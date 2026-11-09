@@ -446,8 +446,17 @@ def gen_dga(out):
     t = T0
     for i in range(60):   # 10.0.0.100: 30자 무작위 라벨 NXDOMAIN 60건 -> 탐지
         dns_exchange(cap, "10.0.0.100", rand_label(30) + ".com", 3, t + i * 2)
-    for i in range(60):   # 10.0.0.101: 10자 무작위 라벨 NXDOMAIN 60건 -> 현재 미탐(검토 H4)
+    for i in range(60):   # 10.0.0.101: 10자 무작위 라벨 NXDOMAIN 60건 -> 탐지 (이전 지표로는 미탐, 검토 H4)
         dns_exchange(cap, "10.0.0.101", rand_label(10) + ".com", 3, t + 1 + i * 2)
+    words = ["mail", "file", "print", "portal", "server", "old", "backup", "test", "dev", "web",
+             "shop", "news", "cloud", "data", "intra", "office", "home", "smart", "global", "korea"]
+    for i in range(60):   # 10.0.0.103: 단어 조합형 미등록 도메인 NXDOMAIN 60건(설정 오류 등) -> 미탐
+        dns_exchange(cap, "10.0.0.103", RNG.choice(words) + RNG.choice(words) + ".com", 3, t + 1.2 + i * 2)
+    for i in range(60):   # 10.0.0.104: 9자 무작위 라벨 + co.kr 접미사 NXDOMAIN 60건 -> 탐지
+        dns_exchange(cap, "10.0.0.104", "www." + rand_label(9) + ".co.kr", 3, t + 1.4 + i * 2)
+    for i in range(60):   # 10.0.0.105: 12자 16진수 라벨 NXDOMAIN 60건 -> 탐지
+        hexlabel = "".join(RNG.choice("0123456789abcdef") for _ in range(12))
+        dns_exchange(cap, "10.0.0.105", hexlabel + ".net", 3, t + 1.6 + i * 2)
     names = ["www.example.com", "mail.example.org", "intranet.corp.local", "update.example.net"]
     for i in range(60):   # 10.0.0.102: 정상 조회(NXDOMAIN 5건) -> 미탐
         if i % 12 == 0:

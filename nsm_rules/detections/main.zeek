@@ -178,16 +178,39 @@ export {
     const dga_interval          = 10min &redef;
     const dga_nxdomain_threshold = 50   &redef; # 윈도우 내 NXDOMAIN 응답 수
     const dga_ratio_threshold   = 0.8   &redef; # NXDOMAIN / 전체 응답 비율
-    const dga_entropy           = 4.0   &redef; # 도메인 평균 엔트로피
+    const dga_like_ratio        = 0.5   &redef; # NXDOMAIN 중 무작위형(DGA형) 등록 라벨 비율
+    ## (폐기) qname 전체 평균 엔트로피 임계. 일반 DGA 길이(8~16자)에서 도달하지 못해
+    ## 미탐이 컸으므로 등록 라벨 무작위성 점수(dga_like_ratio)로 대체했다. 값은 쓰이지 않는다.
+    const dga_entropy           = 4.0   &redef &deprecated="NSM::dga_entropy 는 더 이상 쓰이지 않습니다. NSM::dga_like_ratio 를 사용하세요";
+
+    ## ----------------------------------------------------------------------
+    ## 도메인 접미사: 2단계 공용 접미사(eTLD). 등록 도메인/라벨 추출에 사용.
+    ##   예) www.example.co.kr -> 등록 도메인 example.co.kr, 등록 라벨 example
+    ##   Public Suffix List 전체 대신 실무에서 자주 보이는 것만 둔다. 필요 시 redef 로 추가.
+    ## ----------------------------------------------------------------------
+    const multi_label_suffixes: set[string] = {
+        "co.kr", "or.kr", "go.kr", "ac.kr", "ne.kr", "re.kr", "pe.kr", "mil.kr",
+        "hs.kr", "ms.kr", "es.kr", "kg.kr", "sc.kr",
+        "co.uk", "org.uk", "ac.uk", "gov.uk",
+        "com.cn", "net.cn", "org.cn", "gov.cn",
+        "co.jp", "ne.jp", "or.jp", "ac.jp", "go.jp",
+        "com.au", "net.au", "org.au", "com.tw", "com.hk", "com.sg",
+        "co.in", "com.br", "co.nz", "co.za",
+    } &redef;
 
     ## ----------------------------------------------------------------------
     ## 공통 헬퍼 함수
     ## ----------------------------------------------------------------------
 
-    ## 도메인에서 "부모 도메인"(마지막 2개 라벨)을 추출.
+    ## 도메인에서 "부모(등록) 도메인"을 추출.
+    ##   기본은 마지막 2개 라벨, 끝이 multi_label_suffixes(예: co.kr)면 마지막 3개 라벨.
+    ##   예) a.b.example.com -> example.com,  x.y.naver.co.kr -> naver.co.kr
     ## NOTE: 정확한 eTLD+1 추출은 Public Suffix List 가 필요합니다(zeek-tld 패키지).
-    ##       폐쇄망/POC 에서는 단순 2-라벨 근사로 충분한 경우가 많아 기본 제공합니다.
     global parent_domain: function(name: string): string;
+
+    ## 등록 라벨(등록 도메인에서 접미사를 뺀 이름)을 소문자로 추출. 끝점(.) 무시.
+    ##   예) www.example.com -> example,  a.b.Example.CO.KR. -> example,  example -> example
+    global registered_label: function(name: string): string;
 
     ## 외부(인터넷) 주소 여부. Site::local_nets 설정이 선행되어야 합니다.
     global is_external: function(a: addr): bool;
@@ -247,7 +270,23 @@ function parent_domain(name: string): string
     local n = |parts|;
     if ( n <= 2 )
         return name;
+    if ( to_lower(cat(parts[n-2], ".", parts[n-1])) in multi_label_suffixes )
+        return cat(parts[n-3], ".", parts[n-2], ".", parts[n-1]);
     return cat(parts[n-2], ".", parts[n-1]);
+    }
+
+function registered_label(name: string): string
+    {
+    local host = to_lower(name);
+    if ( |host| > 0 && host[|host| - 1 :] == "." )
+        host = host[: |host| - 1];
+    local parts = split_string(host, /\./);
+    local n = |parts|;
+    if ( n < 2 )
+        return host;
+    if ( n >= 3 && cat(parts[n-2], ".", parts[n-1]) in multi_label_suffixes )
+        return parts[n-3];
+    return parts[n-2];
     }
 
 function is_external(a: addr): bool
