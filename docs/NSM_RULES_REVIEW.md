@@ -12,6 +12,7 @@
 | 0 | C2 detection 중복 → "notice.log 1건 = detection 1건" | PR (phase0/infra-cleanup) |
 | 0 | C3 로그 필터 → `keep_log_streams`/`log_paths` 설정화, reporter 유지 | PR (phase0/infra-cleanup) |
 | 0 | H1 03_sqli 정규식 문법 | PR (phase0/infra-cleanup) |
+| 0 | 08_dns_tunneling 지역 변수 `sub`가 내장 함수와 충돌해 로드 실패 (CI로 추가 발견) | PR (phase0/infra-cleanup) |
 | 0 | 로더 일원화(`detections/__load__.zeek` 삭제, 비활성 룰 경로 수정) | PR (phase0/infra-cleanup) |
 | 0 | 정합성: 상관 진단명(RDP/SSH), T1573.002 통일, `172.16.0.0/12`, 주석·파일명, JA3/JA4 문서 | PR (phase0/infra-cleanup) |
 | 0 | CI: Zeek 9.0.1/8.0.9 문법 검사 + 런타임 스모크 | PR (phase0/infra-cleanup) |
@@ -173,7 +174,7 @@
 | 03 SQLi | **로드 실패 문법**(`(?:`) + 오탐 패턴 | 재작성 | `(?:` 제거, `#`·`--`·`/*` 단독 패턴 삭제(조합 조건으로만), **외부→내부 웹서버 방향**으로 제한, 서버 응답코드(5xx/200)·요청 빈도 조합, URL 디코딩 2회 대응 |
 | 04 Webshell | 광범위 파라미터 패턴 오탐 | 재작성 | 파라미터 단독 매칭 제거, "스크립트 확장자 + 명령 파라미터 + 비정상 응답 크기" 조합, 신규 업로드(POST multipart로 .jsp/.php 업로드) 후 같은 경로 접근 시퀀스 |
 | 05 NTLM Spray | 성공/실패 미구분 → 프록시·메일 서버 오탐 | 재작성 | `hook NTLM::log_policy`에서 `rec$success == F`만 집계 (ntlm 스트림에는 `$ev` 이벤트가 없음 [소스확인]), 내부 src·allowlist, **Kerberos 스프레이(6장 N1)와 함께** 운영 |
-| 08 DNS 터널링 | H5(`co.kr` 묶임) + 리졸버 집계 + TXT 오탐 | 11과 통합 재작성 | 국내 2단계 도메인(co/or/go/ac/ne/re.kr 등) + 주요 공용 접미사 소형 목록 내장, 리졸버 src 제외, 도메인 allowlist(AV 평판 조회 등), 신호를 OR가 아닌 **점수 합산** |
+| 08 DNS 터널링 | **로드 실패**(지역 변수 `sub`가 내장 함수 `sub()`와 충돌, CI로 확인 → 0단계에서 수정) + H5(`co.kr` 묶임) + 리졸버 집계 + TXT 오탐 | 11과 통합 재작성 | 국내 2단계 도메인(co/or/go/ac/ne/re.kr 등) + 주요 공용 접미사 소형 목록 내장, 리졸버 src 제외, 도메인 allowlist(AV 평판 조회 등), 신호를 OR가 아닌 **점수 합산** |
 | 11 DNS 유출 | 08과 동일 + 1MB/5분 과대 | 08과 통합 | (src, 부모도메인)별 "고유 서브도메인 수 + 누적 인코딩 바이트 + 평균 라벨 길이" 하나의 SumStats로 집계 → 터널링/유출을 심각도로 구분 |
 
 ---
