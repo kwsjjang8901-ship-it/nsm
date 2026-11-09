@@ -23,7 +23,8 @@
 | 2 | H4 13 DGA 미탐 → 지표 변경: qname 평균 엔트로피 대신 **등록 라벨 무작위성 점수**(모음 비율·연속 자음·정규화 엔트로피·숫자 혼합·길이·16진수형) 기반 "무작위형 라벨 비율" | PR (phase2/dga-label-metric) |
 | 2 | H5 `parent_domain()` 2단계 공용 접미사(`co.kr` 등) 처리 — `multi_label_suffixes` | PR (phase2/dga-label-metric) |
 | 2 | H3 14 볼륨 유출 성능 → `tcp_packet`(패킷마다) 제거, `ConnThreshold`로 step(1MB)마다 깨어나 **페이로드 증가분**만 집계(ACK 헤더 미포함, 장기 연결도 종료 전 탐지) | PR (phase2/volume-connthreshold) |
-| 2~5 | 나머지 정확도 개선(09 TLS, 소규모, 클러스터 상관), 재작성, 신규 룰, 연동 | 예정 |
+| 2 | 09 SNI-인증서 불일치를 부분문자열 비교 대신 Zeek `sni_matches_cert`(와일드카드·SAN 반영)로 판정, 증적 버킷을 억제창과 일치 | PR (phase2/tls-sni-match) |
+| 2~5 | 나머지 정확도 개선(소규모, 클러스터 상관), 재작성, 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 
