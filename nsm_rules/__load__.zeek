@@ -10,6 +10,8 @@
 @load ./detections/03_sqli                # 내부 웹서버 대상 SQL Injection
 @load ./detections/04_webshell            # 내부 웹서버 대상 웹쉘 접근
 @load ./detections/05_ntlm_spray       # NTLM 인증 실패 기반 패스워드 스프레이
+@load ./detections/17_kerberos_spray    # Kerberos 사전인증 실패 기반 스프레이·무차별 대입
+@load ./detections/18_kerberoasting     # Kerberoasting(RC4 서비스 티켓)·AS-REP Roasting
 @load ./detections/06_smb_admin_share
 @load ./detections/15_rdp_lateral
 @load ./detections/16_ssh_lateral

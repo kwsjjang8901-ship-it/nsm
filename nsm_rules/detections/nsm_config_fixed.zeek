@@ -66,6 +66,22 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::ntlm_spray_allowlist         += { 10.20.40.0/28 };     # 인증 프록시·VDI 게이트웨이, nsm_config_custom.zeek 에 기록
 
 # =============================================================================
+# [17] Kerberos_Spray (T1110.003) / Kerberos_Bruteforce (T1110.001) — 내부 KDC 대상 AS 사전인증 실패
+# =============================================================================
+# redef NSM::krb_spray_interval            = 10min;                 # 집계 윈도우
+# redef NSM::krb_spray_user_threshold      = 10;                    # 출발지별 실패 고유 계정 수
+# redef NSM::krb_bruteforce_threshold      = 20;                    # (출발지, 계정)별 비밀번호 실패 횟수
+# redef NSM::krb_spray_allowlist          += { 10.20.40.0/28 };     # 계정 점검 도구 등, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
+# [18] Kerberoasting (T1558.003) / ASREP_Roasting (T1558.004) — 약한 암호(RC4/DES) 티켓
+# =============================================================================
+# redef NSM::krb_roast_interval            = 10min;                 # 집계 윈도우
+# redef NSM::krb_roast_service_threshold   = 5;                     # 출발지별 RC4 서비스 티켓 고유 SPN 수
+# redef NSM::krb_roast_allowlist          += { 10.20.50.10/32 };    # 레거시 RC4 서비스를 대량 사용하는 서버
+# redef NSM::asrep_require_weak_cipher     = T;                     # F 면 사전인증 없는 AS-REP 전부 탐지(PKINIT 오탐 가능)
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우
