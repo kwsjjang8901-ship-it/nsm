@@ -17,7 +17,7 @@
 | 0 | 로더 일원화(`detections/__load__.zeek` 삭제, 비활성 룰 경로 수정) | PR (phase0/infra-cleanup) |
 | 0 | 정합성: 상관 진단명(RDP/SSH), T1573.002 통일, `172.16.0.0/12`, 주석·파일명, JA3/JA4 문서 | PR (phase0/infra-cleanup) |
 | 0 | CI: Zeek 9.0.1/8.0.9 문법 검사 + 런타임 스모크 | PR (phase0/infra-cleanup) |
-| 0 | `nsm_config_custom.zeek` 원본 확인 | 사용자 확인 필요 |
+| 0 | `nsm_config_custom.zeek` 원본 확인 | 확인 완료 — 원래 빈 파일이며 배포 시 별도로 기록됨(저장소에서는 수정하지 않음) |
 | 1~5 | 테스트 체계, 정확도 개선, 재작성, 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
@@ -133,7 +133,7 @@
 | 06번 문서 | 헤더는 "observe 시점마다 evidence 적재, NTLM 계정(WHO) 채움"이나 실제는 탐지 시점 표본 적재·계정 없음 |
 | ATT&CK | 각 룰이 `write_evidence($technique=...)`를 하드코딩 + `attack_map` + `stage_attack` 3중 관리. `DNS_Tunneling = "T1071.004, T1572"`만 공백 포함 |
 | local_nets 예시 | `nsm_config_fixed.zeek:30` **`172.0.0.0/8`** — 사설 대역은 `172.16.0.0/12`. 그대로 쓰면 공인 IP 상당 부분이 내부로 판정되어 C2/유출 미탐 |
-| custom 설정 | `nsm_config_custom.zeek`가 **0바이트**인데 config 주석 다수가 "custom에 포함됨"이라고 함 → 반입본에서 빠진 것인지 확인 필요 [확인필요] |
+| custom 설정 | `nsm_config_custom.zeek`는 **원래 빈 파일**이고 고객 환경 값(local_nets, allowlist 등)은 배포 시 별도로 기록됨(사용자 확인). config 주석의 "custom에 포함됨"은 이 배포 시점 기록을 가리킴. 저장소에서는 이 파일을 수정하지 않는다 |
 | 심각도 | `detection_log`는 단일 탐지를 전부 `"Information"`으로 기록 — 룰별 심각도 없음 |
 
 **권고:** `main.zeek`에 룰 레지스트리 하나(`rule_id`, note, ATT&CK, 단계, 심각도)를 두고 evidence/detection/상관이 모두 거기서 읽도록 정리.
