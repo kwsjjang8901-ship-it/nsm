@@ -331,8 +331,8 @@ def server_hello(cert_der=None, cipher=0xC02F):
     return tls_record(22, msgs)
 
 
-def self_signed_cert_der(cn):
-    """결정적인 자체서명 인증서 (Ed25519 고정 키 + 고정 유효기간)."""
+def self_signed_cert_der(cn, sans=()):
+    """결정적인 자체서명 인증서 (Ed25519 고정 키 + 고정 유효기간, 선택적 SAN)."""
     from cryptography import x509
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -340,13 +340,16 @@ def self_signed_cert_der(cn):
 
     key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
-    cert = (x509.CertificateBuilder()
-            .subject_name(name).issuer_name(name)
-            .public_key(key.public_key())
-            .serial_number(20261109)
-            .not_valid_before(dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
-            .not_valid_after(dt.datetime(2027, 1, 1, tzinfo=dt.timezone.utc))
-            .sign(key, None))
+    builder = (x509.CertificateBuilder()
+               .subject_name(name).issuer_name(name)
+               .public_key(key.public_key())
+               .serial_number(20261109)
+               .not_valid_before(dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+               .not_valid_after(dt.datetime(2027, 1, 1, tzinfo=dt.timezone.utc)))
+    if sans:
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(d) for d in sans]), critical=False)
+    cert = builder.sign(key, None)
     return cert.public_bytes(serialization.Encoding.DER)
 
 
@@ -379,6 +382,16 @@ def gen_tls_c2(out):
     # 10.0.0.72: SNI 없음, 고유한 ClientHello -> 점수 1 (기본 미탐, JA3 차단목록 추가 시 탐지)
     t = tls_session(cap, "10.0.0.72", "93.184.215.22", t + 1, sni=None,
                     ciphers=(0x0035, 0x002F, 0x000A))
+    # SNI-인증서 일치 판정(sni_matches_cert) 케이스. 셋 다 자체서명(+2)이라 불일치(+1)면 점수 3 으로 탐지.
+    # 10.0.0.73: 와일드카드 인증서 *.example.com 이 SNI www.example.com 과 일치 -> 미탐
+    t = tls_session(cap, "10.0.0.73", "93.184.215.23", t + 1, sni="www.example.com",
+                    cert_der=self_signed_cert_der("*.example.com"))
+    # 10.0.0.74: 인증서 CN attacker.invalid 가 SNI login.bank.example 과 불일치 -> 탐지
+    t = tls_session(cap, "10.0.0.74", "93.184.215.24", t + 1, sni="login.bank.example",
+                    cert_der=self_signed_cert_der("attacker.invalid"))
+    # 10.0.0.75: CN 은 example.org 지만 SAN 에 www.example.com 이 있어 일치 -> 미탐
+    t = tls_session(cap, "10.0.0.75", "93.184.215.25", t + 1, sni="www.example.com",
+                    cert_der=self_signed_cert_der("example.org", sans=("example.org", "www.example.com")))
     cap.tick(t + 180)   # notice_aggregation dedup_window(1분) 만료까지 진행
     cap.write(os.path.join(out, "tls_c2.pcap"))
 
