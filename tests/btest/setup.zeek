@@ -6,6 +6,10 @@
 redef NSM::log_paths = {};
 redef NSM::create_log_dirs = F;
 
+# 운영 필터의 4시간 로그 회전을 끈다. pcap 재생 시 회전은 네트워크 시각 기준이라
+# notice.log 가 notice.<날짜>.log 로 회전돼 버린다.
+redef Log::default_rotation_interval = 0secs;
+
 # json-logs 대신 TSV (assert-rows 가 #fields 헤더를 사용)
 redef LogAscii::use_json = F;
 

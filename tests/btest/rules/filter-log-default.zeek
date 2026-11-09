@@ -6,3 +6,4 @@
 # SETUP 은 쓰지 않고 운영 기본 keep_log_streams 를 그대로 검사한다. 경로만 현재 디렉터리로.
 redef NSM::log_paths = {};
 redef NSM::create_log_dirs = F;
+redef Log::default_rotation_interval = 0secs;
