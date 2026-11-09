@@ -282,7 +282,10 @@ def gen_beacon(out):
     # 10.0.0.61: 불규칙 간격 14회 -> 미탐
     irregular = [5, 47, 13, 90, 22, 61, 8, 120, 35, 17, 75, 40, 9]
     beacon(cap, "10.0.0.61", "93.184.215.15", "news.example.org", T0 + 3, irregular)
-    cap.tick(T0 + 900)
+    # 10.0.0.62: 30초 주기인데 중간 비콘 2개가 빠짐(60초 간격) -> 누락 허용으로 탐지
+    missed = [30, 30, 60, 30, 30, 30, 60, 30, 30, 30, 30, 30, 30]
+    beacon(cap, "10.0.0.62", "93.184.215.17", "sync.beacon-c2.net", T0 + 7, missed)
+    cap.tick(T0 + 1200)
     cap.write(os.path.join(out, "http_beacon.pcap"))
 
 
