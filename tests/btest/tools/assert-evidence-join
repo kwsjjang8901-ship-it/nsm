@@ -1,22 +1,27 @@
-#!/usr/bin/env bash
-# notice.log 의 모든 evidence_id 가 evidence.log 에 존재하는지 검사한다.
-#   (탐지 -> 근거 조인 계약: detection 이 가리키는 근거는 조회 가능해야 한다)
-#
-#   assert-evidence-join [note]     # note 를 주면 해당 notice 만 검사
-set -euo pipefail
-note=${1:-}
+#!/usr/bin/env python3
+"""notice.log 의 모든 evidence_id 가 evidence.log 에 있는지 검사한다(JSON 또는 TSV).
+  (탐지 -> 근거 조인 계약: detection 이 가리키는 근거는 조회 가능해야 한다)
 
-ids_notice=$(zeek-cut note evidence_id < notice.log | awk -F'\t' -v n="$note" '(n=="" || $1==n) && $2!="-" {print $2}' | sort -u)
-ids_evid=$(zeek-cut evidence_id < evidence.log | sort -u)
+  assert-evidence-join [note]     # note 를 주면 해당 notice 만 검사
+"""
+import os
+import sys
 
-if [ -z "$ids_notice" ]; then
-	echo "assert-evidence-join: no notice with evidence_id${note:+ for $note}" >&2
-	exit 1
-fi
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nsmlog  # noqa: E402
 
-missing=$(comm -23 <(echo "$ids_notice") <(echo "$ids_evid"))
-if [ -n "$missing" ]; then
-	echo "assert-evidence-join FAILED: evidence_id not found in evidence.log:" >&2
-	echo "$missing" >&2
-	exit 1
-fi
+note = sys.argv[1] if len(sys.argv) > 1 else ""
+
+notices = nsmlog.read_file("notice.log") if os.path.exists("notice.log") else []
+evidence = nsmlog.read_file("evidence.log") if os.path.exists("evidence.log") else []
+
+ids_notice = {nsmlog.get(r, "evidence_id") for r in notices
+              if (not note or nsmlog.get(r, "note") == note) and nsmlog.get(r, "evidence_id") != "-"}
+ids_evid = {nsmlog.get(r, "evidence_id") for r in evidence}
+
+if not ids_notice:
+    nsmlog.fail("assert-evidence-join: no notice with evidence_id%s" % (" for " + note if note else ""))
+
+missing = sorted(ids_notice - ids_evid)
+if missing:
+    nsmlog.fail("assert-evidence-join FAILED: evidence_id not found in evidence.log:\n" + "\n".join(missing))

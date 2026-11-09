@@ -1,66 +1,62 @@
-#!/usr/bin/env bash
-# Zeek TSV 로그에서 조건에 맞는 행 수를 검사한다.
-#
-#   assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]
-#
-#   예) assert-rows notice.log ge 1 note=NSM::Port_Scan src=10.0.0.5
-#       assert-rows notice.log eq 0 note=NSM::Port_Scan src=10.0.0.6
-#
-# value 는 정확히 일치(문자열). 로그 파일이 없으면 0 행으로 본다.
-# 실패하면 조건과 실제 값, 그리고 해당 로그의 관련 행을 stderr 로 보여준다.
-set -euo pipefail
+#!/usr/bin/env python3
+"""Zeek 로그(JSON 또는 TSV)에서 조건에 맞는 행 수를 검사한다.
 
-if [ $# -lt 3 ]; then
-	echo "usage: assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]" >&2
-	exit 2
-fi
+  assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]
 
-log=$1; op=$2; want=$3; shift 3
+  예) assert-rows notice.log ge 1 note=NSM::Port_Scan src=10.0.0.5
+      assert-rows ntlm.log eq 12 id.orig_h=10.0.0.140 success=-
 
-count_rows() {
-	[ -f "$log" ] || { echo 0; return; }
-	awk -F'\t' -v conds="$*" '
-		BEGIN { nc = split(conds, c, " ") }
-		/^#fields/ {
-			for (i = 2; i <= NF; i++) col[$i] = i - 1
-			for (k = 1; k <= nc; k++) {
-				split(c[k], kv, "=")
-				if (!(kv[1] in col)) { printf("assert-rows: no field \"%s\" in %s\n", kv[1], FILENAME) > "/dev/stderr"; bad = 1 }
-			}
-			next
-		}
-		/^#/ { next }
-		{
-			ok = 1
-			for (k = 1; k <= nc; k++) {
-				eq = index(c[k], "=")
-				f = substr(c[k], 1, eq - 1); v = substr(c[k], eq + 1)
-				if ($(col[f]) != v) { ok = 0; break }
-			}
-			if (ok) n++
-		}
-		END { if (bad) exit 3; print n + 0 }
-	' "$log"
-}
+value 는 정확히 일치(문자열, zeek-cut 표기: 값 없음 "-", bool "T"/"F").
+로그 파일이 없으면 0 행으로 본다. 실패하면 조건과 실제 값, 로그 앞부분을 stderr 로 보여준다.
+"""
+import operator
+import os
+import sys
 
-got=$(count_rows "$@")
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nsmlog  # noqa: E402
 
-case $op in
-	eq) [ "$got" -eq "$want" ] ;;
-	ge) [ "$got" -ge "$want" ] ;;
-	le) [ "$got" -le "$want" ] ;;
-	gt) [ "$got" -gt "$want" ] ;;
-	lt) [ "$got" -lt "$want" ] ;;
-	*) echo "assert-rows: unknown op $op" >&2; exit 2 ;;
-esac && exit 0
+OPS = {"eq": operator.eq, "ge": operator.ge, "le": operator.le, "gt": operator.gt, "lt": operator.lt}
 
-{
-	echo "assert-rows FAILED: $log [$*] count=$got, expected $op $want"
-	if [ -f "$log" ]; then
-		echo "---- $log ----"
-		grep -v '^#\(separator\|set_separator\|empty_field\|unset_field\|path\|open\|close\|types\)' "$log" | head -40
-	else
-		echo "($log not found; files: $(ls -1 *.log 2>/dev/null | tr '\n' ' '))"
-	fi
-} >&2
-exit 1
+if len(sys.argv) < 4:
+    nsmlog.fail("usage: assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]", 2)
+
+log, op, want = sys.argv[1], sys.argv[2], sys.argv[3]
+if op not in OPS:
+    nsmlog.fail("assert-rows: unknown op %s" % op, 2)
+want = int(want)
+
+conds = []
+for c in sys.argv[4:]:
+    if "=" not in c:
+        nsmlog.fail("assert-rows: bad condition %r (field=value)" % c, 2)
+    k, v = c.split("=", 1)
+    conds.append((k, v))
+
+records = nsmlog.read_file(log) if os.path.exists(log) else []
+
+# JSON 로그는 값이 없는 필드를 아예 쓰지 않으므로 필드명 오타를 헤더로 잡을 수 없다.
+#   어떤 레코드에도 없는 필드는 경고만 한다(값 "-" 로 비교).
+if records:
+    seen = set()
+    for r in records:
+        seen.update(r)
+    for k, _ in conds:
+        if k not in seen:
+            print("assert-rows: warning: field %r appears in no record of %s" % (k, log), file=sys.stderr)
+
+got = sum(1 for r in records if all(nsmlog.get(r, k) == v for k, v in conds))
+
+if OPS[op](got, want):
+    sys.exit(0)
+
+lines = ["assert-rows FAILED: %s [%s] count=%d, expected %s %d" % (log, " ".join(sys.argv[4:]), got, op, want)]
+if os.path.exists(log):
+    lines.append("---- %s ----" % log)
+    with open(log, encoding="utf-8", errors="replace") as f:
+        body = [l.rstrip("\n") for l in f if not l.startswith("#")]
+    lines.extend(body[:40])
+else:
+    logs = sorted(p for p in os.listdir(".") if p.endswith(".log"))
+    lines.append("(%s not found; files: %s)" % (log, " ".join(logs)))
+nsmlog.fail("\n".join(lines))

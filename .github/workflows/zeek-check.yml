@@ -56,7 +56,19 @@ jobs:
         run: |
           cd tests/btest
           btest --version || true
-          btest -d -j 4
+          btest -d -t -j 4
+
+      # JSON 로그는 값이 없는 필드를 쓰지 않아 assert-rows 가 필드명 오타를 실패로 잡지 못한다(경고만).
+      #   통과한 테스트의 경고는 각 테스트 폴더의 .stderr 에만 남으므로 모아서 보여 준다.
+      - name: assert-rows warnings
+        if: always()
+        run: |
+          cd tests/btest/output 2>/dev/null || exit 0
+          if grep -rH "assert-rows: warning" --include=.stderr . ; then
+            echo "::warning::assert-rows 가 어떤 레코드에도 없는 필드를 검사했습니다(위 목록). 필드명 오타인지 확인하세요."
+          else
+            echo "assert-rows 경고 없음"
+          fi
 
   pcaps:
     name: pcap 재현성

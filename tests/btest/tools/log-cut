@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""zeek-cut 대용: Zeek 로그(JSON 또는 TSV)에서 지정한 필드를 탭으로 구분해 출력한다.
+
+  log-cut <field> [<field> ...] < some.log
+  예) log-cut id.orig_h ja3 < ssl.log
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nsmlog  # noqa: E402
+
+if len(sys.argv) < 2:
+    nsmlog.fail("usage: log-cut <field> [<field> ...] < log", 2)
+
+for rec in nsmlog.read_records(sys.stdin):
+    print("\t".join(nsmlog.get(rec, f) for f in sys.argv[1:]))

@@ -1,3 +1,4 @@
+tests/btest/output/
 tests/btest/.tmp/
 tests/btest/.btest.failed.dat
 __pycache__/

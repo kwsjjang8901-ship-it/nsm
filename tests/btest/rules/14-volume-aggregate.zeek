@@ -5,7 +5,7 @@
 # @TEST-EXEC: assert-rows notice.log eq 0 note=NSM::Exfil_Volume_Aggregate src=10.0.0.92
 # @TEST-EXEC: assert-rows notice.log eq 1 note=NSM::Exfil_Volume_Aggregate src=10.0.0.93
 # 장기 연결: 업로드는 T0+10초, 연결 종료는 T0+160초. 탐지 시각이 T0+60초(1794182460) 이전이어야 한다.
-# @TEST-EXEC: zeek-cut ts src note < notice.log | awk -F'\t' '$2=="10.0.0.93" && $3=="NSM::Exfil_Volume_Aggregate" && $1 < 1794182460 {n++} END {exit !(n==1)}'
+# @TEST-EXEC: log-cut ts src note < notice.log | awk -F'\t' '$2=="10.0.0.93" && $3=="NSM::Exfil_Volume_Aggregate" && $1 < 1794182460 {n++} END {exit !(n==1)}'
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.Exfiltration.VolumeAggregate attacker=10.0.0.90
 # @TEST-EXEC: assert-evidence-join NSM::Exfil_Volume_Aggregate
 
