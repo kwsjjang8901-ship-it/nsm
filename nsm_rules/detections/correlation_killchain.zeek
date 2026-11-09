@@ -21,6 +21,7 @@
 @load ./evidence_log
 @load ./detection_log
 @load ./notice_aggregation
+@load ./attack_mapping
 
 module NSM;
 
@@ -61,6 +62,63 @@ export {
         [$from=RDP_Lateral,     $to=Exfil_Volume_Aggregate,$pivot=DST_TO_SRC, $window=10min],
         [$from=SSH_Lateral,     $to=Exfil_Large_Transfer,  $pivot=DST_TO_SRC, $window=10min],
         [$from=SSH_Lateral,     $to=Exfil_Volume_Aggregate,$pivot=DST_TO_SRC, $window=10min],
+    } &redef;
+
+    ## ------------------------------------------------------------------
+    ## 단계 묶음 전이 (2026-11, 4단계 신규 탐지 반영)
+    ##   묶음 A 의 어떤 탐지든 -> 묶음 B 의 어떤 탐지로 이어진다. zeek_init 에서 탐지 쌍으로 펼쳐
+    ##   chain_rules 와 합친다(같은 from·to·pivot 이 겹치면 긴 window 를 쓴다).
+    ##   묶음 집합을 redef 하면 반영되지만, chain_group_rules 를 함께 다시 정의해야 한다
+    ##   (const 초기화 시점에 집합이 복사되기 때문).
+    ## ------------------------------------------------------------------
+    type GroupTransition: record {
+        from:   set[Notice::Type];
+        to:     set[Notice::Type];
+        pivot:  PivotKind;
+        window: interval;
+    };
+
+    const corr_recon_notes: set[Notice::Type] = { Port_Scan, Host_Scan } &redef;
+    const corr_c2_notes: set[Notice::Type] = {
+        HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection,
+    } &redef;
+    ## 자격증명 탈취 시도(출발지 = 공격 host)
+    const corr_cred_notes: set[Notice::Type] = {
+        NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning,
+    } &redef;
+    ## 도메인 장악(자격증명 단계의 끝)
+    const corr_domain_notes: set[Notice::Type] = { DCSync } &redef;
+    const corr_lateral_notes: set[Notice::Type] = {
+        SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral,
+    } &redef;
+    const corr_exfil_notes: set[Notice::Type] = {
+        Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB,
+    } &redef;
+    const corr_impact_notes: set[Notice::Type] = { SMB_Ransomware } &redef;
+
+    const chain_group_rules: vector of GroupTransition = {
+        # 정찰 -> C2 / 자격증명 탈취 (같은 host)
+        [$from=corr_recon_notes,   $to=corr_c2_notes,      $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_recon_notes,   $to=corr_cred_notes,    $pivot=SRC_TO_SRC, $window=1hr],
+        # C2 -> 자격증명 탈취·도메인 장악·확산 (같은 host)
+        [$from=corr_c2_notes,      $to=corr_cred_notes,    $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_c2_notes,      $to=corr_domain_notes,  $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_c2_notes,      $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=30min],
+        # 자격증명 탈취 -> 도메인 장악·확산 (같은 host)
+        [$from=corr_cred_notes,    $to=corr_domain_notes,  $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_cred_notes,    $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_domain_notes,  $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=1hr],
+        # 확산 -> 피해 host 에서 유출·영향·추가 자격증명 탈취 (피해 host 피벗)
+        [$from=corr_lateral_notes, $to=corr_exfil_notes,   $pivot=DST_TO_SRC, $window=10min],
+        [$from=corr_lateral_notes, $to=corr_impact_notes,  $pivot=DST_TO_SRC, $window=30min],
+        [$from=corr_lateral_notes, $to=corr_cred_notes,    $pivot=DST_TO_SRC, $window=1hr],
+        [$from=corr_lateral_notes, $to=corr_domain_notes,  $pivot=DST_TO_SRC, $window=1hr],
+        # 확산한 host 가 직접 파일 서버를 암호화
+        [$from=corr_lateral_notes, $to=corr_impact_notes,  $pivot=SRC_TO_SRC, $window=30min],
+        # 유출 후 암호화(이중 갈취)
+        [$from=corr_exfil_notes,   $to=corr_impact_notes,  $pivot=SRC_TO_SRC, $window=1hr],
+        # 외부로 NTLM 해시가 샌 host 가 이어서 C2 통신
+        [$from=set(NTLM_Credential_Leak), $to=corr_c2_notes, $pivot=SRC_TO_SRC, $window=1hr],
     } &redef;
 
     const chain_max_expire = 2hr &redef;
@@ -105,6 +163,52 @@ type ChainState: record {
 
 global primes: table[addr, Notice::Type] of ChainState &write_expire=chain_max_expire;
 
+## chain_rules + chain_group_rules 를 펼친 전이 색인: 출발 탐지 -> 전이 목록
+global transitions_from: table[Notice::Type] of vector of Transition;
+
+event zeek_init() &priority=10
+    {
+    local best: table[Notice::Type, Notice::Type, PivotKind] of interval = table();
+
+    for ( i in chain_rules )
+        {
+        local cr = chain_rules[i];
+        if ( [cr$from, cr$to, cr$pivot] !in best || best[cr$from, cr$to, cr$pivot] < cr$window )
+            best[cr$from, cr$to, cr$pivot] = cr$window;
+        }
+
+    for ( j in chain_group_rules )
+        {
+        local g = chain_group_rules[j];
+        for ( f in g$from )
+            for ( t in g$to )
+                {
+                if ( f == t )
+                    next;
+                if ( [f, t, g$pivot] !in best || best[f, t, g$pivot] < g$window )
+                    best[f, t, g$pivot] = g$window;
+                }
+        }
+
+    for ( [f2, t2, pv], w in best )
+        {
+        if ( f2 !in transitions_from )
+            transitions_from[f2] = vector();
+        local v = transitions_from[f2];
+        v[|v|] = Transition($from=f2, $to=t2, $pivot=pv, $window=w);
+        }
+    }
+
+## 체인 표시용 기법 ID: 상관 전용 표(stage_attack) -> 탐지 공통 표(attack_map) -> notice 이름
+function stage_technique(n: Notice::Type): string
+    {
+    if ( n in stage_attack )
+        return stage_attack[n];
+    if ( n in NSM::attack_map )
+        return NSM::attack_map[n];
+    return cat(n);
+    }
+
 global kc_counter: count = 0;
 
 function chain_tids(st: ChainState): string
@@ -113,7 +217,7 @@ function chain_tids(st: ChainState): string
     local i = 0; local n = |st$stages|;
     while ( i < n )
         {
-        local t = st$stages[i] in stage_attack ? stage_attack[st$stages[i]] : cat(st$stages[i]);
+        local t = stage_technique(st$stages[i]);
         out = i == 0 ? t : cat(out, "->", t);
         i += 1;
         }
@@ -130,7 +234,7 @@ function chain_tids_csv(st: ChainState): string
     local i = 0; local n = |st$stages|;
     while ( i < n )
         {
-        local t = st$stages[i] in stage_attack ? stage_attack[st$stages[i]] : cat(st$stages[i]);
+        local t = stage_technique(st$stages[i]);
         if ( t !in seen )
             {
             add seen[t];
@@ -327,11 +431,13 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
 
 function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr], ts: time)
     {
-    for ( idx in chain_rules )
+    if ( note !in transitions_from )
+        return;
+
+    local rules = transitions_from[note];
+    for ( idx in rules )
         {
-        local rule = chain_rules[idx];
-        if ( rule$from != note )
-            next;
+        local rule = rules[idx];
 
         if ( rule$pivot == SRC_TO_SRC )
             {
