@@ -4,6 +4,20 @@
 - 대상: `nsm_rules/` (nsm_rules_4.zip, 원본 반입 커밋이 베이스라인) — 탐지 룰 16개, 공통 인프라 8개, JA3 패키지, 로그 필터
 - 목적: (1) 현재 룰의 동작 정확성·운영 리스크 점검, (2) 비활성 룰 재활성화 판단, (3) NSM 관점 탐지룰 확대 후보 도출, (4) 자산 식별 PoC(`claudtest2`) 머지 시 충돌 점검
 
+## 진행 현황
+
+| 단계 | 항목 | 상태 |
+|---|---|---|
+| 0 | C1 notice 억제 무력화 → 룰 억제창 존중(`dedup_override_suppression`, 기본 F) | PR (phase0/infra-cleanup) |
+| 0 | C2 detection 중복 → "notice.log 1건 = detection 1건" | PR (phase0/infra-cleanup) |
+| 0 | C3 로그 필터 → `keep_log_streams`/`log_paths` 설정화, reporter 유지 | PR (phase0/infra-cleanup) |
+| 0 | H1 03_sqli 정규식 문법 | PR (phase0/infra-cleanup) |
+| 0 | 로더 일원화(`detections/__load__.zeek` 삭제, 비활성 룰 경로 수정) | PR (phase0/infra-cleanup) |
+| 0 | 정합성: 상관 진단명(RDP/SSH), T1573.002 통일, `172.16.0.0/12`, 주석·파일명, JA3/JA4 문서 | PR (phase0/infra-cleanup) |
+| 0 | CI: Zeek 9.0.1/8.0.9 문법 검사 + 런타임 스모크 | PR (phase0/infra-cleanup) |
+| 0 | `nsm_config_custom.zeek` 원본 확인 | 사용자 확인 필요 |
+| 1~5 | 테스트 체계, 정확도 개선, 재작성, 신규 룰, 연동 | 예정 |
+
 ## 0. 검토 방법과 한계
 
 | 구분 | 내용 |
