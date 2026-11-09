@@ -198,6 +198,9 @@ def gen_smb(out):
         t = smb_tree_connect(cap, "10.0.0.30", dst, share, t + 1)
     # 10.0.0.31: 관리 공유지만 1대뿐 -> 미탐
     t = smb_tree_connect(cap, "10.0.0.31", "10.0.0.21", "ADMIN$", t + 1)
+    # 10.0.0.32: 프린터 드라이버 공유 print$ 를 3대에 접근(정상 숨김 공유) -> 미탐
+    for dst in ("10.0.0.21", "10.0.0.22", "10.0.0.23"):
+        t = smb_tree_connect(cap, "10.0.0.32", dst, "print$", t + 1)
     cap.tick(T0 + 200)
     cap.write(os.path.join(out, "smb_admin_share.pcap"))
 

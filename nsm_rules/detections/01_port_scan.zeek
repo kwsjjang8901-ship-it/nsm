@@ -42,7 +42,7 @@ event zeek_init()
     {
     local r = SumStats::Reducer($stream="nsm.port_scan",
                                 $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
-                                $num_samples=10);
+                                $num_samples=lm_num_samples);
     SumStats::create([
         $name     = "nsm-detect-port-scan",
         $epoch    = scan_interval,
@@ -81,6 +81,7 @@ event zeek_init()
 
             NOTICE([$note=Port_Scan,
                     $src=scanner,
+                    $dst=to_addr(target),   # 대상 host -> detection victims, 상관 DST 피벗에 사용
                     $msg=fmt("Port scan: %s -> %s (%d unique ports in %s)",
                              scanner, target, n_ports, scan_interval),
                     $sub=fmt("unique_ports=%d sample=[%s]", n_ports, samples),

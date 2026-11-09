@@ -6,13 +6,15 @@
 ##!   - 06(SMB)/15(RDP)과 동일 구조: src 단위 "고유 목적지 host 수"를 SumStats 집계.
 ##!   - src allowlist(CI/CD·Ansible·모니터링·백업·점프박스)가 오탐 제어의 핵심.
 ##!
-##!   ※ [중요] 원래는 ssh_auth_successful(인증 성공) 이벤트 기반이었으나,
-##!     Zeek 3.0.14 의 SSH 분석기가 최신 OpenSSH 9.x(ETM MAC 등)의 인증을
-##!     패킷 크기로 판정하지 못해(auth_attempts=0) 미탐. 그래서 conn 레벨로 전환:
-##!     "22/tcp + 양방향 실데이터(orig/resp bytes) + 최소 지속" = 세션 성립으로 간주.
-##!   ※ 한계: "연결 성립"이라 "인증 성공"보다 느슨(인증 실패 후 정상종료는 드묾).
-##!     양방향 바이트 + 최소 지속 필터로 단순 스캔(한쪽 0)·즉시끊김을 배제해 오탐 억제.
-##!   ※ Zeek 7.x 로 업그레이드 시 ssh_auth_successful 로 복원 권장(의미 정확).
+##!   ※ 관측 경로 (2026-11 개정)
+##!     (1) ssh_auth_successful(인증 성공) 이벤트 — 의미가 정확하고 비표준 포트도 잡는다.
+##!         Zeek 3.0.14 는 최신 OpenSSH 9.x(ETM MAC 등) 인증을 판정하지 못해(auth_attempts=0)
+##!         한때 (2)로 전환했었다. 운영 기준 Zeek 9.x 에서 다시 1순위로 쓴다.
+##!     (2) 연결 휴리스틱(폴백) — 인증 이벤트가 나오지 않은 세션에 한해
+##!         "SSH(22/tcp 또는 분석기 SSH) + 양방향 실데이터 + 최소 지속" = 세션 성립으로 본다.
+##!         인증 판정이 안 되는 클라이언트/서버 조합 대비. 인증 성공보다 느슨하다.
+##!     ssh_lm_use_auth_event / ssh_lm_conn_fallback 으로 각각 끌 수 있다.
+##!     같은 연결은 한 번만 관측한다(uid 기준).
 ##!
 ##!   ※ SSH 는 암호화라 명령/파일은 못 본다. "누가 어디에 접속·세션했는가"만 본다.
 ##!   ※ 로컬->로컬(내부간 이동)만 대상. 외부->내부 인입 SSH 는 성격이 달라 제외.
@@ -20,7 +22,7 @@
 ##! 증적(Evidence) 연동  ※ 집계형 (06 과 동일 패턴)
 ##!   - 집계형이라 threshold_crossed 에는 uid 가 없다 -> src 단위 합성 evidence_id
 ##!     ( cat(src, "|ssh-lm") ).
-##!   - 실제 근거(어떤 src->dst)는 인증 성공 시점마다 evidence.log 에 1행씩 적재.
+##!   - 근거(src->dst)는 탐지 시점(epoch_result)에 표본 목적지마다 evidence.log 에 1행씩 적재.
 ##!
 ##! 상관 계약: notice $src = 확산 기점 host, $lm_targets = 피해 host 집합.
 ##! ============================================================================
@@ -28,6 +30,7 @@
 @load base/frameworks/sumstats
 @load base/frameworks/notice
 @load base/protocols/conn
+@load base/protocols/ssh
 @load base/utils/site
 @load ./main
 @load ./evidence_log
@@ -51,7 +54,14 @@ export {
     ## 단순 포트스캔/즉시끊김을 배제: 정상 수립·종료 + 최소 트래픽만 집계.
     const ssh_lm_min_orig_bytes = 1000 &redef;   # 클라->서버 최소 바이트(핸드셰이크+α)
     const ssh_lm_min_duration   = 0.05sec &redef; # 최소 세션 지속(즉시 RST 배제)
+
+    ## 관측 경로 토글. (1) 인증 성공 이벤트, (2) 연결 휴리스틱 폴백.
+    const ssh_lm_use_auth_event = T &redef;
+    const ssh_lm_conn_fallback  = T &redef;
 }
+
+## 인증 성공 이벤트로 이미 관측한 연결(uid). 폴백에서 중복 관측하지 않도록 한다.
+global ssh_lm_seen: set[string] &create_expire=1hr;
 
 ## 집계형 합성 증적 key. 탐지 시점(threshold_crossed)에서만 호출한다.
 ##   관측 시점에 재계산하면 time_bucket 이 어긋나 notice 와 evidence 의
@@ -131,7 +141,7 @@ event zeek_init()
     ]);
     }
 
-## SSH 인증 성공을 "관측" + 증적 1행 적재 (NOTICE 는 SumStats 가 담당)
+## SSH 세션(인증 성공 또는 폴백 판정)을 "관측"만 한다 (NOTICE·증적은 SumStats 가 담당)
 function observe_ssh(c: connection)
     {
     if ( ! detect_ssh_lateral )
@@ -152,12 +162,40 @@ function observe_ssh(c: connection)
        [$str=cat(dst)]);
     }
 
-## SSH 세션 종료 시점에 최종 conn 상태로 "성립 여부" 판정 -> 확산 관측.
-##   connection_state_remove 는 연결 종료 시 1회 발화(최종 conn_state/bytes 확정).
+## (1) SSH 인증 성공 -> 확산 관측
+event ssh_auth_successful(c: connection, auth_method_none: bool)
+    {
+    if ( ! ssh_lm_use_auth_event )
+        return;
+    if ( c$uid in ssh_lm_seen )
+        return;
+    add ssh_lm_seen[c$uid];
+    observe_ssh(c);
+    }
+
+## 연결이 SSH 인지: 22/tcp 이거나 SSH 분석기가 붙은 경우(비표준 포트).
+function ssh_lm_is_ssh(c: connection): bool
+    {
+    if ( c$id$resp_p == 22/tcp )
+        return T;
+    for ( svc in c$service )
+        if ( to_lower(svc) == "ssh" )
+            return T;
+    return F;
+    }
+
+## (2) 폴백: 인증 이벤트가 없던 SSH 세션을 연결 종료 시점의 바이트로 "세션 성립" 판정.
+##   connection_state_remove 는 연결 종료 시 1회 발화(최종 bytes 확정).
 event connection_state_remove(c: connection)
     {
-    # SSH(22/tcp)만 대상
-    if ( c$id$resp_p != 22/tcp )
+    if ( c$uid in ssh_lm_seen )            # 이미 인증 이벤트로 관측
+        {
+        delete ssh_lm_seen[c$uid];
+        return;
+        }
+    if ( ! ssh_lm_conn_fallback )
+        return;
+    if ( ! ssh_lm_is_ssh(c) )
         return;
 
     # "세션 성립" 판정: conn_state(c$conn) 는 connection_state_remove 시점에
@@ -169,7 +207,7 @@ event connection_state_remove(c: connection)
         return;
     if ( c$resp$size <= 0 )                        # 서버 응답 없음 = 미성립(스캔/거부)
         return;
-    if ( ! c?$duration || c$duration < ssh_lm_min_duration )
+    if ( c$duration < ssh_lm_min_duration )
         return;
 
     observe_ssh(c);

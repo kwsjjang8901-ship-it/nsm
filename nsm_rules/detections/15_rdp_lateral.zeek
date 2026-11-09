@@ -9,12 +9,12 @@
 ##!
 ##!   ※ RDP 는 암호화라 본문은 못 본다. "누가 어디로 접속했는가"(메타데이터)만 본다.
 ##!   ※ 로컬->로컬(내부간 이동)만 대상. 외부->내부 인입 RDP 는 성격이 달라 제외.
-##!   ※ rdp_connect_request 의 cookie(mstshash=<user>)에서 계정(WHO)을 추출한다.
+##!   ※ rdp_connect_request 의 cookie(mstshash=<user>)에서 계정(WHO)을 추출해 evidence 의 account 에 남긴다.
 ##!
 ##! 증적(Evidence) 연동  ※ 집계형 (06 과 동일 패턴)
 ##!   - 집계형이라 threshold_crossed 에는 uid 가 없다 -> src 단위 합성 evidence_id
 ##!     ( cat(src, "|rdp-lm") ).
-##!   - 실제 근거(어떤 src->dst, 어떤 계정)는 observe 시점마다 evidence.log 에 1행씩 적재.
+##!   - 근거(어떤 src->dst, 어떤 계정)는 탐지 시점(epoch_result)에 표본마다 evidence.log 에 1행씩 적재.
 ##!
 ##! 상관 계약: notice $src = 확산 기점 host, $lm_targets = 피해 host 집합.
 ##! ============================================================================
@@ -50,24 +50,35 @@ function rdp_evidence_id(src: addr): string
     return cat(src, "|rdp-lm|", time_bucket(rdp_lm_epoch));
     }
 
-## RDP cookie 에서 사용자명 추출: "Cookie: mstshash=Administrator" -> Administrator
+## RDP cookie 에서 사용자명 추출.
+##   rdp_connect_request 의 cookie 는 Zeek 분석기가 "Cookie: mstshash=" 를 떼어낸 값
+##   (예: "administrator")으로 전달된다. 접두어가 남아 있는 경우도 처리한다.
+##   (이전 구현은 접두어가 있을 때만 값을 돌려줘 항상 "" 였고, 호출되지도 않았다)
 function rdp_user_from_cookie(cookie: string): string
     {
-    local m = find_all(cookie, /mstshash=[^\r\n]*/);
+    local v = cookie;
+    local m = find_all(v, /mstshash=[^\r\n]*/);
     for ( s in m )
-        return sub(s, /mstshash=/, "");
-    return "";
+        {
+        v = sub(s, /mstshash=/, "");
+        break;
+        }
+    return strip(v);
     }
 
 event zeek_init()
     {
+    # UNIQUE: 고유 목적지 수(판정) / SAMPLE: "목적지|계정" 표본(근거·WHO)
+    #   계정을 UNIQUE 키에 섞으면 같은 목적지를 다른 계정으로 접속할 때 중복 집계되므로 분리한다.
     local r = SumStats::Reducer($stream="nsm.rdp_lm",
-                                $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
-                                $num_samples=lm_num_samples);
+                                $apply=set(SumStats::UNIQUE));
+    local r_who = SumStats::Reducer($stream="nsm.rdp_lm.who",
+                                    $apply=set(SumStats::SAMPLE),
+                                    $num_samples=lm_num_samples);
     SumStats::create([
         $name             = "nsm-detect-rdp-lateral",
         $epoch            = rdp_lm_epoch,
-        $reducers         = set(r),
+        $reducers         = set(r, r_who),
         # 창(epoch) 종료 시 1회만 평가한다.
         #   threshold_series 는 임계치 단계마다 재발화해 같은 창에서 detection 이
         #   여러 건 생기고, 각 건의 evidence_count 가 그 시점 스냅샷이 되어
@@ -90,30 +101,40 @@ event zeek_init()
 
             local samples = "";
             local targets: set[addr] = set();
-            if ( res?$samples )
-                for ( i in res$samples )
+            if ( "nsm.rdp_lm.who" in result && result["nsm.rdp_lm.who"]?$samples )
+                {
+                local who = result["nsm.rdp_lm.who"];
+                for ( i in who$samples )
                     {
-                    if ( ! res$samples[i]?$str )
+                    if ( ! who$samples[i]?$str )
                         next;
 
-                    local sdst = res$samples[i]$str;
-                    samples += fmt("%s ", sdst);
+                    local item = who$samples[i]$str;          # "목적지|계정"
+                    local parts = split_string(item, /\|/);
+                    local sdst = parts[0];
+                    local user = ( |parts| > 1 ) ? parts[1] : "";
+                    if ( to_addr(sdst) !in targets )
+                        samples += fmt("%s ", sdst);
                     add targets[to_addr(sdst)];   # 상관용 피해 host
 
-                    # 표본 목적지마다 근거 1행. NOTICE 보다 먼저 적재해야
+                    # 표본(목적지,계정)마다 근거 1행. NOTICE 보다 먼저 적재해야
                     #   detection 의 evidence_count 가 정확히 잡힌다.
-                    if ( NSM::evidence_is_new(eid, sdst) )
-                        NSM::write_evidence([
-                            $ts=network_time(),
-                            $evidence_id=eid,
-                            $note=RDP_Lateral,
-                            $technique="T1021.001",
-                            $src=key$host,
-                            $dst=to_addr(sdst),
-                            $operation="rdp_connect",
-                            $detail=fmt("unique_dst=%d observed=%d window=%s",
-                                        dst_n, res$num, rdp_lm_epoch)]);
+                    if ( ! NSM::evidence_is_new(eid, item) )
+                        next;
+                    local ev: EvidenceInfo = [
+                        $ts=network_time(),
+                        $evidence_id=eid,
+                        $note=RDP_Lateral,
+                        $technique="T1021.001",
+                        $src=key$host,
+                        $dst=to_addr(sdst),
+                        $operation="rdp_connect",
+                        $detail=fmt("unique_dst=%d window=%s", dst_n, rdp_lm_epoch)];
+                    if ( user != "" )
+                        ev$account = user;
+                    NSM::write_evidence(ev);
                     }
+                }
 
             NOTICE([$note=RDP_Lateral,
                     $src=key$host,
@@ -147,6 +168,9 @@ function observe_rdp(c: connection, cookie: string)
     SumStats::observe("nsm.rdp_lm",
        [$host=src],
        [$str=cat(dst)]);
+    SumStats::observe("nsm.rdp_lm.who",
+       [$host=src],
+       [$str=cat(dst, "|", rdp_user_from_cookie(cookie))]);
     }
 
 ## RDP 접속 요청 시 cookie(사용자 힌트 mstshash) 동반. 확산 관측의 진입점.
