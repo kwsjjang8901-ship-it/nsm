@@ -29,8 +29,6 @@ jobs:
       - name: Parse nsm_rules + disabled rules
         run: |
           zeek -a ./nsm_rules \
-            ./nsm_rules/detections/03_sqli \
-            ./nsm_rules/detections/04_webshell \
             ./nsm_rules/detections/05_ntlm_spray
 
       # 3) 런타임 스모크: 입력 없이 실행해 zeek_init(SumStats 생성, 로그 필터 등)까지 확인

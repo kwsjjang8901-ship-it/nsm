@@ -544,8 +544,48 @@ def gen_dns_tunnel(out):
     cap.write(os.path.join(out, "dns_tunnel.pcap"))
 
 
+# --------------------------------------------------------------------------- 03/04 웹 공격
+
+WEB_SERVER = "10.0.10.80"
+
+
+def http_req(cap, src, dst, method, uri, t, body=b"", host="intranet.corp.example"):
+    s = Tcp(cap, src, dst, 80)
+    t = s.handshake(t)
+    head = "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0\r\n" % (method, uri, host)
+    if body:
+        head += "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n" % len(body)
+    t = s.client_send(head.encode() + b"\r\n" + body, t)
+    t = s.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: text/html\r\n\r\nok", t + 0.02)
+    return s.close(t + 0.01)
+
+
+def gen_web_attack(out):
+    cap = Capture()
+    t = T0
+    reqs = [
+        # SQLi
+        ("10.0.0.120", WEB_SERVER, "GET", "/item.php?id=1%27%20UNION%20SELECT%20username,password%20FROM%20users--", b""),
+        ("10.0.0.121", WEB_SERVER, "GET", "/search?q=select%20from%20the%20list%20%23top", b""),
+        ("10.0.0.122", WEB_SERVER, "POST", "/login", b"user=admin%27+or+1%3D1--&pw=x"),
+        ("10.0.0.123", WEB_SERVER, "GET", "/p?id=1%2527%2520or%25201%253D1", b""),
+        ("10.0.0.124", "93.184.215.50", "GET", "/item.php?id=1%27%20UNION%20SELECT%20a,b%20FROM%20t--", b""),
+        # 웹쉘
+        ("10.0.0.125", WEB_SERVER, "GET", "/uploads/shell.php?cmd=whoami", b""),
+        ("10.0.0.126", WEB_SERVER, "GET", "/app/view?c=blue&cmd=refresh", b""),
+        ("10.0.0.127", WEB_SERVER, "POST", "/images/x.php",
+         b"z0=%40ini_set%28%22display_errors%22%2C%220%22%29%3B%40set_time_limit%280%29%3Becho%28%22ok%22%29%3B"),
+        ("10.0.0.128", WEB_SERVER, "GET", "/index.php?page=about", b""),
+        ("10.0.0.129", WEB_SERVER, "GET", "/static/js/shell.js", b""),
+    ]
+    for src, dst, method, uri, body in reqs:
+        t = http_req(cap, src, dst, method, uri, t + 1, body)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "web_attack.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
-              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel]
+              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack]
 
 
 def main():
