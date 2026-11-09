@@ -1150,6 +1150,42 @@ def gen_dcsync(out):
 
 # --------------------------------------------------------------------------- 24 비표준 포트 / 장기 연결
 
+def ssh_str(b):
+    return struct.pack(">I", len(b)) + b
+
+
+def ssh_pkt(payload):
+    pad = 8 - ((len(payload) + 5) % 8)
+    if pad < 4:
+        pad += 8
+    return struct.pack(">IB", len(payload) + pad + 1, pad) + payload + b"\x00" * pad
+
+
+def ssh_kexinit():
+    lists = [b"curve25519-sha256", b"ssh-ed25519", b"aes128-ctr", b"aes128-ctr", b"hmac-sha2-256",
+             b"hmac-sha2-256", b"none", b"none", b"", b""]
+    return ssh_pkt(bytes([20]) + rand_bytes(16) + b"".join(ssh_str(x) for x in lists) + b"\x00" + b"\x00" * 4)
+
+
+def ssh_kex_session(cap, src, dst, t, dport=22):
+    """버전 교환 -> KEXINIT -> ECDH(curve25519) -> NEWKEYS 까지 진행하는 SSH 세션.
+    Zeek SSH 분석기는 NEWKEYS 에서 프로토콜을 확인(analyzer_confirmation)한다."""
+    s = Tcp(cap, src, dst, dport)
+    t = s.handshake(t)
+    t = s.server_send(b"SSH-2.0-OpenSSH_9.6\r\n", t + 0.01)
+    t = s.client_send(b"SSH-2.0-OpenSSH_9.6\r\n", t + 0.01)
+    t = s.client_send(ssh_kexinit(), t + 0.01)
+    t = s.server_send(ssh_kexinit(), t + 0.01)
+    t = s.client_send(ssh_pkt(bytes([30]) + ssh_str(rand_bytes(32))), t + 0.01)
+    hostkey = ssh_str(b"ssh-ed25519") + ssh_str(rand_bytes(32))
+    sig = ssh_str(b"ssh-ed25519") + ssh_str(rand_bytes(64))
+    t = s.server_send(ssh_pkt(bytes([31]) + ssh_str(hostkey) + ssh_str(rand_bytes(32)) + ssh_str(sig))
+                      + ssh_pkt(bytes([21])), t + 0.01)
+    t = s.client_send(ssh_pkt(bytes([21])) + rand_bytes(96), t + 0.01)
+    t = s.server_send(rand_bytes(160), t + 0.02)
+    return s.close(t + 0.1)
+
+
 def long_session(cap, src, dst, dport, t, minutes):
     """minutes 분 동안 60초마다 양방향 소량 데이터(keepalive)가 오가는 TCP 연결."""
     s = Tcp(cap, src, dst, dport)
@@ -1166,11 +1202,11 @@ def gen_nonstd_port(out):
     # 비표준 포트: HTTP 8081(.230), TLS 4444(.230), SSH 2222(.230) -> 각각 탐지
     t = http_get(cap, "10.0.0.230", "93.184.215.80", "update.example.net", t + 1, dport=8081)
     t = tls_session(cap, "10.0.0.230", "93.184.215.81", t + 1, sni="cdn.example.net", dport=4444)
-    t = ssh_session(cap, "10.0.0.230", "93.184.215.82", t + 1, dport=2222)
+    t = ssh_kex_session(cap, "10.0.0.230", "93.184.215.82", t + 1, dport=2222)
     # .231: 표준 포트 HTTP 80 / TLS 443 / SSH 22 -> 미탐
     t = http_get(cap, "10.0.0.231", "93.184.215.83", "www.example.net", t + 1)
     t = tls_session(cap, "10.0.0.231", "93.184.215.83", t + 1, sni="www.example.net")
-    t = ssh_session(cap, "10.0.0.231", "93.184.215.83", t + 1)
+    t = ssh_kex_session(cap, "10.0.0.231", "93.184.215.83", t + 1)
     # .235: 내부 서버의 HTTP 8081 -> 미탐 / .236: 허용한 외부 서비스 HTTP 8081 -> 미탐
     t = http_get(cap, "10.0.0.235", "10.0.30.5", "intranet.example", t + 1, dport=8081)
     t = http_get(cap, "10.0.0.236", "93.184.215.84", "partner.example", t + 1, dport=8081)
