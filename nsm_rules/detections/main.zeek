@@ -103,12 +103,15 @@ export {
     const suppress_vol_agg      = 5min &redef;  # 14 볼륨 집계 유출
 
     ## ----------------------------------------------------------------------
-    ## [9] DNS 터널링 파라미터
+    ## [08] DNS 터널링·유출 파라미터 (08_dns_tunneling.zeek, 터널링/유출 통합 판정)
     ## ----------------------------------------------------------------------
-    const dnstun_interval       = 5min &redef;
-    const dnstun_unique_sub     = 50   &redef;  # 동일 부모도메인 고유 서브도메인 수
-    const dnstun_label_len      = 40   &redef;  # 긴 라벨 길이 기준(byte)
-    const dnstun_entropy        = 3.5  &redef;  # 서브도메인 Shannon 엔트로피(bit/byte)
+    const dnstun_interval       = 5min &redef;  # 집계 윈도우(터널링·유출 공용)
+    const dnstun_unique_sub     = 50   &redef;  # [터널링] (src,등록도메인) 고유 서브도메인 수
+    const dnstun_label_len      = 40   &redef;  # 이 길이 이상 라벨이 있으면 수상한 질의
+    const dnstun_min_label_len  = 20   &redef;  # 이 길이 이상 라벨은 무작위성 점수로 판정
+    const dnstun_suspicious_ratio = 0.5 &redef; # 수상한 질의 비율(이상일 때만 판정)
+    ## (폐기) 서브도메인 원시 엔트로피 임계. 무작위성 점수(13 DGA 와 공용)로 대체.
+    const dnstun_entropy        = 3.5  &redef &deprecated="NSM::dnstun_entropy 는 더 이상 쓰이지 않습니다";
 
     ## ----------------------------------------------------------------------
     ## [10] 암호화 C2 파라미터
@@ -151,10 +154,11 @@ export {
     const exfil_bytes_threshold = 100*1024*1024 &redef; # 100MB (orig_bytes 기준)
 
     ## ----------------------------------------------------------------------
-    ## [14] DNS Exfiltration 파라미터 (누적 인코딩 바이트)
+    ## [08] DNS 유출 임계 (누적 인코딩 바이트, 집계 윈도우는 dnstun_interval)
     ## ----------------------------------------------------------------------
-    const dnsexfil_interval     = 5min &redef;
-    const dnsexfil_bytes        = 1*1024*1024 &redef;   # qname 누적 1MB+
+    const dnsexfil_bytes        = 256*1024 &redef;   # [유출] 서브도메인 누적 256KB+ / 5분
+    ## (폐기) 별도 유출 윈도우. 터널링과 같은 dnstun_interval 로 통합.
+    const dnsexfil_interval     = 5min &redef &deprecated="NSM::dnsexfil_interval 는 더 이상 쓰이지 않습니다. NSM::dnstun_interval 을 사용하세요";
 
     ## ----------------------------------------------------------------------
     ## [15] 웹 업로드 Exfiltration 파라미터

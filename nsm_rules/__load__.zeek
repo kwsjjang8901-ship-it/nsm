@@ -14,10 +14,9 @@
 @load ./detections/15_rdp_lateral
 @load ./detections/16_ssh_lateral
 @load ./detections/07_http_beaconing
-#@load ./detections/08_dns_tunneling
+@load ./detections/08_dns_tunneling       # 터널링(DNS_Tunneling) + 유출(Exfil_DNS) 통합
 @load ./detections/09_encrypted_c2
 @load ./detections/10_large_transfer_exfil
-#@load ./detections/11_dns_exfil
 @load ./detections/12_web_upload_exfil
 @load ./detections/13_dga
 @load ./detections/14_large_transfer_exfil
