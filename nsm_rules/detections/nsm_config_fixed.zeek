@@ -52,6 +52,13 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::host_scan_allowlist          += { 10.20.99.20/32 };      # 모니터링/프록시
 
 # =============================================================================
+# [03] SQL_Injection (T1190) / [04] Webshell_Access (T1505.003) — 내부 웹서버 대상 요청만 검사
+# =============================================================================
+# redef NSM::web_attack_local_servers_only = T;                    # 내부(local_nets) 웹서버 대상만
+# redef NSM::web_attack_allowlist         += { 10.20.99.10/32 };   # 취약점 스캐너·모의해킹 장비, nsm_config_custom.zeek 에 기록
+# redef NSM::web_attack_body_max          = 4096;                  # 요청당 본문 검사 바이트
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

@@ -7,8 +7,8 @@
 # 탐지 룰 (킬체인 순서, 1탐지 = 1파일)
 @load ./detections/01_port_scan
 @load ./detections/02_host_scan
-#@load ./detections/03_sqli
-#@load ./detections/04_webshell
+@load ./detections/03_sqli                # 내부 웹서버 대상 SQL Injection
+@load ./detections/04_webshell            # 내부 웹서버 대상 웹쉘 접근
 #@load ./detections/05_ntlm_spray
 @load ./detections/06_smb_admin_share
 @load ./detections/15_rdp_lateral
