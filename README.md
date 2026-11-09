@@ -22,7 +22,7 @@ nsm_rules/
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
     nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
-    01~18_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
+    01~19_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
@@ -58,6 +58,7 @@ docs/
 | 16_ssh_lateral | SSH 확산 | T1021.004 | 활성 |
 | 17_kerberos_spray | Kerberos 패스워드 스프레이 / 무차별 대입 | T1110.003 / T1110.001 | 활성 |
 | 18_kerberoasting | Kerberoasting / AS-REP Roasting | T1558.003 / T1558.004 | 활성 |
+| 19_outbound_smb | 외부향 SMB 연결 / 외부 NTLM 인증(자격증명 유출) | T1048 / T1187 | 활성 |
 
 ## 사용
 

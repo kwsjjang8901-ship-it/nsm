@@ -42,6 +42,10 @@ export {
         Kerberoasting,
         ## 18. AS-REP Roasting (사전인증 없는 AS 요청에 RC4 AS-REP)
         ASREP_Roasting,
+        ## 19. 외부 NTLM 인증 (내부 -> 외부 서버로 NetNTLM 자격증명 전송)
+        NTLM_Credential_Leak,
+        ## 19. 외부향 SMB (내부 -> 외부 445/139 연결 성립)
+        Outbound_SMB,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -254,6 +258,8 @@ export {
         [Kerberos_Bruteforce]    = "Credential Access",
         [Kerberoasting]          = "Credential Access",
         [ASREP_Roasting]         = "Credential Access",
+        [NTLM_Credential_Leak]   = "Credential Access",
+        [Outbound_SMB]           = "Exfiltration",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

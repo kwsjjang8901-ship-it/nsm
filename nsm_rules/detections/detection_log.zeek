@@ -39,6 +39,8 @@ export {
         [Kerberos_Bruteforce]    = "NSM.CredentialAccess.KerberosBruteforce",
         [Kerberoasting]          = "NSM.CredentialAccess.Kerberoasting",
         [ASREP_Roasting]         = "NSM.CredentialAccess.AsrepRoasting",
+        [NTLM_Credential_Leak]   = "NSM.CredentialAccess.NtlmCredentialLeak",
+        [Outbound_SMB]           = "NSM.Exfiltration.OutboundSmb",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",

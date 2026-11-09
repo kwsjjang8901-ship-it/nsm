@@ -853,9 +853,34 @@ def gen_kerberos(out):
     cap.write(os.path.join(out, "kerberos.pcap"))
 
 
+# --------------------------------------------------------------------------- 19 외부향 SMB / NTLM
+
+def tcp_established(cap, src, dst, dport, t):
+    s = Tcp(cap, src, dst, dport)
+    t = s.handshake(t)
+    return s.close(t + 0.05)
+
+
+def gen_outbound_smb(out):
+    cap = Capture()
+    t = T0
+    # .160: 외부 445 연결 + NTLM 인증(강제 인증으로 해시 유출) -> Outbound_SMB + NTLM_Credential_Leak
+    t = ntlm_smb_login(cap, "10.0.0.160", "93.184.215.70", "CORP", "kim.jh", False, t + 1)
+    # .161: 외부 445 SYN 이 경계에서 막힘(RST) -> 미탐
+    t = Tcp(cap, "10.0.0.161", "93.184.215.71", 445).rejected(t + 1)
+    # .162: 내부 파일 서버 445 + NTLM -> 미탐
+    t = ntlm_smb_login(cap, "10.0.0.162", NTLM_SERVER, "CORP", "lee.sm", True, t + 1)
+    # .163: 외부 139 연결만(인증 없음) -> Outbound_SMB 만
+    t = tcp_established(cap, "10.0.0.163", "93.184.215.72", 139, t + 1)
+    # .164: 허용한 외부 SMB 서버(테스트에서 allowed_dsts 등록) + NTLM -> 미탐
+    t = ntlm_smb_login(cap, "10.0.0.164", "93.184.215.73", "CORP", "park.ys", True, t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "outbound_smb.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
-              gen_ntlm_spray, gen_kerberos]
+              gen_ntlm_spray, gen_kerberos, gen_outbound_smb]
 
 
 def main():

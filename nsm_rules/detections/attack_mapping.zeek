@@ -15,6 +15,8 @@ export {
         [Kerberos_Bruteforce]  = "T1110.001",
         [Kerberoasting]        = "T1558.003",
         [ASREP_Roasting]       = "T1558.004",
+        [NTLM_Credential_Leak] = "T1187",
+        [Outbound_SMB]         = "T1048",
         [SMB_Admin_Share]      = "T1021.002",    
         [RDP_Lateral]          = "T1021.001",    
         [SSH_Lateral]          = "T1021.004",    
