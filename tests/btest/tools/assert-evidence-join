@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# notice.log 의 모든 evidence_id 가 evidence.log 에 존재하는지 검사한다.
+#   (탐지 -> 근거 조인 계약: detection 이 가리키는 근거는 조회 가능해야 한다)
+#
+#   assert-evidence-join [note]     # note 를 주면 해당 notice 만 검사
+set -euo pipefail
+note=${1:-}
+
+ids_notice=$(zeek-cut note evidence_id < notice.log | awk -F'\t' -v n="$note" '(n=="" || $1==n) && $2!="-" {print $2}' | sort -u)
+ids_evid=$(zeek-cut evidence_id < evidence.log | sort -u)
+
+if [ -z "$ids_notice" ]; then
+	echo "assert-evidence-join: no notice with evidence_id${note:+ for $note}" >&2
+	exit 1
+fi
+
+missing=$(comm -23 <(echo "$ids_notice") <(echo "$ids_evid"))
+if [ -n "$missing" ]; then
+	echo "assert-evidence-join FAILED: evidence_id not found in evidence.log:" >&2
+	echo "$missing" >&2
+	exit 1
+fi
