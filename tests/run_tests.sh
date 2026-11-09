@@ -5,6 +5,9 @@
 #   tests/run_tests.sh                              # 기본 zeek/zeek:9.0.1
 #   ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh   # 다른 버전
 #   tests/run_tests.sh rules/13-dga.zeek            # 일부만
+#
+# 테스트마다 Zeek 로그(JSON)를 tests/btest/output/<테스트 이름>/ 에 남긴다(btest -t, 통과한 테스트 포함).
+#   클러스터 테스트는 노드별 하위 폴더(manager/, worker-1/ ...)에 남는다. 다음 실행 때 새로 만든다.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ZEEK_IMAGE="${ZEEK_IMAGE:-zeek/zeek:9.0.1}"
@@ -23,7 +26,7 @@ if [ -n "$crlf" ]; then
 fi
 
 if command -v btest >/dev/null 2>&1 && command -v zeek >/dev/null 2>&1; then
-	(cd "$ROOT/tests/btest" && btest -d "$@")
+	(cd "$ROOT/tests/btest" && btest -d -t "$@")
 else
-	docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/w" -w /w/tests/btest "$ZEEK_IMAGE" btest -d "$@"
+	docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/w" -w /w/tests/btest "$ZEEK_IMAGE" btest -d -t "$@"
 fi

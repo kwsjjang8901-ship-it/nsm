@@ -3,7 +3,7 @@
 # @TEST-EXEC: assert-rows notice.log eq 0 note=NSM::Exfil_Volume_Aggregate src=10.0.0.92
 # @TEST-EXEC: assert-rows notice.log eq 1 note=NSM::Exfil_Volume_Aggregate src=10.0.0.90
 # 다운로드 연결의 IP 바이트가 실제로 임계를 넘었는지(=이 테스트가 의미 있는지) conn.log 로 확인
-# @TEST-EXEC: zeek-cut id.orig_h orig_ip_bytes < conn.log | awk -F'\t' '$1=="10.0.0.92" && $2 > 10240 {n++} END {exit !(n==1)}'
+# @TEST-EXEC: log-cut id.orig_h orig_ip_bytes < conn.log | awk -F'\t' '$1=="10.0.0.92" && $2 > 10240 {n++} END {exit !(n==1)}'
 
 redef NSM::exfil_thresholds = vector(10.0 * 1024);
 redef NSM::exfil_volume_step = 2 * 1024;

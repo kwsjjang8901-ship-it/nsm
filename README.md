@@ -32,6 +32,7 @@ tests/
   pcaps/zeek/               # Zeek 공개 테스트 trace 발췌 (실제 프로토콜 동작 검증용)
   extract_zeek_traces.py    # 위 발췌 스크립트
   btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, tools/, setup.zeek)
+    output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
 docs/
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
@@ -82,6 +83,12 @@ tests/run_tests.sh                               # btest 전체 (로컬 zeek 없
 ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh    # Zeek 8.0 으로
 tests/run_tests.sh rules/13-dga.zeek             # 일부만
 ```
+
+- 실행 결과(Zeek 로그, 운영과 같은 JSON)는 테스트마다 `tests/btest/output/<테스트 이름>/`에 남습니다.
+  예: `tests/btest/output/rules.17-kerberos-spray/notice.log`. 클러스터 테스트는 `manager/`, `worker-1/` 등 노드별 하위 폴더에 있습니다.
+  다음 실행 때 새로 만들어지며 커밋되지 않습니다.
+- 로그 검사 도구(`tests/btest/tools/`): `assert-rows`(조건에 맞는 행 수), `assert-evidence-join`(notice ↔ evidence 조인),
+  `log-cut`(zeek-cut 대용, JSON·TSV 모두 읽음).
 
 - 룰마다 합성 pcap 하나에 **탐지돼야 하는 호스트와 탐지되면 안 되는 호스트**를 함께 넣고,
   `notice.log` / `nsm_detection.log` / `evidence.log`의 행 수로 검사합니다(`tests/btest/tools/assert-rows`).
