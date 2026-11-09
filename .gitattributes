@@ -1,0 +1,10 @@
+# 줄바꿈 고정: Windows(core.autocrlf=true)에서 받아도 작업 트리를 LF 로 둔다.
+#   테스트 도구(tests/btest/tools/*)는 "#!/usr/bin/env bash" 셔뱅이라 CRLF 면
+#   "/usr/bin/env: 'bash\r': No such file or directory" 로 실행되지 않는다.
+* text=auto eol=lf
+
+# 바이너리
+*.pcap  binary
+*.pcapng binary
+*.png   binary
+*.zip   binary
