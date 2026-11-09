@@ -702,7 +702,7 @@ def gen_ntlm_spray(out):
             t = ntlm_smb_login(cap, "10.0.0.143", NTLM_SERVER, "corp", v, False, t + 1)
     # .144: 외부 서버 대상 12개 계정 실패 -> 미탐(내부 서버 대상만)
     for u in users:
-        t = ntlm_smb_login(cap, "10.0.0.144", "198.51.100.10", "CORP", u, False, t + 1)
+        t = ntlm_smb_login(cap, "10.0.0.144", "93.184.215.60", "CORP", u, False, t + 1)
     # .145: 예외 출발지(테스트에서 allowlist 등록) 12개 계정 실패 -> 미탐
     for u in users:
         t = ntlm_smb_login(cap, "10.0.0.145", NTLM_SERVER, "CORP", u, False, t + 1)
