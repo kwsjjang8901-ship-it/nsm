@@ -66,7 +66,7 @@ redef record connection += {
 const ntlm_smb2_session_setup = 0x01;
 const ntlm_smb1_session_setup_andx = 0x73;
 
-## 집계형 합성 증적 key (탐지 시점에서만 호출한다)
+# 집계형 합성 증적 key (탐지 시점에서만 호출한다)
 function ntlm_evidence_id(src: addr): string
     {
     return cat(src, "|ntlm-spray|", time_bucket(ntlm_interval));
@@ -144,7 +144,7 @@ function ntlm_spray_target(c: connection): bool
     return T;
     }
 
-## 보관해 둔 계정의 인증 실패를 1회 집계한다.
+# 보관해 둔 계정의 인증 실패를 1회 집계한다.
 function ntlm_failed(c: connection, result: string)
     {
     if ( ! c?$nsm_ntlm_pending )
@@ -153,9 +153,11 @@ function ntlm_failed(c: connection, result: string)
     local acct = c$nsm_ntlm_pending;
     delete c$nsm_ntlm_pending;
 
-    SumStats::observe("nsm.ntlm_spray", [$host=c$id$orig_h], [$str=acct]);
+    # 표본을 먼저 넣는다. 임계 판정은 고유 계정 스트림 observe 에서 즉시 일어날 수 있어(Zeek 8),
+    #   순서가 반대면 임계를 넘긴 마지막 실패가 근거 표본에서 빠진다.
     SumStats::observe("nsm.ntlm_spray.sample", [$host=c$id$orig_h],
                       [$str=cat(acct, "|", c$id$resp_h, "|", result)]);
+    SumStats::observe("nsm.ntlm_spray", [$host=c$id$orig_h], [$str=acct]);
     }
 
 event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
@@ -195,7 +197,7 @@ event smb1_message(c: connection, hdr: SMB1::Header, is_orig: bool)
         delete c$nsm_ntlm_pending;
     }
 
-## SPNEGO 결과: 0 accept-completed, 1 accept-incomplete, 2 reject
+# SPNEGO 결과: 0 accept-completed, 1 accept-incomplete, 2 reject
 event gssapi_neg_result(c: connection, state: count)
     {
     if ( ! c?$nsm_ntlm_pending )
