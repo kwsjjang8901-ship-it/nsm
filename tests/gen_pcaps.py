@@ -710,9 +710,152 @@ def gen_ntlm_spray(out):
     cap.write(os.path.join(out, "ntlm_spray.pcap"))
 
 
+# --------------------------------------------------------------------------- 17/18 Kerberos
+
+KDC = "10.0.0.10"
+REALM = "CORP.EXAMPLE"
+KRB_AES256, KRB_RC4 = 18, 23
+
+
+def asn_int(v):
+    n = max(1, (v.bit_length() + 8) // 8)
+    return der(0x02, v.to_bytes(n, "big", signed=True))
+
+
+def ctx(i, body):
+    return der(0xa0 + i, body)
+
+
+def krb_str(sv):
+    return der(0x1b, sv.encode())                                       # GeneralString
+
+
+def krb_time(t):
+    return der(0x18, dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%Y%m%d%H%M%SZ").encode())
+
+
+def principal(name_type, *names):
+    return der(0x30, ctx(0, asn_int(name_type)) + ctx(1, der(0x30, b"".join(krb_str(n) for n in names))))
+
+
+def enc_data(etype, cipher, kvno=None):
+    body = ctx(0, asn_int(etype))
+    if kvno is not None:
+        body += ctx(1, asn_int(kvno))
+    return der(0x30, body + ctx(2, der(0x04, cipher)))
+
+
+def krb_ticket(spn, etype):
+    return der(0x61, der(0x30, ctx(0, asn_int(5)) + ctx(1, krb_str(REALM)) + ctx(2, principal(2, *spn.split("/")))
+                         + ctx(3, enc_data(etype, rand_bytes(64), kvno=2))))
+
+
+def padata(ptype, value):
+    return der(0x30, ctx(1, asn_int(ptype)) + ctx(2, der(0x04, value)))
+
+
+def kdc_req_body(t, cname=None, sname=("krbtgt", REALM), etypes=(KRB_AES256, 17, KRB_RC4)):
+    body = ctx(0, der(0x03, b"\x00\x40\x81\x00\x10"))                  # forwardable·renewable·canonicalize·renewable-ok
+    if cname:
+        body += ctx(1, principal(1, cname))
+    body += ctx(2, krb_str(REALM)) + ctx(3, principal(2, *sname)) + ctx(5, krb_time(t + 36000))
+    body += ctx(7, asn_int(RNG.randint(1, 2**31 - 1))) + ctx(8, der(0x30, b"".join(asn_int(e) for e in etypes)))
+    return der(0x30, body)
+
+
+def as_req(t, user, preauth, etypes=(KRB_AES256, 17, KRB_RC4)):
+    pa = b""
+    if preauth:
+        pa = ctx(3, der(0x30, padata(2, enc_data(KRB_AES256, rand_bytes(52)))))   # PA-ENC-TIMESTAMP
+    return der(0x6a, der(0x30, ctx(1, asn_int(5)) + ctx(2, asn_int(10)) + pa
+                         + ctx(4, kdc_req_body(t, cname=user, etypes=etypes))))
+
+
+def tgs_req(t, spn, etypes=(KRB_AES256, 17, KRB_RC4)):
+    authn = enc_data(KRB_AES256, rand_bytes(96))
+    ap_req = der(0x6e, der(0x30, ctx(0, asn_int(5)) + ctx(1, asn_int(14)) + ctx(2, der(0x03, b"\x00\x00\x00\x00\x00"))
+                           + ctx(3, krb_ticket("krbtgt/" + REALM, KRB_AES256)) + ctx(4, authn)))
+    pa = ctx(3, der(0x30, padata(1, ap_req)))                                       # PA-TGS-REQ
+    return der(0x6c, der(0x30, ctx(1, asn_int(5)) + ctx(2, asn_int(12)) + pa
+                         + ctx(4, kdc_req_body(t, sname=tuple(spn.split("/")), etypes=etypes))))
+
+
+def kdc_rep(app, msg_type, user, spn, ticket_etype, enc_etype):
+    return der(app, der(0x30, ctx(0, asn_int(5)) + ctx(1, asn_int(msg_type)) + ctx(3, krb_str(REALM))
+                        + ctx(4, principal(1, user)) + ctx(5, krb_ticket(spn, ticket_etype))
+                        + ctx(6, enc_data(enc_etype, rand_bytes(120), kvno=3))))
+
+
+def krb_error(t, code, user=None, sname=("krbtgt", REALM)):
+    body = ctx(0, asn_int(5)) + ctx(1, asn_int(30)) + ctx(4, krb_time(t)) + ctx(5, asn_int(0)) + ctx(6, asn_int(code))
+    if user:
+        body += ctx(7, krb_str(REALM)) + ctx(8, principal(1, user))
+    body += ctx(9, krb_str(REALM)) + ctx(10, principal(2, *sname))
+    return der(0x7e, der(0x30, body))
+
+
+def krb_udp(cap, client, req, rep, t):
+    sport = RNG.randint(49152, 65000)
+    cap.add(cap.l3(client, KDC) / UDP(sport=sport, dport=88) / Raw(req), t)
+    cap.add(cap.l3(KDC, client) / UDP(sport=88, dport=sport) / Raw(rep), t + 0.003)
+    return t + 0.01
+
+
+def krb_logon_fail(cap, client, user, code, t):
+    return krb_udp(cap, client, as_req(t, user, True), krb_error(t, code, user), t)
+
+
+def krb_logon_ok(cap, client, user, t):
+    """정상 Windows 로그온: 사전인증 없는 AS-REQ -> PREAUTH_REQUIRED(25) -> 사전인증 AS-REQ -> AS-REP(AES)."""
+    t = krb_udp(cap, client, as_req(t, user, False), krb_error(t, 25, user), t)
+    return krb_udp(cap, client, as_req(t, user, True),
+                   kdc_rep(0x6b, 11, user, "krbtgt/" + REALM, KRB_AES256, KRB_AES256), t + 0.01)
+
+
+def krb_asrep_nopreauth(cap, client, user, enc_etype, t):
+    return krb_udp(cap, client, as_req(t, user, False, etypes=(enc_etype,)),
+                   kdc_rep(0x6b, 11, user, "krbtgt/" + REALM, KRB_AES256, enc_etype), t)
+
+
+def krb_service_ticket(cap, client, user, spn, etype, t):
+    return krb_udp(cap, client, tgs_req(t, spn, etypes=(etype,) if etype == KRB_RC4 else (KRB_AES256, 17, KRB_RC4)),
+                   kdc_rep(0x6d, 13, user, spn, etype, KRB_AES256), t)
+
+
+def gen_kerberos(out):
+    cap = Capture()
+    t = T0
+    users = ["user%02d" % i for i in range(1, 13)]
+    spns = ["MSSQLSvc/db%02d.corp.example:1433" % i for i in range(1, 7)]
+    # 17 스프레이
+    for u in users:                                               # .150: 12개 계정 사전인증 실패 -> 스프레이
+        t = krb_logon_fail(cap, "10.0.0.150", u, 24, t + 1)
+    for u in users:                                               # .151: 12개 계정 정상 로그온 -> 미탐
+        t = krb_logon_ok(cap, "10.0.0.151", u, t + 1)
+    for _ in range(25):                                           # .152: 1개 계정 25회 실패 -> 무차별 대입
+        t = krb_logon_fail(cap, "10.0.0.152", "administrator", 24, t + 1)
+    for u in users:                                               # .153: 예외 출발지 12개 실패 -> 미탐
+        t = krb_logon_fail(cap, "10.0.0.153", u, 24, t + 1)
+    for i, u in enumerate(users):                                 # .159: 없는 계정·실패 섞어 12개 -> 스프레이
+        t = krb_logon_fail(cap, "10.0.0.159", "x" + u, 6 if i % 2 else 24, t + 1)
+    # 18 AS-REP Roasting
+    for u in ("svc_backup", "svc_legacy", "svc_scan"):            # .154: 사전인증 없이 RC4 AS-REP 3건 -> 계정마다 탐지
+        t = krb_asrep_nopreauth(cap, "10.0.0.154", u, KRB_RC4, t + 1)
+    t = krb_asrep_nopreauth(cap, "10.0.0.155", "svc_nopreauth_aes", KRB_AES256, t + 1)   # .155: AES -> 미탐
+    # 18 Kerberoasting
+    for spn in spns:                                              # .156: 6개 SPN RC4 티켓 -> 탐지
+        t = krb_service_ticket(cap, "10.0.0.156", "user01", spn, KRB_RC4, t + 1)
+    for spn in spns:                                              # .157: 6개 SPN AES 티켓 -> 미탐
+        t = krb_service_ticket(cap, "10.0.0.157", "user02", spn, KRB_AES256, t + 1)
+    for spn in spns[:2]:                                          # .158: RC4 레거시 서비스 2개 -> 미탐
+        t = krb_service_ticket(cap, "10.0.0.158", "user03", spn, KRB_RC4, t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "kerberos.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
-              gen_ntlm_spray]
+              gen_ntlm_spray, gen_kerberos]
 
 
 def main():

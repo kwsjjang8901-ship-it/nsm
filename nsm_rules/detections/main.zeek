@@ -34,6 +34,14 @@ export {
         Webshell_Access,
         ## 4. NTLM 패스워드 스프레이 (1 src -> 다수 계정)
         NTLM_Spray,
+        ## 17. Kerberos 패스워드 스프레이 (1 src -> 다수 계정 사전인증 실패)
+        Kerberos_Spray,
+        ## 17. Kerberos 무차별 대입 (1 src -> 1 계정 반복 사전인증 실패)
+        Kerberos_Bruteforce,
+        ## 18. Kerberoasting (1 src -> 다수 SPN 의 RC4 서비스 티켓)
+        Kerberoasting,
+        ## 18. AS-REP Roasting (사전인증 없는 AS 요청에 RC4 AS-REP)
+        ASREP_Roasting,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -242,6 +250,10 @@ export {
         [SQL_Injection]          = "Initial Access",
         [Webshell_Access]        = "Initial Access",
         [NTLM_Spray]             = "Credential Access",
+        [Kerberos_Spray]         = "Credential Access",
+        [Kerberos_Bruteforce]    = "Credential Access",
+        [Kerberoasting]          = "Credential Access",
+        [ASREP_Roasting]         = "Credential Access",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",
