@@ -1218,12 +1218,46 @@ def gen_nonstd_port(out):
     cap.write(os.path.join(out, "nonstd_port.pcap"))
 
 
+# --------------------------------------------------------------------------- 상관: 5단계 체인(정찰 -> DGA -> C2 -> 확산 -> 유출)
+
+def gen_chain_full(out):
+    """실제 룰을 끝까지 돌려 kill-chain 5단계를 만든다(T = pcap 시작 기준 초).
+
+    A(.240): 포트 스캔(T1, Port_Scan 즉시) -> DGA NXDOMAIN 60건(T20~140, 10분 창 끝 T~601 DGA_Domain)
+             -> HTTP 비커닝(T420 시작, 12번째 콜백 T~750 HTTP_Beaconing)
+             -> .241/.242 ADMIN$ 접근(T800, 1분 창 끝 T~841 SMB_Admin_Share, 피해 host 2대)
+    피해 .241(T900)/.242(T950) 외부 60MB 업로드 -> Exfil_Large_Transfer(10) + Exfil_Volume_Aggregate(14)
+                                   -> 5단계 체인 4갈래(피해 host 2 x 유출 룰 2)
+    비교군: B(.245) 비커닝 후 스캔(순서 반대), C(.246) 스캔 후 1시간 넘어 비커닝(창 초과),
+            D(.247) 확산 없이 업로드만 -> 상관 없음
+    """
+    mb = 1024 * 1024
+    cap = Capture()
+    a, b, c, d = "10.0.0.240", "10.0.0.245", "10.0.0.246", "10.0.0.247"
+    v1, v2 = "10.0.0.241", "10.0.0.242"
+    port_scan(cap, a, "10.0.0.9", range(2000, 2030), T0 + 1)
+    port_scan(cap, c, "10.0.0.9", range(3000, 3030), T0 + 5)
+    for i in range(60):
+        dns_exchange(cap, a, rand_label(30) + ".com", 3, T0 + 20 + i * 2)
+    beacon(cap, b, "93.184.215.91", "cdn.chain-b.net", T0 + 30, [30] * 13)
+    beacon(cap, a, "93.184.215.90", "update.chain-a.net", T0 + 420, [30] * 13)
+    smb_tree_connect(cap, a, v1, "ADMIN$", T0 + 800)
+    smb_tree_connect(cap, a, v2, "C$", T0 + 802)
+    port_scan(cap, b, "10.0.0.9", range(4000, 4030), T0 + 900)
+    bulk_upload(cap, v1, "93.184.215.92", 443, 60 * mb, T0 + 900)
+    bulk_upload(cap, v2, "93.184.215.93", 443, 60 * mb, T0 + 950)
+    bulk_upload(cap, d, "93.184.215.94", 443, 60 * mb, T0 + 1000)
+    beacon(cap, c, "93.184.215.95", "cdn.chain-c.net", T0 + 3700, [30] * 13)
+    cap.tick(T0 + 4200)
+    cap.write(os.path.join(out, "chain_full.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
-              gen_nonstd_port]
+              gen_nonstd_port, gen_chain_full]
 
 
 def main():
