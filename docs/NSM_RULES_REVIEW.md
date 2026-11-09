@@ -24,7 +24,8 @@
 | 2 | H5 `parent_domain()` 2단계 공용 접미사(`co.kr` 등) 처리 — `multi_label_suffixes` | PR (phase2/dga-label-metric) |
 | 2 | H3 14 볼륨 유출 성능 → `tcp_packet`(패킷마다) 제거, `ConnThreshold`로 step(1MB)마다 깨어나 **페이로드 증가분**만 집계(ACK 헤더 미포함, 장기 연결도 종료 전 탐지) | PR (phase2/volume-connthreshold) |
 | 2 | 09 SNI-인증서 불일치를 부분문자열 비교 대신 Zeek `sni_matches_cert`(와일드카드·SAN 반영)로 판정, 증적 버킷을 억제창과 일치 | PR (phase2/tls-sni-match) |
-| 2~5 | 나머지 정확도 개선(소규모, 클러스터 상관), 재작성, 신규 룰, 연동 | 예정 |
+| 2 | 소규모: 15 RDP 근거에 계정(cookie 값이 이미 접두어 없이 전달되어 기존 추출 함수는 항상 빈 값) / 16 SSH 인증 성공 이벤트 1순위 + 연결 휴리스틱 폴백(비표준 포트 포함) / 06 `print$` 제외 / 01 notice 에 대상 IP | PR (phase2/small-fixes) |
+| 2~5 | 클러스터 상관(H2), 재작성, 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 

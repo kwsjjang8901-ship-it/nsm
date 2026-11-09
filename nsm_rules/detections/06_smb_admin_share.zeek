@@ -31,6 +31,10 @@ export {
     ## IPC$ 는 정상 사용도 많아 기본 제외.
     const exclude_ipc_share = T &redef;
 
+    ## 끝이 '$' 이지만 관리 공유가 아닌 정상 숨김 공유(대문자 비교). 기본: 프린터 드라이버 공유.
+    ##   예) redef NSM::smb_lm_exclude_shares += { "SCCMCONTENTLIB$" };
+    const smb_lm_exclude_shares: set[string] = { "PRINT$" } &redef;
+
     ## SMB 관리공유 탐지 마스터 토글.
     const detect_smb_admin_share = T &redef;
 
@@ -130,6 +134,9 @@ function observe_admin_share(c: connection, path: string)
     if ( admin_share_pattern !in path )
         return;
     if ( exclude_ipc_share && /(?i:.*\\IPC\$$)/ in path )
+        return;
+    local comps = split_string(path, /\\/);
+    if ( |comps| > 0 && to_upper(comps[|comps| - 1]) in smb_lm_exclude_shares )
         return;
     if ( c$id$orig_h in smb_lm_allowlist )
         return;
