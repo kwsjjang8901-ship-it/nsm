@@ -56,6 +56,10 @@ export {
         Name_Poisoning,
         ## 23. DCSync (DC 가 아닌 host 의 DRSUAPI DRSGetNCChanges)
         DCSync,
+        ## 24. 비표준 포트 프로토콜 (외부향 HTTP/TLS/SSH 가 표준 포트가 아님)
+        Nonstandard_Port,
+        ## 24. 장기 외부 연결 (내부 -> 외부 TCP 가 long_conn_duration 이상 지속)
+        Long_Connection,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -275,6 +279,8 @@ export {
         [SMB_Ransomware]         = "Impact",
         [Name_Poisoning]         = "Credential Access",
         [DCSync]                 = "Credential Access",
+        [Nonstandard_Port]       = "Command and Control",
+        [Long_Connection]        = "Command and Control",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

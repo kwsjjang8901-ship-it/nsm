@@ -22,7 +22,7 @@ nsm_rules/
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
     nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
-    01~23_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
+    01~24_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
@@ -63,6 +63,7 @@ docs/
 | 21_smb_ransomware | 랜섬웨어성 SMB 파일 변경 (Impact) | T1486 | 활성 |
 | 22_name_poisoning | LLMNR / NBT-NS / mDNS 포이즈닝 (Responder 류) | T1557.001 | 활성 |
 | 23_dcsync | DCSync (DC 가 아닌 host 의 디렉터리 복제 요청) | T1003.006 | 활성 |
+| 24_nonstd_port | 외부향 비표준 포트 프로토콜 / 장기 외부 연결 | T1571 / T1572 | 활성 |
 
 ## 사용
 

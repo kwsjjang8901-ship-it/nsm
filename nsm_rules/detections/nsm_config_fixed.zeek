@@ -118,6 +118,14 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::dcsync_allowlist             += { 10.20.80.5/32 };     # Azure AD Connect 등 복제 권한 사용 서버
 
 # =============================================================================
+# [24] Nonstandard_Port (T1571) / Long_Connection (T1572) — 외부향 비표준 포트·장기 연결
+# =============================================================================
+# redef NSM::nonstd_port_allowed_ports   += { 8081/tcp };         # 사내 표준으로 허용한 외부 포트
+# redef NSM::nonstd_port_allowed_dsts    += { 203.0.113.0/24 };   # 허용한 외부 서비스
+# redef NSM::long_conn_duration           = 6hr;                  # 장기 연결 기준
+# redef NSM::long_conn_allowed_dsts      += { 203.0.113.10/32 };  # VPN·메신저·동기화 목적지, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

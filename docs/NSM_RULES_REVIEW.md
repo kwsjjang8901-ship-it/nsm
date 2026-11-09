@@ -36,7 +36,8 @@
 | 4 | N4 랜섬웨어성 SMB 신규 룰: 21 확장자 변경 rename 고유 파일(1분 30개)·랜섬 노트 생성 고유 폴더(5개), Office 임시 파일 제외, 킬체인 Impact 단계 신설 | PR (phase4/smb-ransomware) |
 | 4 | N6 이름 해석 포이즈닝 신규 룰: 22 한 응답자가 LLMNR·mDNS(A/AAAA 응답 레코드)·NBNS(질의-응답 짝짓기)로 긍정 응답한 고유 이름 ≥ 5(10분) | PR (phase4/llmnr-poisoning) |
 | 4 | N7 DCSync 신규 룰: 23 DC 가 아닌 출발지의 DRSUAPI DRSGetNCChanges(opnum 3) 단건, DC 는 설정 목록 + Kerberos 응답 host 자동 학습 | PR (phase4/dcsync) |
-| 4~5 | 나머지 신규 룰(N9), 연동 | 예정 |
+| 4 | N9 비표준 포트·장기 연결 신규 룰: 24 외부향 HTTP/TLS/SSH 가 표준 포트가 아님(analyzer_confirmation_info), 외부 TCP 연결 6시간 이상(ConnThreshold 실시간) | PR (phase4/nonstd-port) |
+| 5 | 연동(OCSF 변환기·자산 식별 머지), P2 후보 | 예정 |
 
 ## 0. 검토 방법과 한계
 

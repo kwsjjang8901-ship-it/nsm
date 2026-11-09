@@ -46,6 +46,8 @@ export {
         [SMB_Ransomware]         = "NSM.Impact.SmbRansomware",
         [Name_Poisoning]         = "NSM.CredentialAccess.NamePoisoning",
         [DCSync]                 = "NSM.CredentialAccess.DcSync",
+        [Nonstandard_Port]       = "NSM.C2.NonstandardPort",
+        [Long_Connection]        = "NSM.C2.LongConnection",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",

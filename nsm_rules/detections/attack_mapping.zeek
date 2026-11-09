@@ -22,6 +22,8 @@ export {
         [SMB_Ransomware]       = "T1486",
         [Name_Poisoning]       = "T1557.001",
         [DCSync]               = "T1003.006",
+        [Nonstandard_Port]     = "T1571",
+        [Long_Connection]      = "T1572",
         [SMB_Admin_Share]      = "T1021.002",    
         [RDP_Lateral]          = "T1021.001",    
         [SSH_Lateral]          = "T1021.004",    
