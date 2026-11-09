@@ -45,7 +45,7 @@ docs/
 | 02_host_scan | 호스트 스캔 | T1018 | 활성 |
 | 03_sqli | SQL Injection (내부 웹서버 대상) | T1190 | 활성 |
 | 04_webshell | 웹쉘 접근 (내부 웹서버 대상) | T1505.003 | 활성 |
-| 05_ntlm_spray | NTLM 패스워드 스프레이 | T1110.003 | 비활성 |
+| 05_ntlm_spray | NTLM 패스워드 스프레이 (인증 실패 기반) | T1110.003 | 활성 |
 | 06_smb_admin_share | SMB 관리공유 확산 | T1021.002 | 활성 |
 | 07_http_beaconing | HTTP 비커닝 | T1071.001 | 활성 |
 | 08_dns_tunneling | DNS 터널링 + DNS 유출 (통합) | T1071.004 / T1048.003 | 활성 |

@@ -584,8 +584,135 @@ def gen_web_attack(out):
     cap.write(os.path.join(out, "web_attack.pcap"))
 
 
+# --------------------------------------------------------------------------- 05 NTLM 스프레이
+
+NTLM_SERVER = "10.0.0.5"
+SPNEGO_OID = bytes.fromhex("2b0601050502")
+NTLMSSP_OID = bytes.fromhex("2b06010401823702020a")
+STATUS_MORE_PROCESSING = 0xC0000016
+STATUS_LOGON_FAILURE = 0xC000006D
+
+
+def der(tag, body):
+    n = len(body)
+    if n < 0x80:
+        ln = bytes([n])
+    elif n < 0x100:
+        ln = bytes([0x81, n])
+    else:
+        ln = bytes([0x82]) + struct.pack(">H", n)
+    return bytes([tag]) + ln + body
+
+
+def ntlm_negotiate():
+    return b"NTLMSSP\x00" + struct.pack("<II", 1, 0x00000207) + b"\x00" * 16
+
+
+def ntlm_challenge(target="CORP"):
+    name = target.encode("utf-16-le")
+    flags = 0x00000207 | 0x00010000                       # unicode·oem·request_target·ntlm + target_type_domain
+    head = b"NTLMSSP\x00" + struct.pack("<I", 2) + struct.pack("<HHI", len(name), len(name), 48)
+    head += struct.pack("<I", flags) + rand_bytes(8) + b"\x00" * 8 + struct.pack("<HHI", 0, 0, 48 + len(name))
+    return head + name
+
+
+def ntlm_authenticate(domain, user, workstation="WS01"):
+    d, u, w = (x.encode("utf-16-le") for x in (domain, user, workstation))
+    lm, nt = b"\x00" * 24, rand_bytes(24)
+    off = 64
+    fields, payload = b"", b""
+    for blob in (lm, nt, d, u, w, b""):
+        fields += struct.pack("<HHI", len(blob), len(blob), off + len(payload))
+        payload += blob
+    return b"NTLMSSP\x00" + struct.pack("<I", 3) + fields + struct.pack("<I", 0x00000201) + payload
+
+
+def spnego_init(mech_token):
+    mech_types = der(0xa0, der(0x30, der(0x06, NTLMSSP_OID)))
+    body = der(0x30, mech_types + der(0xa2, der(0x04, mech_token)))
+    return der(0x60, der(0x06, SPNEGO_OID) + der(0xa0, body))
+
+
+def spnego_resp(neg_state=None, mech_token=None, with_mech=False):
+    args = b""
+    if neg_state is not None:
+        args += der(0xa0, der(0x0a, bytes([neg_state])))
+    if with_mech:
+        args += der(0xa1, der(0x06, NTLMSSP_OID))
+    if mech_token is not None:
+        args += der(0xa2, der(0x04, mech_token))
+    return der(0xa1, der(0x30, args))
+
+
+def smb2_hdr(command, msg_id, status=0, response=False, session_id=0):
+    return (b"\xfeSMB" + struct.pack("<HHIHHII", 64, 1, status, command, 1, 1 if response else 0, 0)
+            + struct.pack("<QII", msg_id, 0xFEFF, 0) + struct.pack("<Q", session_id) + b"\x00" * 16)
+
+
+def nbss(msg):
+    return b"\x00" + struct.pack(">I", len(msg))[1:] + msg
+
+
+def smb2_session_setup_req(msg_id, blob, session_id=0):
+    body = struct.pack("<HBBIIHHQ", 25, 0, 1, 1, 0, 64 + 24, len(blob), 0) + blob
+    return nbss(smb2_hdr(1, msg_id, session_id=session_id) + body)
+
+
+def smb2_session_setup_resp(msg_id, status, blob, session_id):
+    if status in (0, STATUS_MORE_PROCESSING):
+        body = struct.pack("<HHHH", 9, 0, 64 + 8, len(blob)) + blob
+    else:                                                   # SMB2 ERROR 응답(보안 버퍼 없음)
+        body = struct.pack("<HBBI", 9, 0, 0, 0) + b"\x00"
+    return nbss(smb2_hdr(1, msg_id, status=status, response=True, session_id=session_id) + body)
+
+
+def ntlm_smb_login(cap, src, dst, domain, user, ok, t):
+    """SMB2 세션 설정 2왕복(NEGOTIATE/CHALLENGE, AUTHENTICATE/결과)."""
+    s = Tcp(cap, src, dst, 445)
+    t = s.handshake(t)
+    sid = RNG.randint(1, 2**40)
+    t = s.client_send(smb2_session_setup_req(1, spnego_init(ntlm_negotiate())), t)
+    t = s.server_send(smb2_session_setup_resp(1, STATUS_MORE_PROCESSING,
+                                              spnego_resp(1, ntlm_challenge(), with_mech=True), sid), t + 0.002)
+    t = s.client_send(smb2_session_setup_req(2, spnego_resp(mech_token=ntlm_authenticate(domain, user)), sid),
+                      t + 0.002)
+    if ok:
+        t = s.server_send(smb2_session_setup_resp(2, 0, spnego_resp(0), sid), t + 0.01)
+    else:
+        t = s.server_send(smb2_session_setup_resp(2, STATUS_LOGON_FAILURE, b"", sid), t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_ntlm_spray(out):
+    cap = Capture()
+    t = T0
+    users = ["user%02d" % i for i in range(1, 13)]
+    # .140: 12개 계정 실패(스프레이) -> 탐지 (임계 10)
+    for u in users:
+        t = ntlm_smb_login(cap, "10.0.0.140", NTLM_SERVER, "CORP", u, False, t + 1)
+    # .141: 12개 계정 모두 성공(터미널 서버 등 정상) -> 미탐
+    for u in users:
+        t = ntlm_smb_login(cap, "10.0.0.141", NTLM_SERVER, "CORP", u, True, t + 1)
+    # .142: 한 계정만 15회 실패(무차별 대입, 스프레이 아님) -> 미탐
+    for _ in range(15):
+        t = ntlm_smb_login(cap, "10.0.0.142", NTLM_SERVER, "CORP", "administrator", False, t + 1)
+    # .143: 6개 계정을 대소문자만 바꿔 2번씩 실패 = 고유 6개 -> 미탐
+    for u in users[:6]:
+        for v in (u, u.upper()):
+            t = ntlm_smb_login(cap, "10.0.0.143", NTLM_SERVER, "corp", v, False, t + 1)
+    # .144: 외부 서버 대상 12개 계정 실패 -> 미탐(내부 서버 대상만)
+    for u in users:
+        t = ntlm_smb_login(cap, "10.0.0.144", "93.184.215.60", "CORP", u, False, t + 1)
+    # .145: 예외 출발지(테스트에서 allowlist 등록) 12개 계정 실패 -> 미탐
+    for u in users:
+        t = ntlm_smb_login(cap, "10.0.0.145", NTLM_SERVER, "CORP", u, False, t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "ntlm_spray.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
-              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack]
+              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
+              gen_ntlm_spray]
 
 
 def main():
