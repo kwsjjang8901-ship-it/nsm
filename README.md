@@ -31,7 +31,7 @@ tests/
   pcaps/                    # 룰별 테스트 pcap (생성기 출력, 커밋됨)
   pcaps/zeek/               # Zeek 공개 테스트 trace 발췌 (실제 프로토콜 동작 검증용)
   extract_zeek_traces.py    # 위 발췌 스크립트
-  btest/                    # btest 회귀 테스트 (rules/, tools/, setup.zeek)
+  btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, tools/, setup.zeek)
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
 docs/
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
