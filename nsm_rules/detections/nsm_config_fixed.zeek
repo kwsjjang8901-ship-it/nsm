@@ -96,6 +96,14 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::lm_mgmt_allowlist            += { 10.20.30.0/24 };     # SCCM·모니터링·Ansible·점프 서버, nsm_config_custom.zeek 에 기록
 
 # =============================================================================
+# [21] SMB_Ransomware (T1486 · Impact) — 확장자 변경 rename 대량 / 여러 폴더 랜섬 노트
+# =============================================================================
+# redef NSM::ransomware_interval           = 1min;                  # 집계 윈도우
+# redef NSM::ransomware_rename_threshold   = 30;                    # 확장자가 바뀐 rename 고유 파일 수
+# redef NSM::ransomware_note_threshold     = 5;                     # 랜섬 노트를 만든 고유 폴더 수
+# redef NSM::ransomware_allowlist         += { 10.20.70.0/28 };     # 백업·동기화·DLP 서버, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

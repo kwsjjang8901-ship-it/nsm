@@ -43,6 +43,7 @@ export {
         [Outbound_SMB]           = "NSM.Exfiltration.OutboundSmb",
         [WinRM_Lateral]          = "NSM.LateralMovement.WinrmAccess",
         [DCOM_Lateral]           = "NSM.LateralMovement.DcomExec",
+        [SMB_Ransomware]         = "NSM.Impact.SmbRansomware",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",

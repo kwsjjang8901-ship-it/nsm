@@ -1,7 +1,7 @@
 # NSM 탐지룰 (nsm_rules)
 
 Zeek 기반 NSM(Network Security Monitoring) 탐지 룰 패키지입니다.
-미러 트래픽에서 킬체인 단계별(정찰 → 자격증명 → 확산 → C2 → 유출) 위협을 탐지하고,
+미러 트래픽에서 킬체인 단계별(정찰 → 자격증명 → 확산 → C2 → 유출 → 영향) 위협을 탐지하고,
 `notice.log` / `nsm_detection.log` / `evidence.log`로 탐지와 근거를 남깁니다.
 
 - 대상 Zeek 버전: **9.x** (자산 식별 PoC와 동일 기준)
@@ -22,7 +22,7 @@ nsm_rules/
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
     nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
-    01~20_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
+    01~21_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
@@ -60,6 +60,7 @@ docs/
 | 18_kerberoasting | Kerberoasting / AS-REP Roasting | T1558.003 / T1558.004 | 활성 |
 | 19_outbound_smb | 외부향 SMB 연결 / 외부 NTLM 인증(자격증명 유출) | T1048 / T1187 | 활성 |
 | 20_winrm_dcom_lateral | WinRM / DCOM 내부 확산 | T1021.006 / T1021.003 | 활성 |
+| 21_smb_ransomware | 랜섬웨어성 SMB 파일 변경 (Impact) | T1486 | 활성 |
 
 ## 사용
 
