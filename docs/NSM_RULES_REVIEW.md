@@ -18,7 +18,9 @@
 | 0 | 정합성: 상관 진단명(RDP/SSH), T1573.002 통일, `172.16.0.0/12`, 주석·파일명, JA3/JA4 문서 | PR (phase0/infra-cleanup) |
 | 0 | CI: Zeek 9.0.1/8.0.9 문법 검사 + 런타임 스모크 | PR (phase0/infra-cleanup) |
 | 0 | `nsm_config_custom.zeek` 원본 확인 | 확인 완료 — 원래 빈 파일이며 배포 시 별도로 기록됨(저장소에서는 수정하지 않음) |
-| 1~5 | 테스트 체계, 정확도 개선, 재작성, 신규 룰, 연동 | 예정 |
+| 1 | 테스트 체계: 합성 pcap 생성기 + btest 17개(활성 룰 11개 탐지/미탐, 상관, 계약 C1~C3) + CI | PR (phase1/test-framework) |
+| 1 | H6 07 비커닝 누락 허용 오탐 → 허용오차 고정 + 연속 누락 상한(`beacon_max_missed`=2) | PR (phase1/test-framework) |
+| 2~5 | 정확도 개선, 재작성, 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 
@@ -47,6 +49,7 @@
 | H3 | High | `14_large_transfer_exfil`이 **`tcp_packet`(패킷마다 발생)** 으로 집계 | `detections/14_large_transfer_exfil.zeek:88` | 고대역 CPU 부하 → 패킷 손실 → 전체 룰 품질 저하. Zeek 문서도 사용 자제 권고 |
 | H4 | High | `13_dga` 평균 엔트로피 임계 **4.0은 일반 DGA(라벨 8~16자)가 도달 불가** | `main.zeek:181`, `nsm_config_fixed.zeek:120` | 16자 라벨도 4.0 이상은 8.9%뿐 → **사실상 미탐** (부록 A) |
 | H5 | High | `parent_domain()`이 "마지막 2라벨" 근사 → **`co.kr`/`or.kr`/`go.kr`/`ac.kr` 전체가 한 부모 도메인**으로 묶임 | `main.zeek:244-251` | 08/11(비활성)이 국내 사이트 정상 조회로 오탐. 재활성화 전제 조건 |
+| H6 | High | `07_http_beaconing` 비콘 누락 허용 오차가 `기준주기×jitter×k`로 배수에 비례 → jitter 0.25면 기준주기 1.5배 이상인 **모든 간격이 박자 맞음** | `07_http_beaconing.zeek:106` | 같은 외부 IP로 불규칙 HTTP 연결 13회 이상이면 비커닝 오탐 (1단계 회귀 테스트로 발견) |
 
 **구조/정합성:** 로더 2개 중복·주석 해제 시 경로 오류, 문서·주석의 파일명/임계값 불일치, 룰 번호 체계 불일치(파일 번호 ≠ enum 주석 번호), ATT&CK 코드 이중 관리(09: evidence `T1573` vs notice `T1573.002`), 상관 진단명 버그(RDP/SSH 종료 체인) 등. → 3장.
 
@@ -156,7 +159,7 @@
 
 **06 SMB 관리공유** — `/(?i:.*\\[A-Za-z]*\$$)/`는 `print$`(프린터 드라이버 공유) 같은 정상 숨김 공유도 매칭. `ADMIN$`, `C$`~`Z$` 등 명시 목록 + `IPC$` 제외가 더 정확. SAMPLE은 "관측 표본"이라 같은 목적지 반복 접근이 많으면 표본 20개에 고유 목적지가 다 안 들어올 수 있음(UNIQUE 수와 victims 수 불일치). BZAR `T1021.002`와 역할 중복 — 06은 "다수 host 확산(fan-out)", BZAR는 "개별 행위"로 역할 정의 필요(8장).
 
-**07 HTTP 비커닝** — 현재 C2 대부분이 HTTPS라 커버리지가 낮다. `connection_state_remove`에서 `c$start_time`으로 순서를 판단해 장기 연결이 늦게 끝나면 `last_seen`이 과거로 되돌아감. `http_request` 이벤트 기반 + 키를 (src, Host/SNI)로 바꾸고 TLS까지 확장하는 것을 권장(6장 N5).
+**07 HTTP 비커닝** — (H6, 1단계에서 수정) 비콘 누락 허용 오차가 배수 k에 비례해 불규칙 트래픽도 비커닝으로 판정하던 결함이 있었다. 현재 C2 대부분이 HTTPS라 커버리지가 낮다. `connection_state_remove`에서 `c$start_time`으로 순서를 판단해 장기 연결이 늦게 끝나면 `last_seen`이 과거로 되돌아감. `http_request` 이벤트 기반 + 키를 (src, Host/SNI)로 바꾸고 TLS까지 확장하는 것을 권장(6장 N5).
 
 **09 암호화 C2** — 점수 구성상 TLS 1.3(인증서 암호화)에서는 `no_sni`(1) + JA3(3)만 남아 **사실상 JA3 단독 룰**. JA3 인텔 97개는 abuse.ch SSLBL 기반(Tofsee/Adware 다수)이고 해당 피드는 더 이상 갱신되지 않는다. Chrome 등은 확장 순서를 무작위화해 브라우저 JA3는 불안정(악성코드 고정 지문 매칭은 여전히 유효). 들여쓰기(탭/스페이스 혼용 `:75-79`) 정리 필요. evidence `$technique="T1573"`, eid 버킷 `time_bucket(1hr)` 고정(설정 `suppress_enc_c2`와 별개).
 
