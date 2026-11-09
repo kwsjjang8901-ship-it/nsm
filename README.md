@@ -35,6 +35,7 @@ tests/
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
 docs/
+  SRS.md                    # 요구사항 명세·설정 가이드(원본)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
 ```
 
@@ -95,6 +96,11 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 - 공통 계약도 검사합니다: notice 1건 = detection 1건, notice의 `evidence_id`는 evidence.log에서 조회 가능, 룰 억제창 적용, 운영 로그 필터.
 - pcap은 `python3 tests/gen_pcaps.py tests/pcaps`로 다시 만들 수 있고(결정적 출력), CI가 커밋된 pcap과 생성기 출력이 같은지 확인합니다.
 - CI(`.github/workflows/zeek-check.yml`)는 Zeek 9.0.1 / 8.0.9에서 문법 검사, 기동 검사, btest를 실행합니다.
+
+## 요구사항 명세(SRS)
+
+[docs/SRS.md](docs/SRS.md) — 탐지 룰별 요구사항, 로그 형식, 상관 규칙, 설정 파라미터와 고객별 설정 예시, 테스트, 한계.
+룰·설정·로그 형식을 바꾸는 PR에서는 이 문서도 함께 고칩니다.
 
 ## 검토 결과와 작업 계획
 
