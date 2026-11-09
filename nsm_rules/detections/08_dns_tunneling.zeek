@@ -84,10 +84,11 @@ event dns_request(c: connection, msg: dns_msg, query: string,
         return;
 
     local parent = parent_domain(query);
-    local sub = ( |query| > |parent| ) ? sub_bytes(query, 1, |query| - |parent| - 1) : "";
+    # NOTE: 변수명을 sub 로 두면 내장 함수 sub() 와 충돌해 로드 실패한다.
+    local subdom = ( |query| > |parent| ) ? sub_bytes(query, 1, |query| - |parent| - 1) : "";
 
-    local long_label   = |sub| >= dnstun_label_len;
-    local high_entropy = (sub != "") && (find_entropy(sub)$entropy >= dnstun_entropy);
+    local long_label   = |subdom| >= dnstun_label_len;
+    local high_entropy = (subdom != "") && (find_entropy(subdom)$entropy >= dnstun_entropy);
     local tunnel_rr    = (qtype == 16 || qtype == 10);  # 16=TXT, 10=NULL
 
     if ( long_label || high_entropy || tunnel_rr )
