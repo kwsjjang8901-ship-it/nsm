@@ -26,10 +26,12 @@ jobs:
         run: zeek -a ./nsm_rules
 
       # 2) 비활성 룰까지 포함해 문법 검사 (재활성화 시 로드 실패 방지)
+      #    __load__.zeek 에서 주석 처리된 "#@load ./detections/..." 를 모두 함께 로드한다(없으면 패키지만).
       - name: Parse nsm_rules + disabled rules
         run: |
-          zeek -a ./nsm_rules \
-            ./nsm_rules/detections/05_ntlm_spray
+          disabled=$(sed -n 's|^#@load \./\(detections/[^ ]*\).*|./nsm_rules/\1|p' nsm_rules/__load__.zeek)
+          echo "disabled rules: ${disabled:-none}"
+          zeek -a ./nsm_rules $disabled
 
       # 3) 런타임 스모크: 입력 없이 실행해 zeek_init(SumStats 생성, 로그 필터 등)까지 확인
       #    로그 디렉터리가 없는 상태에서 반복 실행해 디렉터리 생성 경쟁 조건을 잡는다.

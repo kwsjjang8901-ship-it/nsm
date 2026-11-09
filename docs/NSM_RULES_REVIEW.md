@@ -29,7 +29,8 @@
 | 2 | 07 비커닝 클러스터: 워커는 관측값만 만들어 (src,dst) HRW 로 프록시 1대(없으면 매니저)에 전달, 주기 상태는 그 노드에서만. 과거 시각 관측 무시 | PR (phase2/beacon-cluster) |
 | 3 | 08+11 DNS 터널링·유출 통합 재작성·활성화: (src,등록도메인) 집계, 수상한 질의(TXT/NULL·긴 라벨·무작위형 라벨) 비율 게이트, 리졸버 제외·AV/DNSBL 기본 예외, 유출 임계 256KB/5분 | PR (phase3/dns-tunnel-exfil) |
 | 3 | 03/04 웹 공격 재작성·활성화: 내부 웹서버 대상만, URL 이중 디코딩 정규화, SQL 구문 구조 요구(주석·select-from 단독 제거), 웹쉘은 명령 '값'·페이로드 서명 기준(파라미터 이름 단독 제거), 본문 검사 상한 | PR (phase3/web-attack) |
-| 3~5 | 05 NTLM 재작성, 신규 룰, 연동 | 예정 |
+| 3 | 05 NTLM 스프레이 재작성·활성화: 인증 실패만 집계(SMB 세션 설정 실패 NTSTATUS + SPNEGO reject — Zeek ntlm.log success 는 SMB 실패 시 비어 있음), 계정 대소문자 정규화, 내부 서버 대상·예외 출발지 | PR (phase3/ntlm-spray) |
+| 4~5 | 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 
