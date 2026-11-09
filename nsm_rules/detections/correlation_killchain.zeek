@@ -1,6 +1,22 @@
-
+##! ============================================================================
+##! Kill-chain 상관분석 — 확정 notice 를 단계 전이 규칙(chain_rules)으로 연결한다.
+##!
+##! 클러스터 동작 (2026-11 개정, 검토 H2)
+##!   - Notice::log_notice 는 notice 를 기록한 노드에서만 발생한다. SumStats 룰(01/02/06/
+##!     13/14/15/16)은 매니저에서, 연결 단위 룰(07/09/10/12)은 워커에서 notice 를 낸다.
+##!     예전에는 각 노드가 자기 메모리(primes)로 상관해, 워커의 C2 -> 매니저의 확산 같은
+##!     노드를 넘는 전이가 연결되지 않았다.
+##!   - 이제 모든 노드는 notice 요약(CorrNotice)을 NSM::corr_notice 이벤트로 매니저에 보내고,
+##!     상관(primes, 체인 생성, Correlated_KillChain notice)은 매니저 한 곳에서만 한다.
+##!     standalone 에서는 같은 이벤트를 로컬로 처리한다(동작 동일).
+##!   - 전이 시간창은 처리 노드의 현재 시각이 아니라 notice 의 발생 시각(ts)으로 판단한다
+##!     (워커 -> 매니저 전달 지연이 판정에 영향을 주지 않도록).
+##!   - 한계: 서로 다른 노드의 notice 가 전달 지연 때문에 발생 순서와 다르게 도착하면
+##!     (수 초 이내의 근접 사건) 전이가 연결되지 않을 수 있다.
+##! ============================================================================
 
 @load base/frameworks/notice
+@load base/frameworks/cluster
 @load ./main
 @load ./evidence_log
 @load ./detection_log
@@ -48,6 +64,19 @@ export {
     } &redef;
 
     const chain_max_expire = 2hr &redef;
+
+    ## 상관에 필요한 notice 요약(노드 간 전달용).
+    type CorrNotice: record {
+        ts:          time;
+        note:        Notice::Type;
+        src:         addr;
+        evidence_id: string   &default="";
+        targets:     set[addr] &default=addr_set();
+    };
+
+    ## notice 요약 전달 이벤트. 클러스터에서는 워커/매니저 모두 매니저로 보내고,
+    ## 매니저(또는 standalone)에서만 처리한다.
+    global corr_notice: event(cn: CorrNotice);
     # chain_max_victims 는 main.zeek 로 이동(detection_log 와 공용).
 
     const stage_attack: table[Notice::Type] of string = {
@@ -124,16 +153,17 @@ function chain_names(st: ChainState): string
     return out;
     }
 
-function fresh_chain(note: Notice::Type, origin: addr, eid: string): ChainState
+function fresh_chain(note: Notice::Type, origin: addr, eid: string, ts: time): ChainState
     {
     kc_counter += 1;
     local eids: vector of string = vector();
     if ( eid != "" )
         eids[|eids|] = eid;
     local vic: set[addr] = set();
+    # chain_id: 재시작 후 번호 재사용으로 과거 로그와 섞이지 않도록 시각을 포함한다.
     return [$stages=vector(note), $eids=eids,
-            $attacker=origin, $started_at=network_time(),
-            $expire_at=network_time(), $chain_id=cat("kc-", kc_counter),
+            $attacker=origin, $started_at=ts,
+            $expire_at=ts, $chain_id=fmt("kc-%d-%d", double_to_count(time_to_double(ts)), kc_counter),
             $victims=vic];
     }
 
@@ -229,7 +259,7 @@ function chain_evidence_count(eids: vector of string): count
     return total;
     }
 
-function emit_chain(st: ChainState, last_host: addr)
+function emit_chain(st: ChainState, last_host: addr, ts: time)
     {
     local len = |st$stages|;
 
@@ -272,7 +302,7 @@ function emit_chain(st: ChainState, last_host: addr)
         $killchain_stages = chain_stage_names(st),
         $severity         = "Suspicious",
         $first_seen       = st$started_at,
-        $last_seen        = network_time(),
+        $last_seen        = ts,
         $attacker         = st$attacker,
         $attacker_subnet  = NSM::attacker_segment(st$attacker),
         $victims          = victims_str(st, last_host),
@@ -280,7 +310,7 @@ function emit_chain(st: ChainState, last_host: addr)
         $evidence_ids     = join_string_vec(all_eids, ",")]);
     }
 
-function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr])
+function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr], ts: time)
     {
     for ( idx in chain_rules )
         {
@@ -291,39 +321,28 @@ function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: s
         if ( rule$pivot == SRC_TO_SRC )
             {
             local c1 = copy(chain);
-            c1$expire_at = network_time() + rule$window;
+            c1$expire_at = ts + rule$window;
             primes[src, rule$to] = c1;
             }
-        else   
+        else
             {
             for ( d in dsts )
                 {
                 local c2 = copy(chain);
-                c2$expire_at = network_time() + rule$window;
+                c2$expire_at = ts + rule$window;
                 primes[d, rule$to] = c2;
                 }
             }
         }
     }
 
-event Notice::log_notice(rec: Notice::Info)
+## notice 1건을 상관 처리한다(매니저 또는 standalone 에서만 호출).
+function corr_process(cn: CorrNotice)
     {
-    
-    if ( rec$note == Correlated_KillChain )
-        return;
-    
-    if ( rec?$dup_count )
-        return;
-    if ( ! rec?$src )
-        return;
-
-    local s   = rec$src;
-    local m   = rec$note;
-    local eid = rec?$evidence_id ? rec$evidence_id : "";
-
-    local dsts: set[addr];
-    if ( rec?$lm_targets )
-        dsts = rec$lm_targets;
+    local s   = cn$src;
+    local m   = cn$note;
+    local eid = cn$evidence_id;
+    local dsts = cn$targets;
 
     local current: ChainState;
     local matched = F;
@@ -331,7 +350,7 @@ event Notice::log_notice(rec: Notice::Info)
     if ( [s, m] in primes )
         {
         local st = primes[s, m];
-        if ( network_time() <= st$expire_at )
+        if ( cn$ts <= st$expire_at )
             {
             # 확장
             local ext = copy(st);
@@ -341,7 +360,7 @@ event Notice::log_notice(rec: Notice::Info)
             # 이 단계에서 관측된 피해 host 누적(확산 대상 등)
             for ( dv in dsts )
                 add ext$victims[dv];
-            emit_chain(ext, s);
+            emit_chain(ext, s, cn$ts);
             current = ext;
             matched = T;
             }
@@ -350,10 +369,40 @@ event Notice::log_notice(rec: Notice::Info)
 
     if ( ! matched )
         {
-        current = fresh_chain(m, s, eid);
+        current = fresh_chain(m, s, eid, cn$ts);
         for ( dv0 in dsts )
             add current$victims[dv0];
         }
 
-    prime_forward(m, current, s, dsts);
+    prime_forward(m, current, s, dsts, cn$ts);
     }
+
+# notice 가 기록되는 노드(워커/매니저/standalone)에서 요약을 만들어 상관 처리 노드로 보낸다.
+event Notice::log_notice(rec: Notice::Info)
+    {
+    if ( rec$note == Correlated_KillChain )
+        return;
+    if ( rec?$dup_count )
+        return;
+    if ( ! rec?$src )
+        return;
+
+    local cn = CorrNotice($ts=rec$ts, $note=rec$note, $src=rec$src);
+    if ( rec?$evidence_id )
+        cn$evidence_id = rec$evidence_id;
+    if ( rec?$lm_targets )
+        cn$targets = rec$lm_targets;
+
+@if ( Cluster::is_enabled() && Cluster::local_node_type() != Cluster::MANAGER )
+    Cluster::publish(Cluster::manager_topic, NSM::corr_notice, cn);
+@else
+    event NSM::corr_notice(cn);
+@endif
+    }
+
+@if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::MANAGER )
+event NSM::corr_notice(cn: CorrNotice)
+    {
+    corr_process(cn);
+    }
+@endif
