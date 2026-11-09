@@ -110,12 +110,15 @@ class Tcp:
         self._s("A", t)
         return t + 0.001
 
-    def server_send(self, data, t):
+    def server_send(self, data, t, ack_each=False):
         for i in range(0, len(data), self.MSS):
             chunk = data[i:i + self.MSS]
             self._s("PA", t, chunk)
             self.sseq += len(chunk)
             t += 0.0005
+            if ack_each:                       # 다운로드: 내부 클라이언트가 세그먼트마다 ACK
+                self._c("A", t)
+                t += 0.0005
         self._c("A", t)
         return t + 0.001
 
@@ -420,7 +423,19 @@ def gen_volume(out):
     t = s.handshake(t + 1)
     t = s.client_send(rand_bytes(20 * 1024), t)
     t = s.close(t)
-    cap.tick(T0 + 200)
+    # 10.0.0.92: 500KB 다운로드(내부는 ACK 만 보냄) -> 미탐 (ACK 헤더를 전송량으로 세지 않아야 함)
+    s = Tcp(cap, "10.0.0.92", "93.184.215.42", 9000)
+    t = s.handshake(t + 1)
+    t = s.client_send(b"GET /big HTTP/1.1\r\n\r\n", t)
+    t = s.server_send(rand_bytes(500 * 1024), t, ack_each=True)
+    t = s.close(t)
+    # 10.0.0.93: 장기 연결. T0+10초에 80KB 업로드 후 150초 동안 열려 있다가 종료 -> 종료 전(첫 1분 안) 탐지
+    s = Tcp(cap, "10.0.0.93", "93.184.215.43", 9001)
+    lt = s.handshake(T0 + 10)
+    lt = s.client_send(rand_bytes(80 * 1024), lt)
+    lt = s.client_send(b"keepalive", T0 + 150)
+    s.close(T0 + 160)
+    cap.tick(T0 + 300)
     cap.write(os.path.join(out, "volume_aggregate.pcap"))
 
 

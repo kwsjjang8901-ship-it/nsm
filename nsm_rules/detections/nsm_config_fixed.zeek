@@ -157,6 +157,7 @@ redef NSM::webupload_bytes               = 50*1024*1024;    # 업로드 바이�
 # =============================================================================
 redef NSM::exfil_epoch                   = 1min;            # 집계 윈도우
 redef NSM::exfil_thresholds              = vector(50.0 * 1024 * 1024);  # host당 합계 임계(50MB/1min)
+# redef NSM::exfil_volume_step            = 1024 * 1024;  # 연결당 집계 갱신 간격(기본 1MB). 작을수록 빠르고 이벤트 증가
 #   ※ 룰 기본값(5MB/1min)은 정상 업무(파일 전송·백업·동기화·화상회의)에서도
 #     흔히 넘어 오탐이 잦으므로 50MB/1min 으로 상향 운영 중.
 #     운영 데이터로 재산정 권장. (epoch_result 가 아닌 threshold_series 라 단계값 사용 가능)
