@@ -25,6 +25,7 @@
 @load ./detections/10_large_transfer_exfil
 @load ./detections/12_web_upload_exfil
 @load ./detections/13_dga
+@load ./detections/24_nonstd_port         # 외부향 비표준 포트 프로토콜·장기 외부 연결
 @load ./detections/14_large_transfer_exfil
 @load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 
