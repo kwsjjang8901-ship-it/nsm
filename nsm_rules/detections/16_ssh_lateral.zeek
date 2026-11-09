@@ -162,7 +162,7 @@ function observe_ssh(c: connection)
        [$str=cat(dst)]);
     }
 
-## (1) SSH 인증 성공 -> 확산 관측
+# (1) SSH 인증 성공 -> 확산 관측
 event ssh_auth_successful(c: connection, auth_method_none: bool)
     {
     if ( ! ssh_lm_use_auth_event )
@@ -184,8 +184,8 @@ function ssh_lm_is_ssh(c: connection): bool
     return F;
     }
 
-## (2) 폴백: 인증 이벤트가 없던 SSH 세션을 연결 종료 시점의 바이트로 "세션 성립" 판정.
-##   connection_state_remove 는 연결 종료 시 1회 발화(최종 bytes 확정).
+# (2) 폴백: 인증 이벤트가 없던 SSH 세션을 연결 종료 시점의 바이트로 "세션 성립" 판정.
+#   connection_state_remove 는 연결 종료 시 1회 발화(최종 bytes 확정).
 event connection_state_remove(c: connection)
     {
     if ( c$uid in ssh_lm_seen )            # 이미 인증 이벤트로 관측
