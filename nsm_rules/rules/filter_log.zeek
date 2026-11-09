@@ -70,6 +70,35 @@ function log_dir_of(path: string): string
     return join_string_vec(dirs, "/");
     }
 
+## 디렉터리를 상위부터 차례로 만든다(mkdir -p 와 같은 효과, 동기식).
+##   system("mkdir -p ...") 는 명령을 백그라운드로 실행하므로, 디렉터리가
+##   생기기 전에 로그 writer 가 파일을 열어 "No such file or directory" 로
+##   스트림이 종료되는 경쟁 조건이 있었다. mkdir() BIF 는 동기식이고
+##   이미 존재하면 T 를 돌려준다.
+function mkdir_p(dir: string): bool
+    {
+    local parts = split_string(dir, /\//);
+    local cur = ( |dir| > 0 && dir[0] == "/" ) ? "/" : "";
+    local i = 0;
+    while ( i < |parts| )
+        {
+        local part = parts[i];
+        ++i;
+        if ( part == "" )
+            next;
+        if ( cur == "" || cur == "/" )
+            cur = cat(cur, part);
+        else
+            cur = cat(cur, "/", part);
+        if ( ! mkdir(cur) )
+            {
+            Reporter::warning(fmt("NSM filter_log: failed to create log directory %s", cur));
+            return F;
+            }
+        }
+    return T;
+    }
+
 ## default 필터의 다른 속성($policy 등)은 유지하고 경로만 바꾼다.
 function change_log_path(id: Log::ID, path: string)
     {
@@ -101,7 +130,7 @@ function filter_log()
                 add dirs[d];
             }
         for ( dd in dirs )
-            system(fmt("mkdir -p %s", safe_shell_quote(dd)));
+            mkdir_p(dd);
         }
 
     for ( kid in keep_log_streams )

@@ -11,6 +11,7 @@
 | 0 | C1 notice 억제 무력화 → 룰 억제창 존중(`dedup_override_suppression`, 기본 F) | PR (phase0/infra-cleanup) |
 | 0 | C2 detection 중복 → "notice.log 1건 = detection 1건" | PR (phase0/infra-cleanup) |
 | 0 | C3 로그 필터 → `keep_log_streams`/`log_paths` 설정화, reporter 유지 | PR (phase0/infra-cleanup) |
+| 0 | 로그 디렉터리 생성 경쟁 조건: `system("mkdir -p")`는 백그라운드 실행이라 writer가 먼저 파일을 열면 스트림 종료 (CI로 재현) → 동기식 `mkdir()` BIF로 교체 | PR (phase0/infra-cleanup) |
 | 0 | H1 03_sqli 정규식 문법 | PR (phase0/infra-cleanup) |
 | 0 | 08_dns_tunneling 지역 변수 `sub`가 내장 함수와 충돌해 로드 실패 (CI로 추가 발견) | PR (phase0/infra-cleanup) |
 | 0 | 로더 일원화(`detections/__load__.zeek` 삭제, 비활성 룰 경로 수정) | PR (phase0/infra-cleanup) |
@@ -100,7 +101,7 @@
 | weird | 분석기 이상(evasion 징후) 확인 불가 |
 | **asset_signal** (머지 후) | 자산 식별 PoC 결과물이 출력되지 않음 (DESIGN.md 7장 5번 "선별 전송 대상에 asset_signal 추가"와 충돌) |
 
-추가로 `zeek_init`에서 `system("mkdir -p ...")`를 모든 노드가 실행하고, 경로가 하드코딩(`/hdd_tmp`, `/log`)되어 있다. CaptureLoss/Stats/LoadedScripts 스트림은 해당 policy 스크립트가 로드돼 있어야 컴파일된다(기본 local.zeek 의존).
+추가로 `zeek_init`에서 `system("mkdir -p ...")`를 모든 노드가 실행하는데, Zeek `system()`은 명령을 **백그라운드로** 실행하므로 디렉터리가 생기기 전에 로그 writer가 파일을 열면 `No such file or directory`로 스트림이 종료되는 경쟁 조건이 있다(CI에서 재현). 또 경로가 하드코딩(`/hdd_tmp`, `/log`)되어 있다. CaptureLoss/Stats/LoadedScripts 스트림은 해당 policy 스크립트가 로드돼 있어야 컴파일된다(기본 local.zeek 의존).
 
 **권고:** "전부 끄고 일부 켜기" 대신 **켜둘 목록을 설정값(`const keep_streams: set[Log::ID] &redef`)으로 분리**하고 최소한 `Reporter::LOG`, `AssetID` 로그, evidence 조인에 필요한 원본 로그(용량 문제면 별도 경로/짧은 보존)를 포함. 디렉터리 생성은 배포 스크립트로 이동.
 

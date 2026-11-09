@@ -36,14 +36,19 @@ jobs:
             ./nsm_rules/detections/11_dns_exfil
 
       # 3) 런타임 스모크: 입력 없이 실행해 zeek_init(SumStats 생성, 로그 필터 등)까지 확인
+      #    로그 디렉터리가 없는 상태에서 반복 실행해 디렉터리 생성 경쟁 조건을 잡는다.
       - name: Runtime smoke (zeek_init)
         run: |
           mkdir -p /tmp/smoke && cd /tmp/smoke
-          zeek "$GITHUB_WORKSPACE/nsm_rules" 2> stderr.txt || { cat stderr.txt; exit 1; }
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            rm -rf /log/zeek /hdd_tmp/log/zeek ./*.log
+            zeek "$GITHUB_WORKSPACE/nsm_rules" 2> stderr.txt || { cat stderr.txt; exit 1; }
+            if grep -qiE "error|fatal" stderr.txt; then
+              cat stderr.txt
+              echo "::error::Zeek reported errors at startup (run $i)"
+              exit 1
+            fi
+          done
           cat stderr.txt
-          if grep -qiE "error|fatal" stderr.txt; then
-            echo "::error::Zeek reported errors at startup"
-            exit 1
-          fi
-          echo "== log dirs"
-          ls -la /log/zeek /hdd_tmp/log/zeek || true
+          echo "== log dirs (last run)"
+          ls -la /log/zeek /hdd_tmp/log/zeek
