@@ -104,6 +104,13 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::ransomware_allowlist         += { 10.20.70.0/28 };     # 백업·동기화·DLP 서버, nsm_config_custom.zeek 에 기록
 
 # =============================================================================
+# [22] Name_Poisoning (T1557.001) — 한 응답자가 LLMNR/NBT-NS/mDNS 로 다수 이름에 긍정 응답
+# =============================================================================
+# redef NSM::poisoning_interval            = 10min;                 # 집계 윈도우
+# redef NSM::poisoning_name_threshold      = 5;                     # 응답자별 고유 이름 수
+# redef NSM::poisoning_allowlist          += { 10.0.0.53/32 };      # WINS 서버 등, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우
