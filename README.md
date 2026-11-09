@@ -1,0 +1,71 @@
+# NSM 탐지룰 (nsm_rules)
+
+Zeek 기반 NSM(Network Security Monitoring) 탐지 룰 패키지입니다.
+미러 트래픽에서 킬체인 단계별(정찰 → 자격증명 → 확산 → C2 → 유출) 위협을 탐지하고,
+`notice.log` / `nsm_detection.log` / `evidence.log`로 탐지와 근거를 남깁니다.
+
+- 대상 Zeek 버전: **9.x** (자산 식별 PoC와 동일 기준)
+- 현재 상태: 원본(nsm_rules_4.zip) 반입 + 전체 검토 완료, 정리·확대 작업 진행 예정
+
+## 구조
+
+```
+nsm_rules/
+  __load__.zeek             # 패키지 로더 (@load nsm_rules)
+  detections/
+    main.zeek               # Notice 타입, 공통 파라미터·헬퍼
+    evidence_log.zeek       # 증적(evidence.log) 스트림
+    detection_log.zeek      # 탐지 요약(nsm_detection.log) 스트림
+    attack_mapping.zeek     # Notice → ATT&CK 매핑
+    notice_aggregation.zeek # 동일 notice 집계
+    correlation_killchain.zeek # 킬체인 상관분석
+    nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
+    nsm_config_custom.zeek  # 고객 환경별 설정(local_nets, allowlist)
+    intel_ja3.zeek          # JA3 차단 목록
+    01~16_*.zeek            # 탐지 룰 (1파일 = 1탐지)
+  rules/
+    ja3/                    # Salesforce JA3 패키지 (BSD)
+    filter_log.zeek         # 로그 출력 필터/경로
+docs/
+  NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
+```
+
+## 탐지 룰
+
+| 파일 | 탐지 | ATT&CK | 상태 |
+|---|---|---|---|
+| 01_port_scan | 포트 스캔 | T1046 | 활성 |
+| 02_host_scan | 호스트 스캔 | T1018 | 활성 |
+| 03_sqli | SQL Injection | T1190 | 비활성 |
+| 04_webshell | 웹쉘 접근 | T1505.003 | 비활성 |
+| 05_ntlm_spray | NTLM 패스워드 스프레이 | T1110.003 | 비활성 |
+| 06_smb_admin_share | SMB 관리공유 확산 | T1021.002 | 활성 |
+| 07_http_beaconing | HTTP 비커닝 | T1071.001 | 활성 |
+| 08_dns_tunneling | DNS 터널링 | T1071.004 | 비활성 |
+| 09_encrypted_c2 | 암호화 C2 | T1573.002 | 활성 |
+| 10_large_transfer_exfil | 단일 연결 대용량 유출 | T1041 | 활성 |
+| 11_dns_exfil | DNS 유출 | T1048.003 | 비활성 |
+| 12_web_upload_exfil | 클라우드 업로드 유출 | T1567.002 | 활성 |
+| 13_dga | DGA 도메인 | T1568.002 | 활성 |
+| 14_large_transfer_exfil | 호스트 단위 볼륨 유출 | T1041 | 활성 |
+| 15_rdp_lateral | RDP 확산 | T1021.001 | 활성 |
+| 16_ssh_lateral | SSH 확산 | T1021.004 | 활성 |
+
+## 사용
+
+```zeek
+# local.zeek
+@load /path/to/nsm_rules
+```
+
+고객 환경 값(내부 대역, 예외 목록)은 `nsm_rules/detections/nsm_config_custom.zeek`에서 `redef` 합니다.
+
+## 검토 결과와 작업 계획
+
+[docs/NSM_RULES_REVIEW.md](docs/NSM_RULES_REVIEW.md) 참고 — 우선 수정 항목(Critical/High), 비활성 룰 재활성화 조건,
+신규 룰 후보(P1/P2), 자산 식별 PoC 머지 이슈, 작업 순서를 정리했습니다.
+
+## 관련 저장소
+
+- 자산 식별 PoC: `kwsjjang8901-ship-it/claudtest2` — `nsm_rules/asset-id/`로 머지 예정
+- OCSF 변환기(zeek-bzar-ocsf, Go): `kwsjjang8901-ship-it/claudtest`
