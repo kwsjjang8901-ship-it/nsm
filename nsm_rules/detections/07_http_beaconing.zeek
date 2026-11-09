@@ -33,6 +33,10 @@ export {
     ##      해당 도메인/하위도메인으로의 비커닝은 예외 처리된다.
     ##  IP 가 자주 바뀌는 OCSP/업데이트/텔레메트리 오탐 억제에 사용.
     const beacon_allowlist_domains: set[string] = {} &redef;
+
+    ## 캡처 손실 등으로 빠진 비콘을 연속 몇 개까지 허용할지.
+    ##   delta 가 기준주기의 k 배(k <= beacon_max_missed + 1) 근처면 박자 유지로 본다.
+    const beacon_max_missed = 2 &redef;
 }
 
 type BeaconState: record {
@@ -95,15 +99,20 @@ event connection_state_remove(c: connection)
         }
     else
         {
-        # 누락 허용: delta 가 기준주기의 정수배(k=1,2,3...) 근처면 "박자 유지"로 본다.
+        # 누락 허용: delta 가 기준주기의 정수배(k=1..beacon_max_missed+1) 근처면 "박자 유지".
         # 캡처 손실로 중간 비콘이 빠져도(예: 5s 주기인데 10s 관측) 스트릭이 끊기지 않음.
+        #
+        # 허용오차는 k 와 무관하게 기준주기 x jitter 로 고정한다.
+        #   (이전: 기준주기 x jitter x k. jitter 0.25 면 k>=2 부터 허용 구간이 배수 간격의
+        #    절반 이상이 되어, 기준주기의 1.5배 이상인 "모든" 간격이 박자 맞음으로 판정됐다.
+        #    -> 같은 외부 IP 로 불규칙 HTTP 연결이 13회 이상이면 비커닝 오탐. 회귀 테스트로 확인)
         local ratio = delta / st$base_ival;
         local k = double_to_count(floor(ratio + 0.5));   # 가장 가까운 정수배
         local on_beat = F;
-        if ( k >= 1 )
+        if ( k >= 1 && k <= beacon_max_missed + 1 )
             {
             local expect = st$base_ival * k;
-            local tol = st$base_ival * beacon_jitter * k;  # 배수만큼 허용오차도 비례
+            local tol = st$base_ival * beacon_jitter;
             if ( delta >= expect - tol && delta <= expect + tol )
                 on_beat = T;
             }

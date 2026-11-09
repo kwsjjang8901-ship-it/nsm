@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Zeek TSV 로그에서 조건에 맞는 행 수를 검사한다.
+#
+#   assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]
+#
+#   예) assert-rows notice.log ge 1 note=NSM::Port_Scan src=10.0.0.5
+#       assert-rows notice.log eq 0 note=NSM::Port_Scan src=10.0.0.6
+#
+# value 는 정확히 일치(문자열). 로그 파일이 없으면 0 행으로 본다.
+# 실패하면 조건과 실제 값, 그리고 해당 로그의 관련 행을 stderr 로 보여준다.
+set -euo pipefail
+
+if [ $# -lt 3 ]; then
+	echo "usage: assert-rows <log> <eq|ge|le|gt|lt> <N> [field=value ...]" >&2
+	exit 2
+fi
+
+log=$1; op=$2; want=$3; shift 3
+
+count_rows() {
+	[ -f "$log" ] || { echo 0; return; }
+	awk -F'\t' -v conds="$*" '
+		BEGIN { nc = split(conds, c, " ") }
+		/^#fields/ {
+			for (i = 2; i <= NF; i++) col[$i] = i - 1
+			for (k = 1; k <= nc; k++) {
+				split(c[k], kv, "=")
+				if (!(kv[1] in col)) { printf("assert-rows: no field \"%s\" in %s\n", kv[1], FILENAME) > "/dev/stderr"; bad = 1 }
+			}
+			next
+		}
+		/^#/ { next }
+		{
+			ok = 1
+			for (k = 1; k <= nc; k++) {
+				eq = index(c[k], "=")
+				f = substr(c[k], 1, eq - 1); v = substr(c[k], eq + 1)
+				if ($(col[f]) != v) { ok = 0; break }
+			}
+			if (ok) n++
+		}
+		END { if (bad) exit 3; print n + 0 }
+	' "$log"
+}
+
+got=$(count_rows "$@")
+
+case $op in
+	eq) [ "$got" -eq "$want" ] ;;
+	ge) [ "$got" -ge "$want" ] ;;
+	le) [ "$got" -le "$want" ] ;;
+	gt) [ "$got" -gt "$want" ] ;;
+	lt) [ "$got" -lt "$want" ] ;;
+	*) echo "assert-rows: unknown op $op" >&2; exit 2 ;;
+esac && exit 0
+
+{
+	echo "assert-rows FAILED: $log [$*] count=$got, expected $op $want"
+	if [ -f "$log" ]; then
+		echo "---- $log ----"
+		grep -v '^#\(separator\|set_separator\|empty_field\|unset_field\|path\|open\|close\|types\)' "$log" | head -40
+	else
+		echo "($log not found; files: $(ls -1 *.log 2>/dev/null | tr '\n' ' '))"
+	fi
+} >&2
+exit 1

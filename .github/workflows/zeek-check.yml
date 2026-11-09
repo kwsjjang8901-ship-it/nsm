@@ -52,3 +52,28 @@ jobs:
           cat stderr.txt
           echo "== log dirs (last run)"
           ls -la /log/zeek /hdd_tmp/log/zeek
+
+      # 4) 탐지 회귀 테스트: 합성 pcap 재생 -> 룰별 탐지/미탐 검사
+      - name: btest (tests/btest)
+        run: |
+          cd tests/btest
+          btest --version || true
+          btest -d -j 4
+
+  pcaps:
+    name: pcap 재현성
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate and compare
+        run: |
+          pip install --quiet scapy==2.6.1 cryptography
+          python3 tests/gen_pcaps.py "$RUNNER_TEMP/pcaps"
+          rc=0
+          for f in tests/pcaps/*.pcap; do
+            cmp "$f" "$RUNNER_TEMP/pcaps/$(basename "$f")" || { echo "::error::$f differs from generator output"; rc=1; }
+          done
+          exit $rc

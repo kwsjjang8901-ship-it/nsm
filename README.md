@@ -26,6 +26,11 @@ nsm_rules/
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
+tests/
+  gen_pcaps.py              # 합성 pcap 생성기 (scapy)
+  pcaps/                    # 룰별 테스트 pcap (생성기 출력, 커밋됨)
+  btest/                    # btest 회귀 테스트 (rules/, tools/, setup.zeek)
+  run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
 docs/
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
 ```
@@ -60,6 +65,21 @@ docs/
 
 고객 환경 값(내부 대역, 예외 목록, 남길 로그 스트림 등)은 `nsm_rules/detections/nsm_config_custom.zeek`에 `redef`로 둡니다.
 이 파일은 저장소에서는 **빈 파일로 유지**하고, 배포 시 고객 환경별로 별도 기록합니다.
+
+## 테스트
+
+```bash
+tests/run_tests.sh                               # btest 전체 (로컬 zeek 없으면 Docker zeek/zeek:9.0.1)
+ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh    # Zeek 8.0 으로
+tests/run_tests.sh rules/13-dga.zeek             # 일부만
+```
+
+- 룰마다 합성 pcap 하나에 **탐지돼야 하는 호스트와 탐지되면 안 되는 호스트**를 함께 넣고,
+  `notice.log` / `nsm_detection.log` / `evidence.log`의 행 수로 검사합니다(`tests/btest/tools/assert-rows`).
+- 공통 계약도 검사합니다: notice 1건 = detection 1건, notice의 `evidence_id`는 evidence.log에서 조회 가능, 룰 억제창 적용, 운영 로그 필터.
+- `13-dga-known-gap.zeek`는 **알려진 한계(검토 H4)를 기록하는 테스트**입니다. 개선하면 기대값을 바꿉니다.
+- pcap은 `python3 tests/gen_pcaps.py tests/pcaps`로 다시 만들 수 있고(결정적 출력), CI가 커밋된 pcap과 생성기 출력이 같은지 확인합니다.
+- CI(`.github/workflows/zeek-check.yml`)는 Zeek 9.0.1 / 8.0.9에서 문법 검사, 기동 검사, btest를 실행합니다.
 
 ## 검토 결과와 작업 계획
 
