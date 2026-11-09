@@ -166,16 +166,21 @@ global primes: table[addr, Notice::Type] of ChainState &write_expire=chain_max_e
 ## chain_rules + chain_group_rules 를 펼친 전이 색인: 출발 탐지 -> 전이 목록
 global transitions_from: table[Notice::Type] of vector of Transition;
 
+## 같은 (출발, 도착, pivot) 전이가 여러 규칙에 있으면 가장 긴 window 를 쓴다.
+##   (Notice::Type 과 PivotKind 를 한 복합 색인에 섞으면 Zeek 9 가 경고하므로 문자열 키를 쓴다)
+function merge_transition(best: table[string] of Transition, tr: Transition)
+    {
+    local k = cat(tr$from, "|", tr$to, "|", tr$pivot);
+    if ( k !in best || best[k]$window < tr$window )
+        best[k] = tr;
+    }
+
 event zeek_init() &priority=10
     {
-    local best: table[Notice::Type, Notice::Type, PivotKind] of interval = table();
+    local best: table[string] of Transition = table();
 
     for ( i in chain_rules )
-        {
-        local cr = chain_rules[i];
-        if ( [cr$from, cr$to, cr$pivot] !in best || best[cr$from, cr$to, cr$pivot] < cr$window )
-            best[cr$from, cr$to, cr$pivot] = cr$window;
-        }
+        merge_transition(best, chain_rules[i]);
 
     for ( j in chain_group_rules )
         {
@@ -185,17 +190,16 @@ event zeek_init() &priority=10
                 {
                 if ( f == t )
                     next;
-                if ( [f, t, g$pivot] !in best || best[f, t, g$pivot] < g$window )
-                    best[f, t, g$pivot] = g$window;
+                merge_transition(best, Transition($from=f, $to=t, $pivot=g$pivot, $window=g$window));
                 }
         }
 
-    for ( [f2, t2, pv], w in best )
+    for ( bk, tr in best )
         {
-        if ( f2 !in transitions_from )
-            transitions_from[f2] = vector();
-        local v = transitions_from[f2];
-        v[|v|] = Transition($from=f2, $to=t2, $pivot=pv, $window=w);
+        if ( tr$from !in transitions_from )
+            transitions_from[tr$from] = vector();
+        local v = transitions_from[tr$from];
+        v[|v|] = tr;
         }
     }
 
