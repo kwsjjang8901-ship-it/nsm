@@ -5,9 +5,10 @@
 # @TEST-PORT: BROKER_WORKER2_PORT
 #
 # @TEST-EXEC: cp $FILES/cluster-layout.zeek .
-# @TEST-EXEC: btest-bg-run manager  ZEEKPATH=$ZEEKPATH:.. CLUSTER_NODE=manager  zeek $PKG $SETUP %INPUT
-# @TEST-EXEC: btest-bg-run worker-1 ZEEKPATH=$ZEEKPATH:.. CLUSTER_NODE=worker-1 zeek $PKG $SETUP %INPUT
-# @TEST-EXEC: btest-bg-run worker-2 ZEEKPATH=$ZEEKPATH:.. CLUSTER_NODE=worker-2 zeek $PKG $SETUP %INPUT
+# CI 컨테이너는 ZEEKPATH 가 비어 있으므로 Zeek 기본 경로(zeek-config --zeekpath)에 테스트 디렉터리(..)를 덧붙인다.
+# @TEST-EXEC: btest-bg-run manager  ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=manager  zeek $PKG $SETUP %INPUT
+# @TEST-EXEC: btest-bg-run worker-1 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-1 zeek $PKG $SETUP %INPUT
+# @TEST-EXEC: btest-bg-run worker-2 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-2 zeek $PKG $SETUP %INPUT
 # @TEST-EXEC: btest-bg-wait 60
 #
 # 단일 탐지 3건이 각 노드에서 났는지(로그는 매니저가 기록)
