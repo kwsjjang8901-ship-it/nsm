@@ -24,6 +24,7 @@
 @load ./detections/12_web_upload_exfil
 @load ./detections/13_dga
 @load ./detections/14_large_transfer_exfil
+@load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 
 # 공통 인프라(탐지 아님): ATT&CK 매핑 _> 동일 notice 집계
 @load ./detections/detection_log

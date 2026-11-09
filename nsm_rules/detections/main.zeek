@@ -50,6 +50,8 @@ export {
         WinRM_Lateral,
         ## 20. DCOM 내부 확산 (1 src -> 다수 host 원격 COM 객체 생성)
         DCOM_Lateral,
+        ## 21. 랜섬웨어성 SMB 파일 변경 (확장자 변경 rename 대량 / 여러 폴더에 랜섬 노트)
+        SMB_Ransomware,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -266,6 +268,7 @@ export {
         [Outbound_SMB]           = "Exfiltration",
         [WinRM_Lateral]          = "Lateral Movement",
         [DCOM_Lateral]           = "Lateral Movement",
+        [SMB_Ransomware]         = "Impact",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

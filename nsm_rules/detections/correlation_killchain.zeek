@@ -181,6 +181,7 @@ const stage_tag_map: table[Notice::Type] of string = {
     [Outbound_SMB]           = "Exfil",
     [WinRM_Lateral]          = "Lateral",
     [DCOM_Lateral]           = "Lateral",
+    [SMB_Ransomware]         = "Impact",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",

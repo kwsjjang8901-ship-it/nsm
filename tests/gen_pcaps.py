@@ -959,10 +959,103 @@ def gen_winrm_dcom(out):
     cap.write(os.path.join(out, "winrm_dcom.pcap"))
 
 
+# --------------------------------------------------------------------------- 21 랜섬웨어성 SMB
+
+FILE_SERVER = "10.0.0.6"
+
+
+class Smb2Session:
+    """하나의 TCP 연결 위 SMB2 세션(트리 연결 후 파일 열기·이름 바꾸기·만들기)."""
+
+    def __init__(self, cap, src, dst, share, t):
+        self.s = Tcp(cap, src, dst, 445)
+        self.t = self.s.handshake(t)
+        self.mid, self.tid, self.sid = 1, 0, RNG.randint(1, 2**40)
+        path = ("\\\\%s\\%s" % (dst, share)).encode("utf-16-le")
+        self._xchg(3, struct.pack("<HHHH", 9, 0, 64 + 8, len(path)) + path,
+                   struct.pack("<HBxIII", 16, 1, 0, 0, 0x001F01FF), new_tid=1)
+
+    def _hdr(self, cmd, status=0, response=False):
+        return (b"\xfeSMB" + struct.pack("<HHIHHII", 64, 1, status, cmd, 1, 1 if response else 0, 0)
+                + struct.pack("<QII", self.mid, 0xFEFF, self.tid) + struct.pack("<Q", self.sid) + b"\x00" * 16)
+
+    def _xchg(self, cmd, req_body, rep_body, new_tid=None):
+        self.t = self.s.client_send(nbss(self._hdr(cmd) + req_body), self.t + 0.001)
+        if new_tid is not None:
+            self.tid = new_tid
+        self.t = self.s.server_send(nbss(self._hdr(cmd, response=True) + rep_body), self.t + 0.001)
+        self.mid += 1
+
+    def create(self, name, disposition=1):
+        n = name.encode("utf-16-le")
+        req = (struct.pack("<HBBI", 57, 0, 0, 2) + b"\x00" * 16
+               + struct.pack("<IIIII", 0x00130197, 0, 7, disposition, 0x40)
+               + struct.pack("<HHII", 64 + 56, len(n), 0, 0) + n)
+        fid = (RNG.getrandbits(64), RNG.getrandbits(64))
+        ft = 133000000000000000
+        rep = (struct.pack("<HBBI", 89, 0, 0, 1 if disposition == 1 else 2) + struct.pack("<QQQQ", ft, ft, ft, ft)
+               + struct.pack("<QQII", 4096, 1234, 0x20, 0) + struct.pack("<QQ", *fid) + struct.pack("<II", 0, 0))
+        self._xchg(5, req, rep)
+        return fid
+
+    def rename(self, fid, new_name):
+        n = new_name.encode("utf-16-le")
+        buf = struct.pack("<B7xQI", 0, 0, len(n)) + n
+        req = struct.pack("<HBBIHHI", 33, 1, 0x0a, len(buf), 64 + 32, 0, 0) + struct.pack("<QQ", *fid) + buf
+        self._xchg(0x11, req, struct.pack("<H", 2))
+
+    def close(self):
+        return self.s.close(self.t + 0.01)
+
+
+def gen_smb_ransomware(out):
+    cap = Capture()
+    t = T0
+    dirs = ["finance", "hr", "sales", "legal", "it", "ops"]
+    # .180: 40개 파일을 .lockd 로 이름 변경 + 6개 폴더에 랜섬 노트 -> 탐지
+    s = Smb2Session(cap, "10.0.0.180", FILE_SERVER, "data", t + 1)
+    for i in range(40):
+        name = "%s\\report_%02d.docx" % (dirs[i % 6], i)
+        s.rename(s.create(name), name + ".lockd")
+    for d in dirs:
+        s.create("%s\\README_DECRYPT_FILES.txt" % d, disposition=2)
+    t = s.close()
+    # .181: 40개 파일 이름만 변경(확장자 유지) -> 미탐
+    s = Smb2Session(cap, "10.0.0.181", FILE_SERVER, "data", t + 1)
+    for i in range(40):
+        name = "%s\\memo_%02d.docx" % (dirs[i % 6], i)
+        s.rename(s.create(name), name.replace(".docx", "_v2.docx"))
+    t = s.close()
+    # .182: Office 저장 패턴 20회(원본 -> ~WRL.tmp, ~WRD.tmp -> 원본) -> 미탐
+    s = Smb2Session(cap, "10.0.0.182", FILE_SERVER, "data", t + 1)
+    for i in range(20):
+        name = "sales\\plan_%02d.xlsx" % i
+        s.rename(s.create(name), "sales\\~WRL%04d.tmp" % i)
+        s.rename(s.create("sales\\~WRD%04d.tmp" % i), name)
+    t = s.close()
+    # .183: 백업 서버(예외) 40개 확장자 변경 -> 미탐
+    s = Smb2Session(cap, "10.0.0.183", FILE_SERVER, "data", t + 1)
+    for i in range(40):
+        name = "it\\log_%02d.txt" % i
+        s.rename(s.create(name), name + ".bak")
+    t = s.close()
+    # .184: 랜섬 노트만 6개 폴더 -> 탐지 / .185: 일반 readme.txt 6개 폴더 -> 미탐
+    s = Smb2Session(cap, "10.0.0.184", FILE_SERVER, "data", t + 1)
+    for d in dirs:
+        s.create("%s\\HOW_TO_RESTORE_FILES.html" % d, disposition=2)
+    t = s.close()
+    s = Smb2Session(cap, "10.0.0.185", FILE_SERVER, "data", t + 1)
+    for d in dirs:
+        s.create("%s\\readme.txt" % d, disposition=2)
+    t = s.close()
+    cap.tick(t + 120)
+    cap.write(os.path.join(out, "smb_ransomware.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
-              gen_winrm_dcom]
+              gen_winrm_dcom, gen_smb_ransomware]
 
 
 def main():
