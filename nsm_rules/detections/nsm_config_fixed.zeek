@@ -140,6 +140,18 @@ redef NSM::dga_exclude_reverse_dns       = T;
 # redef NSM::dga_allowlist_domains       += { "internal" };             # 필요 시 추가
 
 # =============================================================================
+# [08] DNS_Tunneling / Exfil_DNS  (T1071.004 · C2 / T1048.003 · Exfil) — 통합 판정
+#   (src, 등록도메인) 단위 dnstun_interval 창에서 수상한 질의 비율 >= dnstun_suspicious_ratio 일 때
+#     고유 서브도메인 >= dnstun_unique_sub -> DNS_Tunneling,  누적 서브도메인 바이트 >= dnsexfil_bytes -> Exfil_DNS
+# =============================================================================
+redef NSM::dnstun_interval               = 5min;        # 집계 윈도우
+redef NSM::dnstun_unique_sub             = 50;          # [터널링] 고유 서브도메인 수
+redef NSM::dnsexfil_bytes                = 256*1024;    # [유출] 누적 인코딩 바이트
+redef NSM::dnstun_suspicious_ratio       = 0.5;         # 수상한 질의 비율
+# redef NSM::dns_tunnel_resolvers         += { 10.0.0.53 };          # 내부 재귀 리졸버(출발지 제외), nsm_config_custom.zeek 에 기록
+# redef NSM::dns_tunnel_allowlist_domains += { "example-av.com" };   # 서브도메인 조회형 정상 서비스
+
+# =============================================================================
 # [10] Exfil_Large_Transfer  (T1041 · Exfil)
 # =============================================================================
 redef NSM::exfil_bytes_threshold         = 50*1024*1024;   # 단일 연결 orig_bytes 임계(50MB)

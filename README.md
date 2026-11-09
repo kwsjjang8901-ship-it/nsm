@@ -48,10 +48,9 @@ docs/
 | 05_ntlm_spray | NTLM 패스워드 스프레이 | T1110.003 | 비활성 |
 | 06_smb_admin_share | SMB 관리공유 확산 | T1021.002 | 활성 |
 | 07_http_beaconing | HTTP 비커닝 | T1071.001 | 활성 |
-| 08_dns_tunneling | DNS 터널링 | T1071.004 | 비활성 |
+| 08_dns_tunneling | DNS 터널링 + DNS 유출 (통합) | T1071.004 / T1048.003 | 활성 |
 | 09_encrypted_c2 | 암호화 C2 | T1573.002 | 활성 |
 | 10_large_transfer_exfil | 단일 연결 대용량 유출 | T1041 | 활성 |
-| 11_dns_exfil | DNS 유출 | T1048.003 | 비활성 |
 | 12_web_upload_exfil | 클라우드 업로드 유출 | T1567.002 | 활성 |
 | 13_dga | DGA 도메인 | T1568.002 | 활성 |
 | 14_large_transfer_exfil | 호스트 단위 볼륨 유출 | T1041 | 활성 |

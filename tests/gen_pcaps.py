@@ -511,8 +511,41 @@ def gen_chain(out):
     cap.write(os.path.join(out, "chain_recon_c2.pcap"))
 
 
+# --------------------------------------------------------------------------- 08 DNS 터널링·유출
+
+def dns_query_only(cap, client, qname, qtype, t):
+    q = cap.l3(client, DNS_SERVER) / UDP(sport=RNG.randint(20000, 60000), dport=53) / DNS(
+        id=RNG.randint(1, 65535), rd=1, qd=DNSQR(qname=qname, qtype=qtype))
+    cap.add(q, t)
+
+
+def rand_from(alphabet, n):
+    return "".join(RNG.choice(alphabet) for _ in range(n))
+
+
+def gen_dns_tunnel(out):
+    cap = Capture()
+    t = T0
+    hexchars = "0123456789abcdef"
+    b32 = "abcdefghijklmnopqrstuvwxyz234567"
+    for i in range(80):   # 10.0.0.110: 40자 hex 라벨 TXT 질의 80건 -> 터널링 탐지
+        dns_query_only(cap, "10.0.0.110", "%s.t.evil-tunnel.com" % rand_from(hexchars, 40), "TXT", t + i * 1.5)
+    for i in range(680):  # 10.0.0.111: 50자 base32 라벨 680건(약 34KB) -> 유출 탐지(테스트 임계 32KB)
+        dns_query_only(cap, "10.0.0.111", "%s.x.exfil-dns.net" % rand_from(b32, 50), "A", t + 0.3 + i * 0.15)
+    for i in range(80):   # 10.0.0.112: CDN형 짧은 무작위 서브도메인 80건 -> 미탐
+        dns_query_only(cap, "10.0.0.112", "r%d---sn-%s.cdn-video.example.com" % (i % 9, rand_from(hexchars + "xyz", 8)),
+                       "A", t + 0.6 + i * 1.5)
+    words = ["shop", "news", "bank", "mall", "game", "food", "book", "tour", "car", "home"]
+    for i in range(80):   # 10.0.0.113: 국내 사이트 80곳(www.<단어><n>.co.kr) -> 미탐 (co.kr 은 사이트별로 집계)
+        dns_query_only(cap, "10.0.0.113", "www.%s%d.co.kr" % (words[i % 10], i), "A", t + 0.9 + i * 1.5)
+    for i in range(80):   # 10.0.0.114: AV 평판 조회(sophosxl.net) 80건 -> 미탐 (기본 예외)
+        dns_query_only(cap, "10.0.0.114", "%s.sxl.sophosxl.net" % rand_from(hexchars, 40), "A", t + 1.2 + i * 1.5)
+    cap.tick(T0 + 11 * 60)      # dnstun_interval(5분) epoch 를 두 번 넘긴다
+    cap.write(os.path.join(out, "dns_tunnel.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
-              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain]
+              gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel]
 
 
 def main():
