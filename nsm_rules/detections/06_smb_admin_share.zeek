@@ -8,10 +8,10 @@
 ##!   - src allowlist(SCCM/백업/AV관리/PsExec 등)가 오탐 제어의 핵심.
 ##!
 ##! 증적(Evidence) 연동  ※ 집계형
-##!   - 집계형이라 threshold_crossed 에는 uid 가 없다 -> src 단위 합성 evidence_id
-##!     ( cat(src, "|smb-admin-lm") )를 쓴다.
-##!   - 실제 근거(어떤 src->dst, 어떤 공유)는 observe 시점마다 evidence.log 에 1행씩
-##!     적재한다. 가능하면 NTLM 세션에서 계정(WHO)도 채운다.
+##!   - 집계형이라 epoch_result 에는 uid 가 없다 -> src 단위 합성 evidence_id
+##!     ( cat(src, "|smb-admin-lm|", time_bucket(smb_lm_epoch)) )를 쓴다.
+##!   - 근거(src->dst)는 탐지 시점(epoch_result)에 SAMPLE 표본의 목적지마다 1행씩
+##!     evidence.log 에 적재한다. 계정(WHO)은 아직 채우지 않는다(개선 예정).
 ##!   - notice 는 동일 evidence_id 만 들고 가, 그 src 의 근거 묶음을 가리킨다.
 ##! ============================================================================
 

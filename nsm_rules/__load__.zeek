@@ -7,17 +7,17 @@
 # 탐지 룰 (킬체인 순서, 1탐지 = 1파일)
 @load ./detections/01_port_scan
 @load ./detections/02_host_scan
-#@load ./03_sqli
-#@load ./04_webshell
-#@load ./05_ntlm_spray
+#@load ./detections/03_sqli
+#@load ./detections/04_webshell
+#@load ./detections/05_ntlm_spray
 @load ./detections/06_smb_admin_share
 @load ./detections/15_rdp_lateral
 @load ./detections/16_ssh_lateral
 @load ./detections/07_http_beaconing
-#@load ./08_dns_tunneling
+#@load ./detections/08_dns_tunneling
 @load ./detections/09_encrypted_c2
 @load ./detections/10_large_transfer_exfil
-#@load ./11_dns_exfil
+#@load ./detections/11_dns_exfil
 @load ./detections/12_web_upload_exfil
 @load ./detections/13_dga
 @load ./detections/14_large_transfer_exfil

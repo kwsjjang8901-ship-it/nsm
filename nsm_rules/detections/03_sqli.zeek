@@ -25,7 +25,9 @@ export {
       | /(?i:select[[:space:]].+[[:space:]]from[[:space:]])/
       | /(?i:(load_file|into[[:space:]]+outfile|into[[:space:]]+dumpfile))/
       | /(?i:(xp_cmdshell|exec[[:space:]]*\(|extractvalue|updatexml))/
-      | /(?:--[[:space:]]|;--|\/\*|\*\/|#)/  # 인라인 주석/구문 종료 우회
+      | /(--[[:space:]]|;--|\/\*|\*\/|#)/  # 인라인 주석/구문 종료 우회
+      # NOTE: Zeek 정규식은 비캡처 그룹 (?: 를 지원하지 않는다((?i: (?s: 만 지원).
+      #       오탐 패턴(# 단독 등) 정리는 룰 재작성 단계에서 진행.
       &redef;
 }
 
