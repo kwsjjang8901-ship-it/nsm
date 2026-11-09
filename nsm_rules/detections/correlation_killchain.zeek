@@ -183,6 +183,7 @@ const stage_tag_map: table[Notice::Type] of string = {
     [DCOM_Lateral]           = "Lateral",
     [SMB_Ransomware]         = "Impact",
     [Name_Poisoning]         = "CredentialAccess",
+    [DCSync]                 = "CredentialAccess",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",

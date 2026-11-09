@@ -54,6 +54,8 @@ export {
         SMB_Ransomware,
         ## 22. LLMNR/NBT-NS/mDNS 포이즈닝 (1 응답자 -> 다수 이름에 긍정 응답)
         Name_Poisoning,
+        ## 23. DCSync (DC 가 아닌 host 의 DRSUAPI DRSGetNCChanges)
+        DCSync,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -272,6 +274,7 @@ export {
         [DCOM_Lateral]           = "Lateral Movement",
         [SMB_Ransomware]         = "Impact",
         [Name_Poisoning]         = "Credential Access",
+        [DCSync]                 = "Credential Access",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

@@ -915,8 +915,8 @@ def dce_response(stub, call_id=2):
     return dce_hdr(2, struct.pack("<IHBB", len(stub), 0, 0, 0) + stub, call_id)
 
 
-def dcom_call(cap, src, dst, iface, opnum, t):
-    s = Tcp(cap, src, dst, 135)
+def dcom_call(cap, src, dst, iface, opnum, t, dport=135):
+    s = Tcp(cap, src, dst, dport)
     t = s.handshake(t)
     t = s.client_send(dce_bind(iface), t)
     t = s.server_send(dce_bind_ack(), t + 0.002)
@@ -1114,11 +1114,45 @@ def gen_name_poisoning(out):
     cap.write(os.path.join(out, "name_poisoning.pcap"))
 
 
+# --------------------------------------------------------------------------- 23 DCSync
+
+DRSUAPI = "e3514235-4b06-11d1-ab04-00c04fc2dcd2"
+
+
+def krb_as_ok_to(cap, client, kdc, user, t):
+    """임의 KDC 와의 사전인증 AS 교환(성공). DC 자동 학습용."""
+    sport = RNG.randint(49152, 65000)
+    cap.add(cap.l3(client, kdc) / UDP(sport=sport, dport=88) / Raw(as_req(t, user, True)), t)
+    cap.add(cap.l3(kdc, client) / UDP(sport=88, dport=sport)
+            / Raw(kdc_rep(0x6b, 11, user, "krbtgt/" + REALM, KRB_AES256, KRB_AES256)), t + 0.003)
+    return t + 0.01
+
+
+def gen_dcsync(out):
+    cap = Capture()
+    t = T0
+    # DC 학습: 10.0.0.10, 10.0.0.11 이 Kerberos 응답
+    t = krb_as_ok_to(cap, "10.0.0.220", KDC, "user01", t + 1)
+    t = krb_as_ok_to(cap, "10.0.0.220", "10.0.0.11", "user02", t + 1)
+    # .210: 일반 host 가 DC 에 DRSGetNCChanges (동적 포트) -> 탐지
+    t = dcom_call(cap, "10.0.0.210", KDC, DRSUAPI, 3, t + 1, dport=49667)
+    # 10.0.0.11: 학습된 DC 간 복제 -> 미탐
+    t = dcom_call(cap, "10.0.0.11", KDC, DRSUAPI, 3, t + 1, dport=49667)
+    # 10.0.0.12: 설정 목록의 DC(테스트 redef) -> 미탐
+    t = dcom_call(cap, "10.0.0.12", KDC, DRSUAPI, 3, t + 1, dport=49667)
+    # .211: DRSCrackNames(opnum 12) — 관리 도구의 이름 변환 -> 미탐
+    t = dcom_call(cap, "10.0.0.211", KDC, DRSUAPI, 12, t + 1, dport=49667)
+    # .212: Azure AD Connect(예외) DRSGetNCChanges -> 미탐
+    t = dcom_call(cap, "10.0.0.212", KDC, DRSUAPI, 3, t + 1, dport=49667)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "dcsync.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
-              gen_name_poisoning]
+              gen_name_poisoning, gen_dcsync]
 
 
 def main():
