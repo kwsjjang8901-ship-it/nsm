@@ -22,7 +22,7 @@ nsm_rules/
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
     nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
-    01~21_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
+    01~22_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
@@ -61,6 +61,7 @@ docs/
 | 19_outbound_smb | 외부향 SMB 연결 / 외부 NTLM 인증(자격증명 유출) | T1048 / T1187 | 활성 |
 | 20_winrm_dcom_lateral | WinRM / DCOM 내부 확산 | T1021.006 / T1021.003 | 활성 |
 | 21_smb_ransomware | 랜섬웨어성 SMB 파일 변경 (Impact) | T1486 | 활성 |
+| 22_name_poisoning | LLMNR / NBT-NS / mDNS 포이즈닝 (Responder 류) | T1557.001 | 활성 |
 
 ## 사용
 

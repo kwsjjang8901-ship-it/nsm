@@ -1052,10 +1052,73 @@ def gen_smb_ransomware(out):
     cap.write(os.path.join(out, "smb_ransomware.pcap"))
 
 
+# --------------------------------------------------------------------------- 22 LLMNR / NBT-NS / mDNS 포이즈닝
+
+def netbios_encode(name, suffix=0x20):
+    raw = name.upper().ljust(15)[:15].encode() + bytes([suffix])
+    return b"".join(bytes([0x41 + (b >> 4), 0x41 + (b & 0x0F)]) for b in raw)
+
+
+def nbns_packet(tid, flags, name, answer_ip=None):
+    qname = b"\x20" + netbios_encode(name) + b"\x00"
+    if answer_ip is None:                                   # 질의: QD 1
+        return struct.pack(">HHHHHH", tid, flags, 1, 0, 0, 0) + qname + struct.pack(">HH", 32, 1)
+    rdata = struct.pack(">H", 0) + bytes(int(x) for x in answer_ip.split("."))
+    return (struct.pack(">HHHHHH", tid, flags, 0, 1, 0, 0) + qname
+            + struct.pack(">HHIH", 32, 1, 300, len(rdata)) + rdata)   # 응답: 질문 없이 NB 레코드
+
+
+def nbns_exchange(cap, querier, responder, name, t):
+    tid = RNG.randint(1, 65535)
+    cap.add(cap.l3(querier, "10.0.0.255") / UDP(sport=137, dport=137) / Raw(nbns_packet(tid, 0x0110, name)), t)
+    cap.add(cap.l3(responder, querier) / UDP(sport=137, dport=137)
+            / Raw(nbns_packet(tid, 0x8500, name, answer_ip=responder)), t + 0.002)
+    return t + 0.01
+
+
+def llmnr_exchange(cap, querier, responder, name, t):
+    tid = RNG.randint(1, 65535)
+    sport = RNG.randint(49152, 65000)
+    q = DNS(id=tid, qd=DNSQR(qname=name, qtype="A"))
+    cap.add(cap.l3(querier, "224.0.0.252") / UDP(sport=sport, dport=5355) / q, t)
+    r = DNS(id=tid, qr=1, qd=DNSQR(qname=name, qtype="A"), an=DNSRR(rrname=name, type="A", ttl=30, rdata=responder))
+    cap.add(cap.l3(responder, querier) / UDP(sport=5355, dport=sport) / r, t + 0.002)
+    return t + 0.01
+
+
+def mdns_announce(cap, responder, an, t):
+    cap.add(cap.l3(responder, "224.0.0.251") / UDP(sport=5353, dport=5353) / DNS(id=0, qr=1, aa=1, qd=[], an=an), t)
+    return t + 0.01
+
+
+def gen_name_poisoning(out):
+    cap = Capture()
+    t = T0
+    # .190: Responder — LLMNR 3개 이름 + NBNS 3개 이름에 모두 자기 주소로 응답 -> 탐지
+    for querier, name in (("10.0.0.201", "fileserv01"), ("10.0.0.202", "printsrv"), ("10.0.0.203", "wpad")):
+        t = llmnr_exchange(cap, querier, "10.0.0.190", name, t + 1)
+    for name in ("FILESHARE", "SQLDB", "BACKUPSRV"):
+        t = nbns_exchange(cap, "10.0.0.204", "10.0.0.190", name, t + 1)
+    # .191: mDNS 프린터 — 자기 이름 A 10회 + 서비스 PTR 10종 -> 미탐
+    for i in range(10):
+        t = mdns_announce(cap, "10.0.0.191", DNSRR(rrname="printer-3f.local", type="A", ttl=120, rdata="10.0.0.191"), t + 1)
+        t = mdns_announce(cap, "10.0.0.191", DNSRR(rrname="_svc%02d._tcp.local" % i, type="PTR", ttl=4500,
+                                                  rdata="printer-3f._svc%02d._tcp.local" % i), t + 0.5)
+    # .192: 정상 LLMNR host — 5대가 물은 자기 이름(ws-192)에만 응답 -> 미탐
+    for i in range(5):
+        t = llmnr_exchange(cap, "10.0.0.%d" % (205 + i), "10.0.0.192", "ws-192", t + 1)
+    # .193: WINS 서버(예외) — NBNS 8개 이름 응답 -> 미탐
+    for i in range(8):
+        t = nbns_exchange(cap, "10.0.0.204", "10.0.0.193", "HOST%02d" % i, t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "name_poisoning.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
-              gen_winrm_dcom, gen_smb_ransomware]
+              gen_winrm_dcom, gen_smb_ransomware,
+              gen_name_poisoning]
 
 
 def main():

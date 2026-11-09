@@ -34,7 +34,8 @@
 | 4 | N3 외부향 SMB/NTLM 신규 룰: 19 내부→외부 445/139 연결 성립(Outbound_SMB), 외부 서버로 NTLM AUTHENTICATE(NTLM_Credential_Leak) | PR (phase4/outbound-smb) |
 | 4 | N8 WinRM/DCOM 신규 룰: 20 내부 출발지의 WinRM(5985/5986) 연결·DCOM RemoteCreateInstance 고유 목적지 fan-out(5분, 3대) | PR (phase4/winrm-dcom) |
 | 4 | N4 랜섬웨어성 SMB 신규 룰: 21 확장자 변경 rename 고유 파일(1분 30개)·랜섬 노트 생성 고유 폴더(5개), Office 임시 파일 제외, 킬체인 Impact 단계 신설 | PR (phase4/smb-ransomware) |
-| 4~5 | 나머지 신규 룰(N6, N7, N9), 연동 | 예정 |
+| 4 | N6 이름 해석 포이즈닝 신규 룰: 22 한 응답자가 LLMNR·mDNS(A/AAAA 응답 레코드)·NBNS(질의-응답 짝짓기)로 긍정 응답한 고유 이름 ≥ 5(10분) | PR (phase4/llmnr-poisoning) |
+| 4~5 | 나머지 신규 룰(N7, N9), 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 

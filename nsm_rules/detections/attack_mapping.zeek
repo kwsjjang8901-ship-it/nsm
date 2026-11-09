@@ -20,6 +20,7 @@ export {
         [WinRM_Lateral]        = "T1021.006",
         [DCOM_Lateral]         = "T1021.003",
         [SMB_Ransomware]       = "T1486",
+        [Name_Poisoning]       = "T1557.001",
         [SMB_Admin_Share]      = "T1021.002",    
         [RDP_Lateral]          = "T1021.001",    
         [SSH_Lateral]          = "T1021.004",    
