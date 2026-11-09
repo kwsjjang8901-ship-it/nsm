@@ -23,6 +23,7 @@ import os
 import random
 import string
 import struct
+import uuid as uuidlib
 
 from scapy.all import DNS, DNSQR, DNSRR, IP, TCP, UDP, Ether, Raw, wrpcap
 
@@ -878,9 +879,90 @@ def gen_outbound_smb(out):
     cap.write(os.path.join(out, "outbound_smb.pcap"))
 
 
+# --------------------------------------------------------------------------- 20 WinRM / DCOM
+
+ISYSTEMACTIVATOR = "000001a0-0000-0000-c000-000000000046"
+IOXID_RESOLVER = "99fcfec4-5260-101b-bbcb-00aa0021347a"
+NDR_SYNTAX = "8a885d04-1ceb-11c9-9fe8-08002b104860"
+
+
+def dce_hdr(ptype, body, call_id):
+    return struct.pack("<BBBB4sHHI", 5, 0, ptype, 0x03, b"\x10\x00\x00\x00", 16 + len(body), 0, call_id) + body
+
+
+def dce_syntax(u, major=0, minor=0):
+    return uuidlib.UUID(u).bytes_le + struct.pack("<HH", major, minor)
+
+
+def dce_bind(iface, call_id=1):
+    ctxs = struct.pack("<BBH", 1, 0, 0) + struct.pack("<HBB", 0, 1, 0) + dce_syntax(iface) + dce_syntax(NDR_SYNTAX, 2)
+    return dce_hdr(11, struct.pack("<HHI", 4280, 4280, 0) + ctxs, call_id)
+
+
+def dce_bind_ack(call_id=1):
+    sec = b"135\x00"
+    body = struct.pack("<HHIH", 4280, 4280, 0x1234, len(sec)) + sec
+    body += b"\x00" * ((-(16 + len(body))) % 4)
+    body += struct.pack("<BBH", 1, 0, 0) + struct.pack("<HH", 0, 0) + dce_syntax(NDR_SYNTAX, 2)
+    return dce_hdr(12, body, call_id)
+
+
+def dce_request(opnum, stub, call_id=2):
+    return dce_hdr(0, struct.pack("<IHH", len(stub), 0, opnum) + stub, call_id)
+
+
+def dce_response(stub, call_id=2):
+    return dce_hdr(2, struct.pack("<IHBB", len(stub), 0, 0, 0) + stub, call_id)
+
+
+def dcom_call(cap, src, dst, iface, opnum, t):
+    s = Tcp(cap, src, dst, 135)
+    t = s.handshake(t)
+    t = s.client_send(dce_bind(iface), t)
+    t = s.server_send(dce_bind_ack(), t + 0.002)
+    t = s.client_send(dce_request(opnum, rand_bytes(120)), t + 0.002)
+    t = s.server_send(dce_response(rand_bytes(80)), t + 0.01)
+    return s.close(t + 0.01)
+
+
+def winrm_session(cap, src, dst, t, dport=5985):
+    s = Tcp(cap, src, dst, dport)
+    t = s.handshake(t)
+    if dport == 5985:
+        body = b"<s:Envelope>" + rand_bytes(200).hex().encode() + b"</s:Envelope>"
+        t = s.client_send(b"POST /wsman HTTP/1.1\r\nHost: %s:5985\r\nContent-Type: application/soap+xml;charset=UTF-8\r\n"
+                          b"Content-Length: %d\r\n\r\n" % (dst.encode(), len(body)) + body, t)
+        t = s.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", t + 0.01)
+    else:
+        t = s.client_send(rand_bytes(300), t)
+        t = s.server_send(rand_bytes(600), t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_winrm_dcom(out):
+    cap = Capture()
+    t = T0
+    targets = ["10.0.20.%d" % i for i in range(11, 15)]
+    for i, dst in enumerate(targets):                        # .170: WinRM 4대(5985·5986 섞어) -> 탐지
+        t = winrm_session(cap, "10.0.0.170", dst, t + 2, 5985 if i % 2 == 0 else 5986)
+    for dst in targets[:2]:                                  # .171: WinRM 2대 -> 미탐(임계 3)
+        t = winrm_session(cap, "10.0.0.171", dst, t + 2)
+    for dst in targets:                                      # .172: 관리 서버(예외) WinRM 4대 -> 미탐
+        t = winrm_session(cap, "10.0.0.172", dst, t + 2)
+    for dst in targets:                                      # .173: DCOM RemoteCreateInstance 4대 -> 탐지
+        t = dcom_call(cap, "10.0.0.173", dst, ISYSTEMACTIVATOR, 4, t + 2)
+    for dst in targets:                                      # .174: 135 포트 다른 인터페이스(IOXIDResolver) 4대 -> 미탐
+        t = dcom_call(cap, "10.0.0.174", dst, IOXID_RESOLVER, 5, t + 2)
+    for dst in targets:                                      # .175: ISystemActivator 의 다른 opnum(3) 4대 -> 미탐
+        t = dcom_call(cap, "10.0.0.175", dst, ISYSTEMACTIVATOR, 3, t + 2)
+    cap.tick(T0 + 900)                                       # 5분 epoch 종료
+    cap.write(os.path.join(out, "winrm_dcom.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
-              gen_ntlm_spray, gen_kerberos, gen_outbound_smb]
+              gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
+              gen_winrm_dcom]
 
 
 def main():

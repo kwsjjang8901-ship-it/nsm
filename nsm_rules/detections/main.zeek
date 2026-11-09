@@ -46,6 +46,10 @@ export {
         NTLM_Credential_Leak,
         ## 19. 외부향 SMB (내부 -> 외부 445/139 연결 성립)
         Outbound_SMB,
+        ## 20. WinRM 내부 확산 (1 src -> 다수 host 5985/5986)
+        WinRM_Lateral,
+        ## 20. DCOM 내부 확산 (1 src -> 다수 host 원격 COM 객체 생성)
+        DCOM_Lateral,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -260,6 +264,8 @@ export {
         [ASREP_Roasting]         = "Credential Access",
         [NTLM_Credential_Leak]   = "Credential Access",
         [Outbound_SMB]           = "Exfiltration",
+        [WinRM_Lateral]          = "Lateral Movement",
+        [DCOM_Lateral]           = "Lateral Movement",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

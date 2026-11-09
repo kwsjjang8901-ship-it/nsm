@@ -16,6 +16,7 @@
 @load ./detections/06_smb_admin_share
 @load ./detections/15_rdp_lateral
 @load ./detections/16_ssh_lateral
+@load ./detections/20_winrm_dcom_lateral  # WinRM(5985/5986)·DCOM(RemoteCreateInstance) 확산
 @load ./detections/07_http_beaconing
 @load ./detections/08_dns_tunneling       # 터널링(DNS_Tunneling) + 유출(Exfil_DNS) 통합
 @load ./detections/09_encrypted_c2
