@@ -264,4 +264,8 @@ redef NSM::suppress_vol_agg              = 5min;         # 14 볼륨 집계 유�
 # [상관] Correlated_KillChain
 # =============================================================================
 redef NSM::chain_max_expire              = 2hr;         # prime 최대 보관 시간
-# 전이 규칙(chain_rules)·단계별 윈도우는 correlation_killchain.zeek 에서 직접 편집(고급).
+# 전이 규칙은 두 가지다(correlation_killchain.zeek, 고급):
+#   chain_rules       : 탐지 -> 탐지 개별 전이(기존 23개)
+#   chain_group_rules : 단계 묶음 -> 단계 묶음 전이(정찰·C2·자격증명·도메인 장악·확산·유출·영향)
+#   묶음 구성은 corr_*_notes 집합. 예) 새 C2 탐지를 묶음에 넣기
+#     redef NSM::corr_c2_notes += { NSM::Encrypted_C2 };   (chain_group_rules 도 함께 다시 정의해야 반영됨)

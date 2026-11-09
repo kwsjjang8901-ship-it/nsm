@@ -1252,12 +1252,56 @@ def gen_chain_full(out):
     cap.write(os.path.join(out, "chain_full.pcap"))
 
 
+# --------------------------------------------------------------------------- 상관: 8단계 체인(정찰 -> C2 -> 자격증명 -> 도메인 장악 -> 확산 -> 유출 -> 영향)
+
+def gen_chain_ext(out):
+    """단계 묶음 전이로 kill-chain 8단계를 만든다(T = pcap 시작 기준 초, 실제 룰로 끝까지).
+
+    A(.250): 포트 스캔(T1) -> DGA NXDOMAIN 60건(T20~140, ~T601 DGA_Domain)
+             -> HTTP 비커닝(T420~, ~T750) -> Kerberoasting RC4 SPN 6개(T800)
+             -> DCSync(T850, 동적 포트 DRSUAPI) -> WinRM .251/.252/.253(T910, 5분 창 끝 ~T1201)
+    피해 .251: 외부 60MB 업로드(T1250, 10·14) -> 파일 서버 40개 .lockd 이름 변경(T1300, 21)
+    비교군: .254 Kerberoasting 만, .255 랜섬웨어 SMB 만 -> 상관 없음
+    """
+    mb = 1024 * 1024
+    cap = Capture()
+    a, v1, v2, v3 = "10.0.0.250", "10.0.0.251", "10.0.0.252", "10.0.0.253"
+    spns = ["MSSQLSvc/sql%02d.corp.example:1433" % i for i in range(1, 7)]
+    port_scan(cap, a, "10.0.0.9", range(5000, 5030), T0 + 1)
+    for i in range(60):
+        dns_exchange(cap, a, rand_label(30) + ".com", 3, T0 + 20 + i * 2)
+    t = T0 + 100
+    for spn in spns:                                          # 비교군 .254: Kerberoasting 만
+        t = krb_service_ticket(cap, "10.0.0.254", "user09", spn, KRB_RC4, t + 1)
+    s = Smb2Session(cap, "10.0.0.255", FILE_SERVER, "data", T0 + 200)   # 비교군 .255: 랜섬웨어 만
+    for i in range(40):
+        name = "hr\\pay_%02d.xlsx" % i
+        s.rename(s.create(name), name + ".enc")
+    s.close()
+    beacon(cap, a, "93.184.215.96", "update.chain-x.net", T0 + 420, [30] * 13)
+    t = T0 + 800
+    for spn in spns:
+        t = krb_service_ticket(cap, a, "user01", spn, KRB_RC4, t + 1)
+    dcom_call(cap, a, KDC, DRSUAPI, 3, T0 + 850, dport=49667)
+    for i, v in enumerate((v1, v2, v3)):
+        winrm_session(cap, a, v, T0 + 910 + 2 * i)
+    bulk_upload(cap, v1, "93.184.215.97", 443, 60 * mb, T0 + 1250)
+    s = Smb2Session(cap, v1, FILE_SERVER, "data", T0 + 1300)
+    for i in range(40):
+        name = "finance\\q%02d.docx" % i
+        s.rename(s.create(name), name + ".lockd")
+    s.close()
+    cap.tick(T0 + 1500)
+    cap.write(os.path.join(out, "chain_ext.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
-              gen_nonstd_port, gen_chain_full]
+              gen_nonstd_port, gen_chain_full,
+              gen_chain_ext]
 
 
 def main():
