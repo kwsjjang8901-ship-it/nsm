@@ -8,15 +8,22 @@
 ##!
 ##! 상관 계약: notice $src = 감염 host (C2 단계, SRC_TO_SRC 로 Lateral 에 연결).
 ##!
-##! ⚠ 클러스터 주의: 이 상태는 워커 로컬이다. AF_PACKET fanout 이 5-튜플 해시면
-##!   같은 (src,dst)의 연결이 포트마다 다른 워커로 흩어져 주기 카운트가 쪼개질 수 있다.
-##!   -> 단일 워커로 테스트하거나 flow/IP 기반 fanout 을 확인할 것. (Phase2 개선 후보)
+##! 클러스터 동작 (2026-11 개정)
+##!   - 이전에는 주기 상태가 워커 로컬이라, 워커 분배가 5-튜플 해시면 같은 (src,dst)의
+##!     연결이 출발 포트마다 다른 워커로 흩어져 각 워커가 보는 연결 수가 줄었다(미탐).
+##!   - 이제 워커는 연결마다 관측값(BeaconObs)만 만들어, (src,dst) 키의 HRW 해시로 정해지는
+##!     프록시 1대로 보낸다(Cluster::publish_hrw). 프록시가 없으면 매니저로 보낸다.
+##!     같은 (src,dst)는 항상 같은 노드로 가므로 주기 상태가 한 곳에 모인다.
+##!     standalone 에서는 로컬에서 바로 처리한다.
+##!   - 관측 시각이 이전 관측보다 과거(도착 순서 역전, 장기 연결의 늦은 종료)면 무시한다.
+##!     (이전에는 last_seen 이 과거로 되돌아가 주기 판정이 흐트러졌다)
 ##! ============================================================================
 
 @load base/frameworks/notice
 @load base/protocols/http
 @load base/protocols/conn
 @load base/utils/site
+@load base/frameworks/cluster
 @load ./main
 @load ./evidence_log
 
@@ -37,6 +44,21 @@ export {
     ## 캡처 손실 등으로 빠진 비콘을 연속 몇 개까지 허용할지.
     ##   delta 가 기준주기의 k 배(k <= beacon_max_missed + 1) 근처면 박자 유지로 본다.
     const beacon_max_missed = 2 &redef;
+
+    ## HTTP 연결 1건의 비커닝 관측값(워커 -> 상태 보유 노드 전달용).
+    type BeaconObs: record {
+        orig: addr;
+        resp: addr;
+        ts:   time;                 # 연결 시작 시각
+        host: string &default="-";  # HTTP Host
+        uid:  string &default="";
+    };
+
+    ## 관측값을 상태 보유 노드(프록시 HRW / 매니저 / standalone 로컬)로 보낸다.
+    global beacon_submit: function(obs: BeaconObs);
+
+    ## 관측값 처리 이벤트(상태 보유 노드에서만 처리).
+    global beacon_obs: event(obs: BeaconObs);
 }
 
 type BeaconState: record {
@@ -48,8 +70,21 @@ type BeaconState: record {
 };
 
 ## key: (src, dst). 마지막 활동 후 beacon_expire 지나면 만료.
+## (클러스터에서는 관측값을 받는 프록시/매니저에만 상태가 쌓인다)
 global beacons: table[addr, addr] of BeaconState &write_expire=beacon_expire;
 
+function beacon_submit(obs: BeaconObs)
+    {
+@if ( Cluster::is_enabled() )
+    # 같은 (src,dst) 는 항상 같은 프록시로. 프록시가 없으면(풀 비어 있음) 매니저로.
+    if ( ! Cluster::publish_hrw(Cluster::proxy_pool, cat(obs$orig, "-", obs$resp), beacon_obs, obs) )
+        Cluster::publish(Cluster::manager_topic, beacon_obs, obs);
+@else
+    event beacon_obs(obs);
+@endif
+    }
+
+# 워커(또는 standalone): HTTP 연결이 끝나면 관측값을 만들어 보낸다.
 event connection_state_remove(c: connection)
     {
     if ( ! detect_beaconing )
@@ -65,13 +100,28 @@ event connection_state_remove(c: connection)
     if ( resp in beacon_allowlist )
         return;
 
-    local now = c$start_time;
+    local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid);
+    if ( c$http?$host )
+        obs$host = c$http$host;
+    beacon_submit(obs);
+    }
+
+@if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::PROXY || Cluster::local_node_type() == Cluster::MANAGER )
+# 상태 보유 노드: 주기 상태머신
+event beacon_obs(obs: BeaconObs)
+    {
+    local orig = obs$orig;
+    local resp = obs$resp;
+    local now = obs$ts;
 
     if ( [orig, resp] !in beacons )
         {
         beacons[orig, resp] = [$last_seen=now];
         return;
         }
+
+    if ( now < beacons[orig, resp]$last_seen )   # 과거 시각(순서 역전) -> 무시
+        return;
 
     local st = beacons[orig, resp];
     local delta = now - st$last_seen;
@@ -127,7 +177,7 @@ event connection_state_remove(c: connection)
 
     if ( st$consecutive >= beacon_min_hits && ! st$fired )
         {
-        local hoststr = c$http?$host ? c$http$host : "-";
+        local hoststr = obs$host;
 
         # 도메인 예외(부분매칭): 신뢰 도메인으로의 비커닝은 발화하지 않음.
         #   상태(st$fired)를 세워 이후 재평가도 스킵 -> 반복 오탐 억제.
@@ -151,7 +201,7 @@ event connection_state_remove(c: connection)
             $src=orig,
             $dst=resp,
             $operation="http_beacon",
-            $uid=c$uid,
+            $uid=obs$uid,
             $detail=fmt("interval=%.1fs consecutive=%d total=%d host=%s",
                         ival_s, st$consecutive, st$total, hoststr)]);
 
@@ -167,3 +217,4 @@ event connection_state_remove(c: connection)
 
     beacons[orig, resp] = st;
     }
+@endif

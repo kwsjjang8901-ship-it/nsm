@@ -26,7 +26,8 @@
 | 2 | 09 SNI-인증서 불일치를 부분문자열 비교 대신 Zeek `sni_matches_cert`(와일드카드·SAN 반영)로 판정, 증적 버킷을 억제창과 일치 | PR (phase2/tls-sni-match) |
 | 2 | 소규모: 15 RDP 근거에 계정(cookie 값이 이미 접두어 없이 전달되어 기존 추출 함수는 항상 빈 값) / 16 SSH 인증 성공 이벤트 1순위 + 연결 휴리스틱 폴백(비표준 포트 포함) / 06 `print$` 제외 / 01 notice 에 대상 IP | PR (phase2/small-fixes) |
 | 2 | H2 클러스터 상관: 모든 노드가 notice 요약을 `Cluster::publish`로 매니저에 전달, 상관은 매니저 한 곳에서만. 전이 시간창은 notice 발생 시각 기준. chain_id 에 시각 포함 | PR (phase2/cluster-correlation) |
-| 3~5 | 재작성, 신규 룰, 연동 (07 비커닝 상태의 워커 분산 문제는 별도 검토) | 예정 |
+| 2 | 07 비커닝 클러스터: 워커는 관측값만 만들어 (src,dst) HRW 로 프록시 1대(없으면 매니저)에 전달, 주기 상태는 그 노드에서만. 과거 시각 관측 무시 | PR (phase2/beacon-cluster) |
+| 3~5 | 재작성, 신규 룰, 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 
