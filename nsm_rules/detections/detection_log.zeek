@@ -41,6 +41,8 @@ export {
         [ASREP_Roasting]         = "NSM.CredentialAccess.AsrepRoasting",
         [NTLM_Credential_Leak]   = "NSM.CredentialAccess.NtlmCredentialLeak",
         [Outbound_SMB]           = "NSM.Exfiltration.OutboundSmb",
+        [WinRM_Lateral]          = "NSM.LateralMovement.WinrmAccess",
+        [DCOM_Lateral]           = "NSM.LateralMovement.DcomExec",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",

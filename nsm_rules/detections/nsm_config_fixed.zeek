@@ -88,6 +88,14 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::outbound_smb_allowed_dsts    += { 203.0.113.0/28 };    # 허용한 외부 SMB 서버, nsm_config_custom.zeek 에 기록
 
 # =============================================================================
+# [20] WinRM_Lateral (T1021.006) / DCOM_Lateral (T1021.003) — 내부 원격 관리 채널 fan-out
+# =============================================================================
+# redef NSM::lm_mgmt_epoch                 = 5min;                  # 집계 윈도우
+# redef NSM::winrm_lm_threshold            = 3;                     # WinRM 고유 목적지 수
+# redef NSM::dcom_lm_threshold             = 3;                     # DCOM 원격 객체 생성 고유 목적지 수
+# redef NSM::lm_mgmt_allowlist            += { 10.20.30.0/24 };     # SCCM·모니터링·Ansible·점프 서버, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우
