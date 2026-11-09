@@ -23,7 +23,7 @@
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated diagnosis=NSM.Correlation.Recon.C2 attacker=10.0.0.240
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Lateral attacker=10.0.0.240
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated diagnosis=NSM.Correlation.Recon.Exfil attacker=10.0.0.240
-# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated techniques=T1046->T1568.002->T1071.001->T1021.002->T1041
+# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated 'techniques=T1046->T1568.002->T1071.001->T1021.002->T1041'
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 5 category=Correlated
 
 @load policy/frameworks/cluster/experimental

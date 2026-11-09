@@ -1226,7 +1226,8 @@ def gen_chain_full(out):
     A(.240): 포트 스캔(T1, Port_Scan 즉시) -> DGA NXDOMAIN 60건(T20~140, 10분 창 끝 T~601 DGA_Domain)
              -> HTTP 비커닝(T420 시작, 12번째 콜백 T~750 HTTP_Beaconing)
              -> .241/.242 ADMIN$ 접근(T800, 1분 창 끝 T~841 SMB_Admin_Share, 피해 host 2대)
-    피해 .241(T900)/.242(T950) 외부 60MB 업로드 -> Exfil_Large_Transfer -> 5단계 체인 2갈래
+    피해 .241(T900)/.242(T950) 외부 60MB 업로드 -> Exfil_Large_Transfer(10) + Exfil_Volume_Aggregate(14)
+                                   -> 5단계 체인 4갈래(피해 host 2 x 유출 룰 2)
     비교군: B(.245) 비커닝 후 스캔(순서 반대), C(.246) 스캔 후 1시간 넘어 비커닝(창 초과),
             D(.247) 확산 없이 업로드만 -> 상관 없음
     """
