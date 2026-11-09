@@ -115,7 +115,7 @@ event ssl_established(c: connection)
         $ts=network_time(),
         $evidence_id=eid,
         $note=Encrypted_C2,
-        $technique="T1573",
+        $technique="T1573.002",
         $src=orig,
         $dst=resp,
         $operation="tls_c2",

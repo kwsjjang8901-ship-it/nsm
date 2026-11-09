@@ -58,7 +58,7 @@ export {
         ## 16. DGA 도메인 탐지 (높은 NXDOMAIN 비율 + 고엔트로피)
         DGA_Domain,
         ## [상관] kill-chain 상관 탐지 (측면확산 -> 유출 등 단계 연결)
-        ##        correlation-killchain.zeek 가 소비. 모듈 제거해도 enum 만 남아 무해.
+        ##        correlation_killchain.zeek 가 소비. 모듈 제거해도 enum 만 남아 무해.
         Correlated_KillChain
     };
 

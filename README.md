@@ -20,7 +20,7 @@ nsm_rules/
     notice_aggregation.zeek # 동일 notice 집계
     correlation_killchain.zeek # 킬체인 상관분석
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
-    nsm_config_custom.zeek  # 고객 환경별 설정(local_nets, allowlist)
+    nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
     01~16_*.zeek            # 탐지 룰 (1파일 = 1탐지)
   rules/
@@ -58,7 +58,8 @@ docs/
 @load /path/to/nsm_rules
 ```
 
-고객 환경 값(내부 대역, 예외 목록)은 `nsm_rules/detections/nsm_config_custom.zeek`에서 `redef` 합니다.
+고객 환경 값(내부 대역, 예외 목록, 남길 로그 스트림 등)은 `nsm_rules/detections/nsm_config_custom.zeek`에 `redef`로 둡니다.
+이 파일은 저장소에서는 **빈 파일로 유지**하고, 배포 시 고객 환경별로 별도 기록합니다.
 
 ## 검토 결과와 작업 계획
 

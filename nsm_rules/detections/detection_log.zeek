@@ -3,6 +3,7 @@
 @load ./main
 @load ./attack_mapping
 @load ./evidence_log   # evidence_count_of (evidence_id 별 실제 근거 건수) 참조
+@load ./notice_aggregation   # dup_count / dedup_emit_first 참조
 
 module NSM;
 
@@ -71,6 +72,16 @@ hook Notice::policy(n: Notice::Info) &priority=-6
         return;
 
     if ( n$note !in diagnosis_map )
+        return;
+
+    # 계약: notice.log 에 기록되는 notice 1건 = detection 1건.
+    #   notice_aggregation(-5)이 묶은 중복 건은 ACTION_LOG 가 제거돼 있으므로 제외.
+    if ( Notice::ACTION_LOG !in n$actions )
+        return;
+    #   emit_first 모드에서는 첫 건이 이미 detection 으로 기록됐으므로
+    #   창 종료 시 나오는 요약 notice(dup_count)는 detection 을 추가하지 않는다.
+    #   (보류 모드에서는 요약 notice 가 유일한 기록이므로 그대로 남긴다)
+    if ( n?$dup_count && NSM::dedup_emit_first )
         return;
 
     local d: DetectionInfo;

@@ -4,6 +4,22 @@
 - 대상: `nsm_rules/` (nsm_rules_4.zip, 원본 반입 커밋이 베이스라인) — 탐지 룰 16개, 공통 인프라 8개, JA3 패키지, 로그 필터
 - 목적: (1) 현재 룰의 동작 정확성·운영 리스크 점검, (2) 비활성 룰 재활성화 판단, (3) NSM 관점 탐지룰 확대 후보 도출, (4) 자산 식별 PoC(`claudtest2`) 머지 시 충돌 점검
 
+## 진행 현황
+
+| 단계 | 항목 | 상태 |
+|---|---|---|
+| 0 | C1 notice 억제 무력화 → 룰 억제창 존중(`dedup_override_suppression`, 기본 F) | PR (phase0/infra-cleanup) |
+| 0 | C2 detection 중복 → "notice.log 1건 = detection 1건" | PR (phase0/infra-cleanup) |
+| 0 | C3 로그 필터 → `keep_log_streams`/`log_paths` 설정화, reporter 유지 | PR (phase0/infra-cleanup) |
+| 0 | 로그 디렉터리 생성 경쟁 조건: `system("mkdir -p")`는 백그라운드 실행이라 writer가 먼저 파일을 열면 스트림 종료 (CI로 재현) → 동기식 `mkdir()` BIF로 교체 | PR (phase0/infra-cleanup) |
+| 0 | H1 03_sqli 정규식 문법 | PR (phase0/infra-cleanup) |
+| 0 | 08_dns_tunneling 지역 변수 `sub`가 내장 함수와 충돌해 로드 실패 (CI로 추가 발견) | PR (phase0/infra-cleanup) |
+| 0 | 로더 일원화(`detections/__load__.zeek` 삭제, 비활성 룰 경로 수정) | PR (phase0/infra-cleanup) |
+| 0 | 정합성: 상관 진단명(RDP/SSH), T1573.002 통일, `172.16.0.0/12`, 주석·파일명, JA3/JA4 문서 | PR (phase0/infra-cleanup) |
+| 0 | CI: Zeek 9.0.1/8.0.9 문법 검사 + 런타임 스모크 | PR (phase0/infra-cleanup) |
+| 0 | `nsm_config_custom.zeek` 원본 확인 | 확인 완료 — 원래 빈 파일이며 배포 시 별도로 기록됨(저장소에서는 수정하지 않음) |
+| 1~5 | 테스트 체계, 정확도 개선, 재작성, 신규 룰, 연동 | 예정 |
+
 ## 0. 검토 방법과 한계
 
 | 구분 | 내용 |
@@ -85,7 +101,7 @@
 | weird | 분석기 이상(evasion 징후) 확인 불가 |
 | **asset_signal** (머지 후) | 자산 식별 PoC 결과물이 출력되지 않음 (DESIGN.md 7장 5번 "선별 전송 대상에 asset_signal 추가"와 충돌) |
 
-추가로 `zeek_init`에서 `system("mkdir -p ...")`를 모든 노드가 실행하고, 경로가 하드코딩(`/hdd_tmp`, `/log`)되어 있다. CaptureLoss/Stats/LoadedScripts 스트림은 해당 policy 스크립트가 로드돼 있어야 컴파일된다(기본 local.zeek 의존).
+추가로 `zeek_init`에서 `system("mkdir -p ...")`를 모든 노드가 실행하는데, Zeek `system()`은 명령을 **백그라운드로** 실행하므로 디렉터리가 생기기 전에 로그 writer가 파일을 열면 `No such file or directory`로 스트림이 종료되는 경쟁 조건이 있다(CI에서 재현). 또 경로가 하드코딩(`/hdd_tmp`, `/log`)되어 있다. CaptureLoss/Stats/LoadedScripts 스트림은 해당 policy 스크립트가 로드돼 있어야 컴파일된다(기본 local.zeek 의존).
 
 **권고:** "전부 끄고 일부 켜기" 대신 **켜둘 목록을 설정값(`const keep_streams: set[Log::ID] &redef`)으로 분리**하고 최소한 `Reporter::LOG`, `AssetID` 로그, evidence 조인에 필요한 원본 로그(용량 문제면 별도 경로/짧은 보존)를 포함. 디렉터리 생성은 배포 스크립트로 이동.
 
@@ -117,7 +133,7 @@
 | 06번 문서 | 헤더는 "observe 시점마다 evidence 적재, NTLM 계정(WHO) 채움"이나 실제는 탐지 시점 표본 적재·계정 없음 |
 | ATT&CK | 각 룰이 `write_evidence($technique=...)`를 하드코딩 + `attack_map` + `stage_attack` 3중 관리. `DNS_Tunneling = "T1071.004, T1572"`만 공백 포함 |
 | local_nets 예시 | `nsm_config_fixed.zeek:30` **`172.0.0.0/8`** — 사설 대역은 `172.16.0.0/12`. 그대로 쓰면 공인 IP 상당 부분이 내부로 판정되어 C2/유출 미탐 |
-| custom 설정 | `nsm_config_custom.zeek`가 **0바이트**인데 config 주석 다수가 "custom에 포함됨"이라고 함 → 반입본에서 빠진 것인지 확인 필요 [확인필요] |
+| custom 설정 | `nsm_config_custom.zeek`는 **원래 빈 파일**이고 고객 환경 값(local_nets, allowlist 등)은 배포 시 별도로 기록됨(사용자 확인). config 주석의 "custom에 포함됨"은 이 배포 시점 기록을 가리킴. 저장소에서는 이 파일을 수정하지 않는다 |
 | 심각도 | `detection_log`는 단일 탐지를 전부 `"Information"`으로 기록 — 룰별 심각도 없음 |
 
 **권고:** `main.zeek`에 룰 레지스트리 하나(`rule_id`, note, ATT&CK, 단계, 심각도)를 두고 evidence/detection/상관이 모두 거기서 읽도록 정리.
@@ -159,7 +175,7 @@
 | 03 SQLi | **로드 실패 문법**(`(?:`) + 오탐 패턴 | 재작성 | `(?:` 제거, `#`·`--`·`/*` 단독 패턴 삭제(조합 조건으로만), **외부→내부 웹서버 방향**으로 제한, 서버 응답코드(5xx/200)·요청 빈도 조합, URL 디코딩 2회 대응 |
 | 04 Webshell | 광범위 파라미터 패턴 오탐 | 재작성 | 파라미터 단독 매칭 제거, "스크립트 확장자 + 명령 파라미터 + 비정상 응답 크기" 조합, 신규 업로드(POST multipart로 .jsp/.php 업로드) 후 같은 경로 접근 시퀀스 |
 | 05 NTLM Spray | 성공/실패 미구분 → 프록시·메일 서버 오탐 | 재작성 | `hook NTLM::log_policy`에서 `rec$success == F`만 집계 (ntlm 스트림에는 `$ev` 이벤트가 없음 [소스확인]), 내부 src·allowlist, **Kerberos 스프레이(6장 N1)와 함께** 운영 |
-| 08 DNS 터널링 | H5(`co.kr` 묶임) + 리졸버 집계 + TXT 오탐 | 11과 통합 재작성 | 국내 2단계 도메인(co/or/go/ac/ne/re.kr 등) + 주요 공용 접미사 소형 목록 내장, 리졸버 src 제외, 도메인 allowlist(AV 평판 조회 등), 신호를 OR가 아닌 **점수 합산** |
+| 08 DNS 터널링 | **로드 실패**(지역 변수 `sub`가 내장 함수 `sub()`와 충돌, CI로 확인 → 0단계에서 수정) + H5(`co.kr` 묶임) + 리졸버 집계 + TXT 오탐 | 11과 통합 재작성 | 국내 2단계 도메인(co/or/go/ac/ne/re.kr 등) + 주요 공용 접미사 소형 목록 내장, 리졸버 src 제외, 도메인 allowlist(AV 평판 조회 등), 신호를 OR가 아닌 **점수 합산** |
 | 11 DNS 유출 | 08과 동일 + 1MB/5분 과대 | 08과 통합 | (src, 부모도메인)별 "고유 서브도메인 수 + 누적 인코딩 바이트 + 평균 라벨 길이" 하나의 SumStats로 집계 → 터널링/유출을 심각도로 구분 |
 
 ---

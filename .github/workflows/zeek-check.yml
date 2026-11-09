@@ -1,0 +1,54 @@
+name: zeek-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  zeek:
+    name: zeek ${{ matrix.zeek }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        zeek: ["9.0.1", "8.0.9"]
+    container:
+      image: zeek/zeek:${{ matrix.zeek }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zeek version
+        run: zeek --version
+
+      # 1) 패키지 전체 문법 검사 (parse only)
+      - name: Parse nsm_rules
+        run: zeek -a ./nsm_rules
+
+      # 2) 비활성 룰까지 포함해 문법 검사 (재활성화 시 로드 실패 방지)
+      - name: Parse nsm_rules + disabled rules
+        run: |
+          zeek -a ./nsm_rules \
+            ./nsm_rules/detections/03_sqli \
+            ./nsm_rules/detections/04_webshell \
+            ./nsm_rules/detections/05_ntlm_spray \
+            ./nsm_rules/detections/08_dns_tunneling \
+            ./nsm_rules/detections/11_dns_exfil
+
+      # 3) 런타임 스모크: 입력 없이 실행해 zeek_init(SumStats 생성, 로그 필터 등)까지 확인
+      #    로그 디렉터리가 없는 상태에서 반복 실행해 디렉터리 생성 경쟁 조건을 잡는다.
+      - name: Runtime smoke (zeek_init)
+        run: |
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            rm -rf /log/zeek /hdd_tmp/log/zeek ./*.log
+            zeek "$GITHUB_WORKSPACE/nsm_rules" 2> stderr.txt || { cat stderr.txt; exit 1; }
+            if grep -qiE "error|fatal" stderr.txt; then
+              cat stderr.txt
+              echo "::error::Zeek reported errors at startup (run $i)"
+              exit 1
+            fi
+          done
+          cat stderr.txt
+          echo "== log dirs (last run)"
+          ls -la /log/zeek /hdd_tmp/log/zeek
