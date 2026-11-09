@@ -31,7 +31,8 @@
 | 3 | 03/04 웹 공격 재작성·활성화: 내부 웹서버 대상만, URL 이중 디코딩 정규화, SQL 구문 구조 요구(주석·select-from 단독 제거), 웹쉘은 명령 '값'·페이로드 서명 기준(파라미터 이름 단독 제거), 본문 검사 상한 | PR (phase3/web-attack) |
 | 3 | 05 NTLM 스프레이 재작성·활성화: 인증 실패만 집계(SMB 세션 설정 실패 NTSTATUS + SPNEGO reject — Zeek ntlm.log success 는 SMB 실패 시 비어 있음), 계정 대소문자 정규화, 내부 서버 대상·예외 출발지 | PR (phase3/ntlm-spray) |
 | 4 | N1/N2 Kerberos 신규 룰: 17 스프레이(AS 사전인증 실패 고유 계정)·무차별 대입(계정별 실패 횟수), 18 Kerberoasting(RC4 서비스 티켓 고유 SPN)·AS-REP Roasting(사전인증 없는 RC4 AS-REP) | PR (phase4/kerberos) |
-| 4~5 | 나머지 신규 룰(N3~N9), 연동 | 예정 |
+| 4 | N3 외부향 SMB/NTLM 신규 룰: 19 내부→외부 445/139 연결 성립(Outbound_SMB), 외부 서버로 NTLM AUTHENTICATE(NTLM_Credential_Leak) | PR (phase4/outbound-smb) |
+| 4~5 | 나머지 신규 룰(N4~N9), 연동 | 예정 |
 
 ## 0. 검토 방법과 한계
 

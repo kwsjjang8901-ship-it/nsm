@@ -82,6 +82,12 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::asrep_require_weak_cipher     = T;                     # F 면 사전인증 없는 AS-REP 전부 탐지(PKINIT 오탐 가능)
 
 # =============================================================================
+# [19] Outbound_SMB (T1048) / NTLM_Credential_Leak (T1187) — 내부 -> 외부 SMB·NTLM 인증
+# =============================================================================
+# redef NSM::outbound_smb_allowlist       += { 10.20.60.5/32 };     # 외부 파일 공유가 허용된 장비
+# redef NSM::outbound_smb_allowed_dsts    += { 203.0.113.0/28 };    # 허용한 외부 SMB 서버, nsm_config_custom.zeek 에 기록
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우
