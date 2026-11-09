@@ -77,7 +77,6 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 - 룰마다 합성 pcap 하나에 **탐지돼야 하는 호스트와 탐지되면 안 되는 호스트**를 함께 넣고,
   `notice.log` / `nsm_detection.log` / `evidence.log`의 행 수로 검사합니다(`tests/btest/tools/assert-rows`).
 - 공통 계약도 검사합니다: notice 1건 = detection 1건, notice의 `evidence_id`는 evidence.log에서 조회 가능, 룰 억제창 적용, 운영 로그 필터.
-- `13-dga-known-gap.zeek`는 **알려진 한계(검토 H4)를 기록하는 테스트**입니다. 개선하면 기대값을 바꿉니다.
 - pcap은 `python3 tests/gen_pcaps.py tests/pcaps`로 다시 만들 수 있고(결정적 출력), CI가 커밋된 pcap과 생성기 출력이 같은지 확인합니다.
 - CI(`.github/workflows/zeek-check.yml`)는 Zeek 9.0.1 / 8.0.9에서 문법 검사, 기동 검사, btest를 실행합니다.
 

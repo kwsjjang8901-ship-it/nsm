@@ -112,20 +112,22 @@ redef NSM::get_ja3 = function(c: connection): string {
 #   판정: src별 dga_interval 창에서 아래 3조건 AND
 #     (1) NXDOMAIN 수 >= dga_nxdomain_threshold
 #     (2) NXDOMAIN/전체 비율 >= dga_ratio_threshold
-#     (3) NXDOMAIN qname 평균 엔트로피 >= dga_entropy
+#     (3) NXDOMAIN 중 무작위형(DGA형) 등록 라벨 비율 >= dga_like_ratio
+#         (2026-11 개정: 이전의 qname 평균 엔트로피 >= dga_entropy 는 폐기. 13_dga.zeek 머리말 참고)
 #   ※ 13은 유일하게 방향(local_nets) 판정을 쓰지 않는다 -> local_nets 미설정 시에도 발화.
+#   ※ evidence 는 무작위형 라벨인 NXDOMAIN 만 남긴다(정상 NXDOMAIN 의 evidence 폭증 억제).
 # =============================================================================
 redef NSM::dga_interval                  = 10min;       # 집계 윈도우
 redef NSM::dga_nxdomain_threshold        = 50;          # 창 내 NXDOMAIN 응답 수
 redef NSM::dga_ratio_threshold           = 0.8;         # NXDOMAIN / 전체 응답 비율
-redef NSM::dga_entropy                   = 4.0;         # NXDOMAIN 도메인 평균 엔트로피
+redef NSM::dga_like_ratio                = 0.5;         # NXDOMAIN 중 무작위형 라벨 비율
+# ── 무작위형 라벨 판정(고급) — 기본값 그대로 두는 것을 권장 ──
+# redef NSM::dga_min_label_len           = 6;           # 이보다 짧은 라벨은 판정 제외
+# redef NSM::dga_label_min_score         = 2;           # 무작위형 판정 최소 점수
+# redef NSM::multi_label_suffixes        += { "go.th" }; # 2단계 공용 접미사 추가
 # ── 오탐/노이즈 억제 토글 ──
-#   역방향 조회(in-addr.arpa·ip6.arpa)는 숫자·점이 많아 엔트로피가 높지만 DGA와 무관.
-#   T면 집계·evidence 양쪽에서 완전 제외한다(기본 T).
+#   역방향 조회(in-addr.arpa·ip6.arpa)는 DGA와 무관. T면 집계·evidence 양쪽에서 완전 제외(기본 T).
 redef NSM::dga_exclude_reverse_dns       = T;
-#   evidence 를 남길 최소 엔트로피. 미달 NXDOMAIN 은 집계(nx/ratio/평균)에는 반영하되
-#   evidence 행만 생략한다 -> 판정 정확도 불변, evidence 폭증만 억제(기본 = dga_entropy).
-redef NSM::dga_evidence_min_entropy      = 4.0;
 # ── 내부/신뢰 도메인 예외(부분매칭): 집계·evidence 모두 제외 ──
 #   내부 DNS·k8s·검색도메인 때문에 정상 조회가 NXDOMAIN 으로 잡히는 것을 막는다.
 #   상위 도메인 하나로 하위 전체 매칭(예: "ahnlab.com" -> *.ahnlab.com).
