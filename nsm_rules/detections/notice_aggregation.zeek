@@ -13,6 +13,12 @@ export {
     ## 첫 건 즉시 발화 여부(위 모드 설명 참고). 기본 T(지연 없음).
     const dedup_emit_first = T &redef;
 
+    ## T 이면 이 레이어가 모든 대상 notice 의 $suppress_for 를 0 으로 덮어써
+    ## 프레임워크 suppression 을 끄고 dedup 을 전담한다(2026-11 이전 동작).
+    ## 이 경우 룰별 억제창(nsm_config_fixed 의 suppress_* 등)은 무시되고
+    ## dedup_window 단위로 같은 이벤트가 반복 발화한다. 기본 F(룰 억제창 존중).
+    const dedup_override_suppression = F &redef;
+
     ## notice.log 에 발생 횟수를 표시하는 컬럼.
     redef record Notice::Info += {
         dup_count: count &optional &log;
@@ -83,8 +89,11 @@ hook Notice::policy(n: Notice::Info) &priority=-5
 
     local sig = dedup_signature(n);
 
-    # 이 레이어가 dedup 을 전담하도록 프레임워크 자체 suppression 은 비활성화
-    n$suppress_for = 0secs;
+    # 프레임워크 suppression(룰이 정한 $suppress_for / $identifier)은 기본 유지한다.
+    #   이 레이어는 suppression 으로 걸러지지 않은 중복(identifier 없음 등)만 묶는다.
+    #   과거 동작(이 레이어가 dedup 전담)이 필요하면 dedup_override_suppression = T.
+    if ( dedup_override_suppression )
+        n$suppress_for = 0secs;
 
     if ( sig !in dedup_tbl )
         {
