@@ -293,7 +293,9 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
                      len, chain_names(st), st$attacker, last_host),
             $sub=fmt("chain=%s chain_id=%s eids=%s",
                      chain_tids(st), st$chain_id, join_string_vec(st$eids, ",")),
-            $identifier=cat(st$chain_id, "|len", len),
+            # 같은 체인이 피해 host 별(DST_TO_SRC)·마지막 단계별로 갈라질 수 있으므로 마지막 단계와 host 를 넣는다.
+            #   (len 만 쓰면 두 번째 갈래 notice 가 억제되는데 detection 은 기록돼 notice 1 = detection 1 계약이 깨진다)
+            $identifier=cat(st$chain_id, "|len", len, "|", st$stages[len-1], "|", last_host),
             $suppress_for=chain_max_expire,
             $attack=chain_tids_csv(st),
             $evidence_id=st$chain_id]);
