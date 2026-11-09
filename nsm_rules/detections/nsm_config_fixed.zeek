@@ -111,6 +111,13 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # redef NSM::poisoning_allowlist          += { 10.0.0.53/32 };      # WINS 서버 등, nsm_config_custom.zeek 에 기록
 
 # =============================================================================
+# [23] DCSync (T1003.006) — DC 가 아닌 host 의 DRSUAPI DRSGetNCChanges
+# =============================================================================
+# redef NSM::dcsync_domain_controllers    += { 10.0.0.10, 10.0.0.11 }; # DC 목록(권장), nsm_config_custom.zeek 에 기록
+# redef NSM::dcsync_learn_dcs              = T;                     # Kerberos 응답을 보낸 내부 host 를 DC 로 학습
+# redef NSM::dcsync_allowlist             += { 10.20.80.5/32 };     # Azure AD Connect 등 복제 권한 사용 서버
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

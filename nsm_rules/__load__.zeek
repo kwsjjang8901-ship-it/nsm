@@ -14,6 +14,7 @@
 @load ./detections/18_kerberoasting     # Kerberoasting(RC4 서비스 티켓)·AS-REP Roasting
 @load ./detections/19_outbound_smb      # 외부향 SMB 연결·외부 NTLM 인증(자격증명 유출)
 @load ./detections/22_name_poisoning    # LLMNR/NBT-NS/mDNS 포이즈닝(Responder 류)
+@load ./detections/23_dcsync            # DC 가 아닌 host 의 디렉터리 복제 요청(DRSGetNCChanges)
 @load ./detections/06_smb_admin_share
 @load ./detections/15_rdp_lateral
 @load ./detections/16_ssh_lateral

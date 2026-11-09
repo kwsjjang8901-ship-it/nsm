@@ -45,6 +45,7 @@ export {
         [DCOM_Lateral]           = "NSM.LateralMovement.DcomExec",
         [SMB_Ransomware]         = "NSM.Impact.SmbRansomware",
         [Name_Poisoning]         = "NSM.CredentialAccess.NamePoisoning",
+        [DCSync]                 = "NSM.CredentialAccess.DcSync",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",
