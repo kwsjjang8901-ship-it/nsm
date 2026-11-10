@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""assert-fields <log> <field> [field ...]
+로그의 모든 행이 주어진 필드만 가지는지 검사한다(JSON 로그). 행이 하나도 없으면 실패.
+메타데이터 선별 전송의 include(필드 축소)가 지켜지는지 확인하는 데 쓴다."""
+import json
+import sys
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__, file=sys.stderr)
+        return 2
+    path, allowed = sys.argv[1], set(sys.argv[2:])
+    try:
+        rows = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip() and not l.startswith("#")]
+    except OSError as e:
+        print("assert-fields: %s" % e, file=sys.stderr)
+        return 1
+    except ValueError:
+        print("assert-fields: %s 는 JSON 로그가 아닙니다" % path, file=sys.stderr)
+        return 1
+    if not rows:
+        print("assert-fields: %s 에 행이 없습니다" % path, file=sys.stderr)
+        return 1
+    extra = set()
+    for r in rows:
+        extra |= set(r) - allowed
+    if extra:
+        print("assert-fields: %s 에 허용하지 않은 필드: %s" % (path, ", ".join(sorted(extra))), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

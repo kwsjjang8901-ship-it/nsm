@@ -52,6 +52,11 @@ export {
     ## log_paths 의 상위 디렉터리를 zeek_init 에서 생성할지 여부.
     ##   배포 스크립트/패키지에서 디렉터리를 만드는 환경이면 F 로 둔다.
     const create_log_dirs = T &redef;
+
+    ## keep_log_streams 에 없어도 끄지 않을 스트림(zeek_init 우선순위 -1 전에 채운다).
+    ##   메타데이터 선별 전송(metadata/main.zeek)이 자기 필터를 붙일 스트림을 여기에 넣는다.
+    ##   이 스트림들의 default 필터(원본 출력) 처리는 넣은 쪽이 맡는다.
+    global keep_enabled_streams: set[Log::ID] = set();
 }
 
 ## 경로 문자열에서 디렉터리 부분("/a/b/c" -> "/a/b")을 돌려준다. 없으면 "".
@@ -117,7 +122,7 @@ function filter_log()
         add ids[id];
 
     for ( id in ids )
-        if ( id !in keep_log_streams )
+        if ( id !in keep_log_streams && id !in keep_enabled_streams )
             Log::disable_stream(id);
 
     if ( create_log_dirs )
