@@ -106,37 +106,43 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ### 4.1 룰 목록 (킬체인 순서)
 
-| 단계 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
-| --- | --- | --- | --- | --- | --- |
-| 정찰 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 시도만) | 예외 출발지, 제외 포트 |
-| 정찰 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
-| 초기 침투 | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
-| 초기 침투 | 04_webshell | Webshell_Access | T1505.003 | 웹쉘 파일명+스크립트 확장자, 명령 파라미터 값이 실제 명령(`cmd=whoami`), China Chopper류 본문 | 파라미터 이름만으로는 탐지하지 않음 |
-| 자격증명 접근 | 05_ntlm_spray | NTLM_Spray | T1110.003 | 한 출발지에서 10분 안 **인증 실패** 고유 계정 10개 이상(SMB 상태코드·SPNEGO reject) | 성공은 세지 않음, 대소문자 정규화 |
-| 자격증명 접근 | 17_kerberos_spray | Kerberos_Spray | T1110.003 | 10분 안 AS 사전인증 실패(코드 24·6·18·23) 고유 계정 10개 이상 | 정상 로그온 첫 단계(코드 25) 제외 |
-| 자격증명 접근 | 17_kerberos_spray | Kerberos_Bruteforce | T1110.001 | 한 출발지가 같은 계정으로 10분 안 비밀번호 실패(코드 24·18) 20회 이상 | 예외 출발지 |
-| 자격증명 접근 | 18_kerberoasting | Kerberoasting | T1558.003 | 10분 안 RC4·DES 서비스 티켓을 받은 고유 SPN 5개 이상 | krbtgt·kadmin 제외 |
-| 자격증명 접근 | 18_kerberoasting | ASREP_Roasting | T1558.004 | 사전인증 없는 AS 요청에 RC4·DES로 암호화된 AS-REP(계정마다 1건) | AES 응답은 제외(스마트카드 오탐 방지) |
-| 자격증명 접근 | 19_outbound_smb | NTLM_Credential_Leak | T1187 | 내부 호스트가 외부 서버에 NTLM 인증을 보냄(1건) | 익명 인증 제외, 허용 목적지 |
-| 자격증명 접근 | 22_name_poisoning | Name_Poisoning | T1557.001 | 한 응답자가 10분 안 LLMNR·NBT-NS·mDNS로 고유 이름 5개 이상에 긍정 응답 | mDNS 서비스 광고(PTR 등) 제외, WINS 예외 |
-| 자격증명 접근 | 23_dcsync | DCSync | T1003.006 | DC가 아닌 호스트의 DRSUAPI DRSGetNCChanges 요청(1건) | DC 목록+자동 학습, Azure AD Connect 예외 |
-| 확산 | 06_smb_admin_share | SMB_Admin_Share | T1021.002 | 1분 안 관리 공유(`ADMIN$`·`C$` 등)에 접근한 고유 피해 호스트 2대 이상 | `IPC$`·`PRINT$` 제외, 관리 서버 예외 |
-| 확산 | 15_rdp_lateral | RDP_Lateral | T1021.001 | 1분 안 내부 RDP 고유 목적지 3대 이상 | 점프 서버 예외 |
-| 확산 | 16_ssh_lateral | SSH_Lateral | T1021.004 | 1분 안 SSH 인증 성공 고유 목적지 3대 이상 | 즉시 끊긴 연결 제외 |
-| 확산 | 20_winrm_dcom_lateral | WinRM_Lateral | T1021.006 | 5분 안 WinRM(5985·5986) 연결 고유 내부 목적지 3대 이상 | 관리 서버 예외(필수 등록) |
-| 확산 | 20_winrm_dcom_lateral | DCOM_Lateral | T1021.003 | 5분 안 원격 COM 객체 생성(RemoteCreateInstance) 고유 목적지 3대 이상 | 같은 인터페이스의 다른 호출 제외 |
-| C2 | 07_http_beaconing | HTTP_Beaconing | T1071.001 | 같은 목적지로 3초\~1시간 주기의 HTTP 콜백 12회(오차 25%, 누락 2회 허용) | 도메인·출발지 예외 |
-| C2 | 08_dns_tunneling | DNS_Tunneling | T1071.004 | (출발지, 등록 도메인)별 5분 안 고유 서브도메인 50개 이상 + 수상한 질의 비율 0.5 이상 | 내부 리졸버 제외, AV·DNSBL 도메인 기본 예외 |
-| C2 | 09_encrypted_c2 | Encrypted_C2 | T1573.002 | TLS 점수 3 이상(자체서명 2, SNI 없음 1, SNI 불일치 1, JA3·JA4 차단목록 3, JA4-a 1) | SNI·출발지 예외 |
-| C2 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
-| C2 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
-| C2 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
-| 유출 | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
-| 유출 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
-| 유출 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 클라우드 저장소(지정 호스트 패턴)로 50MB 이상 업로드 | 출발지 예외 |
-| 유출 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | T1041 | 한 호스트의 외부향 업로드 합계가 1분 안 50MB 이상(1MB 단위 실시간 집계) | 5분 억제 |
-| 유출 | 19_outbound_smb | Outbound_SMB | T1048 | 내부 → 외부 445·139 TCP 연결 성립(1건) | 경계에서 막힌 시도는 제외 |
-| 영향 | 21_smb_ransomware | SMB_Ransomware | T1486 | 1분 안 확장자가 바뀐 이름 변경 30개 이상, 또는 랜섬 노트 생성 폴더 5개 이상 | Office 임시 파일 제외, 백업 서버 예외 |
+‘구분’은 룰이 언제부터 있었는지를 나타냅니다.
+
+- 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
+- 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
+- 신규: 2026-11 4단계에서 새로 추가한 룰(17\~24).
+
+| 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 정찰 | 기존 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 시도만) | 예외 출발지, 제외 포트 |
+| 정찰 | 기존 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
+| 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
+| 초기 침투 | 기존(재작성) | 04_webshell | Webshell_Access | T1505.003 | 웹쉘 파일명+스크립트 확장자, 명령 파라미터 값이 실제 명령(`cmd=whoami`), China Chopper류 본문 | 파라미터 이름만으로는 탐지하지 않음 |
+| 자격증명 접근 | 기존(재작성) | 05_ntlm_spray | NTLM_Spray | T1110.003 | 한 출발지에서 10분 안 **인증 실패** 고유 계정 10개 이상(SMB 상태코드·SPNEGO reject) | 성공은 세지 않음, 대소문자 정규화 |
+| 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Spray | T1110.003 | 10분 안 AS 사전인증 실패(코드 24·6·18·23) 고유 계정 10개 이상 | 정상 로그온 첫 단계(코드 25) 제외 |
+| 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Bruteforce | T1110.001 | 한 출발지가 같은 계정으로 10분 안 비밀번호 실패(코드 24·18) 20회 이상 | 예외 출발지 |
+| 자격증명 접근 | 신규 | 18_kerberoasting | Kerberoasting | T1558.003 | 10분 안 RC4·DES 서비스 티켓을 받은 고유 SPN 5개 이상 | krbtgt·kadmin 제외 |
+| 자격증명 접근 | 신규 | 18_kerberoasting | ASREP_Roasting | T1558.004 | 사전인증 없는 AS 요청에 RC4·DES로 암호화된 AS-REP(계정마다 1건) | AES 응답은 제외(스마트카드 오탐 방지) |
+| 자격증명 접근 | 신규 | 19_outbound_smb | NTLM_Credential_Leak | T1187 | 내부 호스트가 외부 서버에 NTLM 인증을 보냄(1건) | 익명 인증 제외, 허용 목적지 |
+| 자격증명 접근 | 신규 | 22_name_poisoning | Name_Poisoning | T1557.001 | 한 응답자가 10분 안 LLMNR·NBT-NS·mDNS로 고유 이름 5개 이상에 긍정 응답 | mDNS 서비스 광고(PTR 등) 제외, WINS 예외 |
+| 자격증명 접근 | 신규 | 23_dcsync | DCSync | T1003.006 | DC가 아닌 호스트의 DRSUAPI DRSGetNCChanges 요청(1건) | DC 목록+자동 학습, Azure AD Connect 예외 |
+| 확산 | 기존 | 06_smb_admin_share | SMB_Admin_Share | T1021.002 | 1분 안 관리 공유(`ADMIN$`·`C$` 등)에 접근한 고유 피해 호스트 2대 이상 | `IPC$`·`PRINT$` 제외, 관리 서버 예외 |
+| 확산 | 기존 | 15_rdp_lateral | RDP_Lateral | T1021.001 | 1분 안 내부 RDP 고유 목적지 3대 이상 | 점프 서버 예외 |
+| 확산 | 기존 | 16_ssh_lateral | SSH_Lateral | T1021.004 | 1분 안 SSH 인증 성공 고유 목적지 3대 이상 | 즉시 끊긴 연결 제외 |
+| 확산 | 신규 | 20_winrm_dcom_lateral | WinRM_Lateral | T1021.006 | 5분 안 WinRM(5985·5986) 연결 고유 내부 목적지 3대 이상 | 관리 서버 예외(필수 등록) |
+| 확산 | 신규 | 20_winrm_dcom_lateral | DCOM_Lateral | T1021.003 | 5분 안 원격 COM 객체 생성(RemoteCreateInstance) 고유 목적지 3대 이상 | 같은 인터페이스의 다른 호출 제외 |
+| C2 | 기존 | 07_http_beaconing | HTTP_Beaconing | T1071.001 | 같은 목적지로 3초\~1시간 주기의 HTTP 콜백 12회(오차 25%, 누락 2회 허용) | 도메인·출발지 예외 |
+| C2 | 기존(재작성) | 08_dns_tunneling | DNS_Tunneling | T1071.004 | (출발지, 등록 도메인)별 5분 안 고유 서브도메인 50개 이상 + 수상한 질의 비율 0.5 이상 | 내부 리졸버 제외, AV·DNSBL 도메인 기본 예외 |
+| C2 | 기존 | 09_encrypted_c2 | Encrypted_C2 | T1573.002 | TLS 점수 3 이상(자체서명 2, SNI 없음 1, SNI 불일치 1, JA3·JA4 차단목록 3, JA4-a 1) | SNI·출발지 예외 |
+| C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
+| C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
+| C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
+| 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
+| 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
+| 유출 | 기존 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 클라우드 저장소(지정 호스트 패턴)로 50MB 이상 업로드 | 출발지 예외 |
+| 유출 | 기존 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | T1041 | 한 호스트의 외부향 업로드 합계가 1분 안 50MB 이상(1MB 단위 실시간 집계) | 5분 억제 |
+| 유출 | 신규 | 19_outbound_smb | Outbound_SMB | T1048 | 내부 → 외부 445·139 TCP 연결 성립(1건) | 경계에서 막힌 시도는 제외 |
+| 영향 | 신규 | 21_smb_ransomware | SMB_Ransomware | T1486 | 1분 안 확장자가 바뀐 이름 변경 30개 이상, 또는 랜섬 노트 생성 폴더 5개 이상 | Office 임시 파일 제외, 백업 서버 예외 |
 
 킬체인 상관 탐지 `Correlated_KillChain`은 위 탐지들을 이어 붙여 만드는 별도 유형입니다(5장).
 
