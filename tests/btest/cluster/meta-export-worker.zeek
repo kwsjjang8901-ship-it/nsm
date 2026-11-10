@@ -17,6 +17,8 @@
 # 탈락 집계가 워커-1 의 통계로 남는다(판정 위치 = 워커)
 # @TEST-EXEC: assert-rows manager/meta_export_stats.log ge 1 node=worker-1 stream=conn dropped_scope=1
 # @TEST-EXEC: assert-rows manager/meta_export_stats.log eq 0 node=manager stream=conn
+# 요약(dns)은 워커 메모리에서 묶여 주기마다 1행으로 로거에 간다
+# @TEST-EXEC: assert-rows manager/meta_dns_summary.log eq 1 node=worker-1 orig_h=10.0.0.200 domain=example.com queries=2 unique_names=1
 
 @load policy/frameworks/cluster/experimental
 
@@ -25,6 +27,7 @@ redef NSM::meta_export_streams += {
 };
 # 통계를 빨리 내보낸다
 redef NSM::meta_stats_interval = 1sec;
+redef NSM::meta_dns_interval = 1sec;
 
 global finish: event();
 
@@ -42,6 +45,10 @@ event write_rows()
 	Log::write(KRB::LOG, KRB::Info($ts=network_time(), $uid="Cmeta3",
 	                               $id=[$orig_h=10.0.0.200, $orig_p=50002/udp, $resp_h=10.0.0.10, $resp_p=88/udp],
 	                               $request_type="AS", $client="user01/CORP.EXAMPLE", $success=T));
+	for ( i in vector(1, 2) )
+		Log::write(DNS::LOG, DNS::Info($ts=network_time(), $uid=fmt("Cdns%d", i), $proto=udp,
+		                               $id=[$orig_h=10.0.0.200, $orig_p=50003/udp, $resp_h=10.0.0.53, $resp_p=53/udp],
+		                               $query="www.example.com", $qtype_name="A", $rcode_name="NOERROR"));
 	}
 
 event Cluster::Experimental::cluster_started()

@@ -16,7 +16,12 @@
 ##!     - 없는 스트림: filter_log 가 끈 스트림을 다시 켜고 default 필터를 지운다.
 ##!       meta_keep_raw_local = T 면 default 필터를 지우지 않고 meta_raw_path_prefix 로 보낸다(T2).
 ##!
-##!   meta_export_stats.log : meta_stats_interval 마다 스트림별 보냄·탈락 건수(노드별).
+##!   요약 모드(MetaSpec$summary = T): 행을 보내지 않고 노드 메모리에서 묶어 주기마다 요약 행을 쓴다.
+##!     - conn → flow_summary.log : (출발지, 목적지, 목적지 포트, 프로토콜)별, meta_flow_interval(10분)
+##!     - dns  → dns_summary.log  : (출발지, 등록 도메인, 유형, 결과)별, meta_dns_interval(1시간)
+##!       질의 이름이 매번 다른 트래픽(DGA·터널링·CDN)도 도메인 하나로 묶이도록 등록 도메인 단위로 센다.
+##!
+##!   meta_export_stats.log : meta_stats_interval 마다 스트림별 보냄·요약·탈락 건수(노드별).
 ##!
 ##!   탐지 경로(notice·nsm_detection·evidence)는 이 모듈과 무관하게 그대로 기록된다.
 ##! ============================================================================
@@ -30,14 +35,19 @@
 @load base/protocols/dce-rpc
 @load base/protocols/rdp
 @load base/protocols/ssh
+@load base/protocols/ssl
+@load base/protocols/http
+@load base/protocols/dns
 @load policy/misc/capture-loss
 @load policy/misc/stats
 @load ../rules/filter_log
+@load ../detections/main             # domain_matches
+@load ../detections/08_dns_tunneling # dns_tunnel_resolvers(내부 재귀 리졸버)
 
 module NSM;
 
 export {
-    redef enum Log::ID += { META_STATS_LOG };
+    redef enum Log::ID += { META_STATS_LOG, META_FLOW_LOG, META_DNS_LOG };
 
     ## 행을 고르는 범위(연결 방향 기준). 연결 정보가 없는 로그(상태 로그)는 범위와 무관하게 통과한다.
     type MetaScope: enum {
@@ -54,6 +64,7 @@ export {
         scope:      MetaScope &default=META_ALL;
         dedup:      interval &default=0secs;  ##< 같은 중복 키를 다시 보내지 않는 기간(0 = 끔)
         rate_limit: count &default=0;         ##< 노드별 분당 최대 행 수(0 = 무제한)
+        summary:    bool &default=F;          ##< T: 행 대신 요약 로그로 묶음(Conn::LOG, DNS::LOG 만 지원)
     };
 
     ## 전체 토글
@@ -90,6 +101,23 @@ export {
         "efsrpc",                                   # PetitPotam 강제 인증
     } &redef;
 
+    ## ssl·http(SNI·Host)·dns(질의)에서 뺄 도메인(접미사 일치). 업데이트·CDN·텔레메트리 등.
+    const meta_domain_allowlist: set[string] = {} &redef;
+
+    ## 요약 로그 주기와 노드당 최대 키 수(넘으면 그 시점에 내보내고 새로 시작)
+    const meta_flow_interval = 10min &redef;
+    const meta_dns_interval = 1hr &redef;
+    const meta_summary_max_keys = 100000 &redef;
+
+    ## dns_summary 에 남길 응답·표본 이름 최대 개수, 고유 이름을 셀 최대 개수(넘으면 unique_names_capped)
+    const meta_dns_max_answers = 5 &redef;
+    const meta_dns_max_samples = 5 &redef;
+    const meta_dns_max_unique = 1000 &redef;
+
+    ## 출발지 하나가 한 주기에 만드는 dns_summary 도메인 행 상한. 넘는 도메인은 domain="(other)" 한 행에
+    ## 묶는다(DGA·대량 조회 host 가 요약 로그를 키우지 않게).
+    const meta_dns_max_domains_per_src = 100 &redef;
+
     ## 스트림별 설정. 여기 있는 스트림만 선별 전송한다.
     const meta_export_streams: table[Log::ID] of MetaSpec = {
         [KRB::LOG] = [$name="kerberos",
@@ -116,6 +144,17 @@ export {
         [SSH::LOG] = [$name="ssh",
                       $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
                                   "auth_success", "auth_attempts", "direction", "client", "server")],
+        [SSL::LOG] = [$name="ssl", $scope=META_BOUNDARY, $dedup=1hr,
+                      $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
+                                  "version", "cipher", "server_name", "established", "ja3")],
+        # URL 은 쿼리 문자열을 뺀 uri_path 만 보낸다(개인정보).
+        [HTTP::LOG] = [$name="http", $scope=META_BOUNDARY, $dedup=10min,
+                       $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
+                                   "method", "host", "uri_path", "status_code", "user_agent",
+                                   "request_body_len", "response_body_len")],
+        # 양이 큰 conn·dns 는 요약 로그로 보낸다.
+        [Conn::LOG] = [$name="flow_summary", $scope=META_BOUNDARY_OR_ADMIN, $summary=T],
+        [DNS::LOG]  = [$name="dns_summary", $summary=T],
         # 센서 상태
         [CaptureLoss::LOG] = [$name="capture_loss"],
         [Stats::LOG]       = [$name="stats"],
@@ -138,6 +177,45 @@ export {
         dropped_filter: count   &log &default=0;   ##< 스트림별 조건(동작·인터페이스 등) 탈락
         dropped_dedup:  count   &log &default=0;   ##< 중복 억제
         dropped_rate:   count   &log &default=0;   ##< 분당 상한 초과
+        summarized:     count   &log &default=0;   ##< 요약 로그로 묶은 행
+    };
+
+    ## flow_summary.log
+    type FlowSummary: record {
+        ts:         time   &log;            ##< 창의 첫 연결 시작 시각
+        ts_end:     time   &log;            ##< 창의 마지막 연결 시작 시각
+        node:       string &log;
+        orig_h:     addr   &log;
+        resp_h:     addr   &log;
+        resp_p:     port   &log;
+        proto:      transport_proto &log;
+        service:    string &log &optional;  ##< 관측된 서비스(쉼표 구분)
+        conns:      count  &log &default=0;
+        orig_bytes: count  &log &default=0;
+        resp_bytes: count  &log &default=0;
+        duration:   double &log &default=0.0; ##< 연결 지속 시간 합(초)
+        states:     string &log &optional;  ##< 연결 상태별 건수(예: SF:12,S0:3)
+        sample_uid: string &log;            ##< 대표 연결 uid(원본 조회용)
+        svc_set:    set[string] &default=set();
+        state_cnt:  table[string] of count &default=table();
+    };
+
+    ## dns_summary.log
+    type DnsSummary: record {
+        ts:           time   &log;
+        ts_end:       time   &log;
+        node:         string &log;
+        orig_h:       addr   &log;
+        domain:       string &log;                  ##< 등록 도메인(parent_domain, co.kr 등 2단계 접미사 처리)
+        qtype_name:   string &log &optional;
+        rcode_name:   string &log &optional;
+        queries:      count  &log &default=0;       ##< 질의 수
+        unique_names: count  &log &default=0;       ##< 고유 질의 이름 수
+        unique_names_capped: bool &log &default=F;  ##< T: meta_dns_max_unique 에 닿아 그 뒤는 세지 않음
+        sample_names: vector of string &log;        ##< 처음 관측한 질의 이름(최대 meta_dns_max_samples)
+        answers:      vector of string &log &optional;  ##< 처음 관측한 응답(최대 meta_dns_max_answers)
+        sample_uid:   string &log;
+        names:        set[string] &default=set();
     };
 
     ## 한 행의 판정 재료. 스트림마다 meta_extract 가 채운다.
@@ -149,6 +227,20 @@ export {
 }
 
 redef NSM::keep_log_streams += { NSM::META_STATS_LOG };
+
+## http: 쿼리 문자열을 뺀 경로(선별 전송용). 원본 http.log 를 남기는 환경에서는 그 로그에도 열이 생긴다.
+redef record HTTP::Info += {
+    uri_path: string &log &optional;
+};
+
+event http_request(c: connection, method: string, original_URI: string, unescaped_URI: string,
+                   version: string) &priority=4
+    {
+    if ( ! c?$http )
+        return;
+    local parts = split_string1(original_URI, /\?/);
+    c$http$uri_path = parts[0];
+    }
 redef NSM::log_paths += { [NSM::META_STATS_LOG] = "/log/zeek/meta/meta_export_stats" };
 
 # ---------------------------------------------------------------- 상태
@@ -230,12 +322,170 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
         r$key = cat(meta_cid_key(dr$id), "|", dr?$endpoint ? dr$endpoint : "-", "|",
                     dr?$operation ? dr$operation : "-");
         }
+    else if ( rec is SSL::Info )
+        {
+        local sl = rec as SSL::Info;
+        r$cid = sl$id;
+        local sni = sl?$server_name ? to_lower(sl$server_name) : "";
+        r$keep = ! domain_matches(sni, meta_domain_allowlist);
+        r$key = cat(sl$id$orig_h, "|", sni, "|", sl?$ja3 ? sl$ja3 : "-");
+        }
+    else if ( rec is HTTP::Info )
+        {
+        local hp = rec as HTTP::Info;
+        r$cid = hp$id;
+        local host = hp?$host ? to_lower(hp$host) : "";
+        r$keep = ! domain_matches(host, meta_domain_allowlist);
+        r$key = cat(hp$id$orig_h, "|", host, "|", hp?$method ? hp$method : "-", "|",
+                    hp?$uri_path ? hp$uri_path : "-", "|", hp?$status_code ? cat(hp$status_code) : "-");
+        }
+    else if ( rec is DNS::Info )
+        {
+        local dn = rec as DNS::Info;
+        r$cid = dn$id;
+        local q = dn?$query ? to_lower(dn$query) : "";
+        local ql = |q|;
+        r$keep = q != ""
+                 && dn$id$orig_h !in dns_tunnel_resolvers          # 리졸버가 대신 묻는 질의(중복)
+                 && ! ( ql >= 13 && q[ql - 13 :] == ".in-addr.arpa" )
+                 && ! ( ql >= 9 && q[ql - 9 :] == ".ip6.arpa" )
+                 && ! domain_matches(q, meta_domain_allowlist);
+        }
     else if ( rec is RDP::Info )
         r$cid = (rec as RDP::Info)$id;
     else if ( rec is SSH::Info )
         r$cid = (rec as SSH::Info)$id;
 
     return r;
+    }
+
+# ---------------------------------------------------------------- 요약
+
+global meta_flows: table[string] of FlowSummary = table();
+global meta_dns: table[string] of DnsSummary = table();
+global meta_dns_src_domains: table[addr] of count = table();
+
+function meta_flush_flows()
+    {
+    for ( _k, fs in meta_flows )
+        {
+        if ( |fs$svc_set| > 0 )
+            fs$service = join_string_set(fs$svc_set, ",");
+        local st = "";
+        for ( s, n in fs$state_cnt )
+            st = st == "" ? fmt("%s:%d", s, n) : fmt("%s,%s:%d", st, s, n);
+        if ( st != "" )
+            fs$states = st;
+        Log::write(META_FLOW_LOG, fs);
+        }
+    meta_flows = table();
+    }
+
+function meta_flush_dns()
+    {
+    for ( _k, ds in meta_dns )
+        Log::write(META_DNS_LOG, ds);
+    meta_dns = table();
+    meta_dns_src_domains = table();
+    }
+
+function meta_summarize(rec: any)
+    {
+    if ( rec is Conn::Info )
+        {
+        local cn = rec as Conn::Info;
+        local k = cat(cn$id$orig_h, "|", cn$id$resp_h, "|", cn$id$resp_p);
+        if ( k !in meta_flows )
+            {
+            if ( |meta_flows| >= meta_summary_max_keys )
+                meta_flush_flows();
+            meta_flows[k] = FlowSummary($ts=cn$ts, $ts_end=cn$ts, $node=peer_description,
+                                        $orig_h=cn$id$orig_h, $resp_h=cn$id$resp_h, $resp_p=cn$id$resp_p,
+                                        $proto=cn$proto, $sample_uid=cn$uid);
+            }
+        local fs = meta_flows[k];
+        if ( cn$ts < fs$ts ) fs$ts = cn$ts;
+        if ( cn$ts > fs$ts_end ) fs$ts_end = cn$ts;
+        ++fs$conns;
+        if ( cn?$orig_bytes ) fs$orig_bytes += cn$orig_bytes;
+        if ( cn?$resp_bytes ) fs$resp_bytes += cn$resp_bytes;
+        if ( cn?$duration ) fs$duration += interval_to_double(cn$duration);
+        if ( cn?$service )
+            for ( _si, sv in split_string(cn$service, /,/) )
+                add fs$svc_set[sv];
+        local cs = cn?$conn_state ? cn$conn_state : "-";
+        fs$state_cnt[cs] = ( cs in fs$state_cnt ? fs$state_cnt[cs] : 0 ) + 1;
+        }
+    else if ( rec is DNS::Info )
+        {
+        local dn = rec as DNS::Info;
+        local q = to_lower(dn$query);
+        local dom = parent_domain(q);
+        local qt = dn?$qtype_name ? dn$qtype_name : "-";
+        local rc = dn?$rcode_name ? dn$rcode_name : "-";
+        local src = dn$id$orig_h;
+        local dk = cat(src, "|", dom, "|", qt, "|", rc);
+        if ( dk !in meta_dns )
+            {
+            local nd = src in meta_dns_src_domains ? meta_dns_src_domains[src] : 0;
+            if ( nd >= meta_dns_max_domains_per_src )
+                {
+                dom = "(other)";
+                dk = cat(src, "|", dom, "|", qt, "|", rc);
+                }
+            else
+                meta_dns_src_domains[src] = nd + 1;
+            }
+        if ( dk !in meta_dns )
+            {
+            if ( |meta_dns| >= meta_summary_max_keys )
+                meta_flush_dns();
+            meta_dns[dk] = DnsSummary($ts=dn$ts, $ts_end=dn$ts, $node=peer_description,
+                                      $orig_h=dn$id$orig_h, $domain=dom, $sample_names=vector(),
+                                      $sample_uid=dn$uid);
+            if ( dn?$qtype_name ) meta_dns[dk]$qtype_name = dn$qtype_name;
+            if ( dn?$rcode_name ) meta_dns[dk]$rcode_name = dn$rcode_name;
+            }
+        local ds = meta_dns[dk];
+        if ( dn$ts < ds$ts ) ds$ts = dn$ts;
+        if ( dn$ts > ds$ts_end ) ds$ts_end = dn$ts;
+        ++ds$queries;
+        if ( q !in ds$names )
+            {
+            if ( |ds$names| < meta_dns_max_unique )
+                {
+                add ds$names[q];
+                ds$unique_names = |ds$names|;
+                if ( |ds$sample_names| < meta_dns_max_samples )
+                    ds$sample_names += q;
+                }
+            else
+                ds$unique_names_capped = T;
+            }
+        if ( ! ds?$answers && dn?$answers && |dn$answers| > 0 )
+            {
+            local av: vector of string = vector();
+            for ( i in dn$answers )
+                {
+                if ( |av| >= meta_dns_max_answers )
+                    break;
+                av += dn$answers[i];
+                }
+            ds$answers = av;
+            }
+        }
+    }
+
+event meta_flow_tick()
+    {
+    meta_flush_flows();
+    schedule meta_flow_interval { meta_flow_tick() };
+    }
+
+event meta_dns_tick()
+    {
+    meta_flush_dns();
+    schedule meta_dns_interval { meta_dns_tick() };
     }
 
 hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
@@ -257,6 +507,14 @@ hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
     if ( ! row$keep )
         {
         ++st$dropped_filter;
+        break;
+        }
+
+    # 요약 모드: 행은 보내지 않고 묶는다
+    if ( spec$summary )
+        {
+        meta_summarize(rec);
+        ++st$summarized;
         break;
         }
 
@@ -301,7 +559,8 @@ function meta_flush_stats()
     {
     for ( name, st in meta_counters )
         {
-        if ( st$sent + st$dropped_scope + st$dropped_filter + st$dropped_dedup + st$dropped_rate == 0 )
+        if ( st$sent + st$dropped_scope + st$dropped_filter + st$dropped_dedup + st$dropped_rate
+             + st$summarized == 0 )
             next;
         st$ts = network_time();
         Log::write(META_STATS_LOG, st);
@@ -317,8 +576,11 @@ event meta_stats_tick()
 
 event zeek_done()
     {
-    if ( meta_export_enable )
-        meta_flush_stats();
+    if ( ! meta_export_enable )
+        return;
+    meta_flush_flows();
+    meta_flush_dns();
+    meta_flush_stats();
     }
 
 # ---------------------------------------------------------------- 필터 설치
@@ -326,6 +588,8 @@ event zeek_done()
 event zeek_init() &priority=5
     {
     Log::create_stream(META_STATS_LOG, [$columns=MetaStats, $path="meta_export_stats"]);
+    Log::create_stream(META_FLOW_LOG, [$columns=FlowSummary, $path="flow_summary"]);
+    Log::create_stream(META_DNS_LOG, [$columns=DnsSummary, $path="dns_summary"]);
     }
 
 # filter_log(우선순위 -1)가 끄지 않도록 대상 스트림을 알린다(스트림은 우선순위 5 에서 만들어진다).
@@ -336,6 +600,8 @@ event zeek_init() &priority=0
     for ( id in meta_export_streams )
         if ( id in Log::active_streams )
             add keep_enabled_streams[id];
+    add keep_enabled_streams[META_FLOW_LOG];
+    add keep_enabled_streams[META_DNS_LOG];
     }
 
 # filter_log(우선순위 -1)가 스트림을 정리한 뒤에 실행한다.
@@ -346,6 +612,11 @@ event zeek_init() &priority=-2
         Log::disable_stream(META_STATS_LOG);
         return;
         }
+
+    change_log_path(META_FLOW_LOG, meta_path_prefix + "flow_summary");
+    change_log_path(META_DNS_LOG, meta_path_prefix + "dns_summary");
+    local want_flow = F;
+    local want_dns = F;
 
     if ( create_log_dirs )
         {
@@ -374,14 +645,34 @@ event zeek_init() &priority=-2
                 Log::remove_filter(id, "default");
             }
 
+        if ( spec$summary )
+            {
+            if ( id == Conn::LOG )
+                want_flow = T;
+            else if ( id == DNS::LOG )
+                want_dns = T;
+            else
+                Reporter::warning(fmt("NSM metadata: %s 는 요약 모드를 지원하지 않습니다", spec$name));
+            }
+
         local f = Log::Filter($name="nsm_meta",
-                              $path=meta_path_prefix + spec$name,
+                              # 요약 모드 필터는 행을 쓰지 않는다(경로는 요약 로그와 겹치지 않게만)
+                              $path=meta_path_prefix + spec$name + ( spec$summary ? "_rows" : "" ),
                               $policy=meta_policy,
                               $config=table(["use_json"] = "T"));
         if ( spec?$fields )
             f$include = spec$fields;
         Log::add_filter(id, f);
         }
+
+    if ( ! want_flow )
+        Log::disable_stream(META_FLOW_LOG);
+    else
+        schedule meta_flow_interval { meta_flow_tick() };
+    if ( ! want_dns )
+        Log::disable_stream(META_DNS_LOG);
+    else
+        schedule meta_dns_interval { meta_dns_tick() };
 
     schedule meta_stats_interval { meta_stats_tick() };
     }

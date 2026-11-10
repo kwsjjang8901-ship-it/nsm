@@ -687,13 +687,13 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 | 요구사항 | 내용 |
 | --- | --- |
-| 대상(1차) | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh와 센서 상태(capture_loss, stats, reporter). ssl·dns·http·conn은 다음 단계 |
+| 대상 | 행 단위: kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http와 센서 상태(capture_loss, stats, reporter). 요약: conn → `flow_summary`, dns → `dns_summary` |
 | 필드 축소 | 스트림마다 조사에 쓰는 필드만 남김(`fields`) |
 | 행 선별 | 범위(방향·내부 관리 포트) → 스트림별 조건(smb_files는 쓰기·이름 변경·삭제만, dce_rpc는 주요 인터페이스만) → 중복 억제 → 노드당 분당 상한 순으로 판정 |
 | 판정 위치 | 로그를 쓰는 노드(클러스터에서는 워커). 탈락한 행은 로거·디스크·네트워크로 가지 않음 |
 | 과부하 | 분당 상한을 넘는 행은 버리고 건수를 `meta_export_stats.log`에 남김. 탐지 로그(notice·nsm_detection·evidence)는 영향 없음 |
 | 원본 | 유지 목록(5.2절)에 없는 대상 스트림은 원본을 쓰지 않음. `meta_keep_raw_local = T`면 원본을 `/hdd_tmp/log/zeek/<이름>.log`에도 남김 |
-| 개인정보 | 계정 이름은 보냄. 인증 응답값은 보내지 않음(HTTP를 넣을 때 URL 쿼리 문자열도 제외) |
+| 개인정보 | 계정 이름·URL 경로는 보냄. 인증 응답값과 URL 쿼리 문자열은 보내지 않음(http는 `uri` 대신 쿼리를 뺀 `uri_path`) |
 | 예산(목표) | Zeek 전체 로그 대비 5% 이하, CPU 추가 부하 5% 이하. 측정: `tests/measure_meta_export.sh <pcap>` |
 
 스트림별 남기는 필드와 선별 조건:
@@ -707,9 +707,18 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | dce_rpc | endpoint, operation | 전체 | 주요 인터페이스만, (출발지, 목적지, 인터페이스, 호출) 10분 |
 | rdp | cookie, security_protocol, result | 전체 | 없음 |
 | ssh | auth_success, auth_attempts, direction, client, server | 전체 | 없음 |
+| ssl | version, cipher, server_name, established, ja3 | 경계 | 예외 도메인(SNI) 제외, (출발지, SNI, JA3) 1시간 |
+| http | method, host, uri_path, status_code, user_agent, request_body_len, response_body_len | 경계 | 예외 도메인(Host) 제외, (출발지, Host, 메서드, 경로, 상태) 10분 |
 | capture_loss, stats, reporter | 전체 필드 | - | 없음 |
 
-`meta_export_stats.log` 필드: `ts`, `node`(기록한 노드), `stream`, `sent`, `dropped_scope`(범위 밖), `dropped_filter`(스트림별 조건), `dropped_dedup`(중복 억제), `dropped_rate`(분당 상한). 1분마다 건수가 있는 스트림만 씁니다.
+요약 로그(conn·dns는 행을 보내지 않고 노드 메모리에서 묶어 주기마다 씀):
+
+| 출력 | 묶는 키·주기 | 필드 | 선별 |
+| --- | --- | --- | --- |
+| flow_summary | (출발지, 목적지, 목적지 포트), 10분 | ts, ts_end, node, orig_h, resp_h, resp_p, proto, service, conns, orig_bytes, resp_bytes, duration, states(예: `SF:12,S0:3`), sample_uid | 경계 + 내부 관리 포트 |
+| dns_summary | (출발지, 등록 도메인, 유형, 결과), 1시간 | ts, ts_end, node, orig_h, domain, qtype_name, rcode_name, queries, unique_names, unique_names_capped, sample_names(최대 5), answers(최대 5), sample_uid | 역방향 조회·예외 도메인·내부 리졸버(`dns_tunnel_resolvers`) 출발지 제외. 출발지당 주기마다 도메인 행 100개까지, 넘는 도메인은 `domain=(other)` 한 행 |
+
+`meta_export_stats.log` 필드: `ts`, `node`(기록한 노드), `stream`, `sent`, `dropped_scope`(범위 밖), `dropped_filter`(스트림별 조건), `dropped_dedup`(중복 억제), `dropped_rate`(분당 상한), `summarized`(요약으로 묶은 행). 1분마다 건수가 있는 스트림만 씁니다.
 
 ## 6. 출력(로그) 요구사항
 
@@ -1070,6 +1079,11 @@ redef NSM::log_paths += {
 | `meta_dedup_max_entries` / `meta_dedup_expire` | 200000 / 1hr | 중복 억제 테이블 상한·보관 시간 | 넘치면 억제 없이 보냄 |
 | `meta_stats_interval` | 1min | 통계 로그 주기 |  |
 | `meta_keep_raw_local` / `meta_raw_path_prefix` | F / `/hdd_tmp/log/zeek/` | 대상 스트림 원본을 로컬에도 남길지와 경로 | 디스크 여유가 있는 센서만 |
+| `meta_domain_allowlist` | 비어 있음 | ssl(SNI)·http(Host)·dns(질의)에서 뺄 도메인(접미사 일치) | OS·백신 업데이트, CDN, 텔레메트리 도메인 `+=` |
+| `meta_flow_interval` / `meta_dns_interval` | 10min / 1hr | 요약 주기 | 짧게 하면 행이 늘고 지연이 줄어듦 |
+| `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 dns_summary 도메인 행 상한 | 넘는 도메인은 `(other)` 한 행 |
+| `meta_summary_max_keys` | 100000 | 노드당 요약 키 상한 | 넘으면 그 시점에 내보냄 |
+| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름·응답 수, 고유 이름을 셀 최대 수 |  |
 
 ### 7.7 설정 변경·검증 절차
 
@@ -1105,8 +1119,8 @@ redef NSM::log_paths += {
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 41개 — 룰·계약·선별 전송 테스트 36개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
-| 합성 pcap | 24개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
+| btest | 42개 — 룰·계약·선별 전송 테스트 37개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| 합성 pcap | 25개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
 | 실행 | `tests/run_tests.sh`(로컬 zeek 없으면 Docker `zeek/zeek:9.0.1`), `ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh` |
@@ -1147,7 +1161,7 @@ redef NSM::log_paths += {
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
-| 메타데이터 선별 전송 1차만 구현(AD·Windows 프로토콜) | ssl·dns·http·conn 메타데이터는 아직 안 보냄. 운영 pcap 기준 전송량·CPU 미측정 | 운영 pcap 측정 후 2차(행 선별·요약 로그). `docs/METADATA_EXPORT_PLAN.md` |
+| 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |
 
 ## 부록 A. 배포 설정 파일 예시 (nsm_config_custom.zeek)
 
