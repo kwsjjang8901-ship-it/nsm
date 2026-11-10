@@ -683,42 +683,14 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 ### 5.3 메타데이터 선별 전송
 
-탐지 결과 외에 조사·헌팅에 쓰는 프로토콜 메타데이터를 골라 `/log/zeek/meta/<이름>.log`(JSON)에 기록합니다. 수집 에이전트가 이 디렉터리를 Manager로 보냅니다. 전체 Zeek 로그를 보내기에는 양이 너무 많아(운영 pcap 기준 하루 약 180GB 규모) 행과 필드를 줄여 보냅니다. 설계와 단계별 계획은 `docs/METADATA_EXPORT_PLAN.md`에 있습니다.
+탐지 결과 외에 조사·헌팅에 쓰는 프로토콜 메타데이터를 골라 `/log/zeek/meta/<이름>.log`(JSON)에 기록하는 기능입니다. 탐지와 별개 기능이라 요구사항·출력 명세·설정·운영 절차는 [메타데이터 선별 전송 SRS](SRS_METADATA_EXPORT.md)에 따로 정리했습니다.
 
-| 요구사항 | 내용 |
+| 항목 | 요약 |
 | --- | --- |
-| 대상 | 행 단위: kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http와 센서 상태(capture_loss, stats, reporter). 요약: conn → `flow_summary`, dns → `dns_summary` |
-| 필드 축소 | 스트림마다 조사에 쓰는 필드만 남김(`fields`) |
-| 행 선별 | 범위(방향·내부 관리 포트) → 스트림별 조건(smb_files는 쓰기·이름 변경·삭제만, dce_rpc는 주요 인터페이스만) → 중복 억제 → 노드당 분당 상한 순으로 판정 |
-| 판정 위치 | 로그를 쓰는 노드(클러스터에서는 워커). 탈락한 행은 로거·디스크·네트워크로 가지 않음 |
-| 과부하 | 분당 상한을 넘는 행은 버리고 건수를 `meta_export_stats.log`에 남김. 탐지 로그(notice·nsm_detection·evidence)는 영향 없음 |
-| 원본 | 유지 목록(5.2절)에 없는 대상 스트림은 원본을 쓰지 않음. `meta_keep_raw_local = T`면 원본을 `/hdd_tmp/log/zeek/<이름>.log`에도 남김 |
-| 개인정보 | 계정 이름·URL 경로는 보냄. 인증 응답값과 URL 쿼리 문자열은 보내지 않음(http는 `uri` 대신 쿼리를 뺀 `uri_path`) |
-| 예산(목표) | Zeek 전체 로그 대비 5% 이하, CPU 추가 부하 5% 이하. 측정: `tests/measure_meta_export.sh <pcap>` |
-
-스트림별 남기는 필드와 선별 조건:
-
-| 출력 | 남기는 필드(ts, uid, id 외) | 범위 | 선별·중복 억제 |
-| --- | --- | --- | --- |
-| kerberos | request_type, client, service, success, error_msg, cipher | 전체 | 없음 |
-| ntlm | username, domainname, hostname, success | 전체 | 없음 |
-| smb_mapping | path, share_type | 전체 | (출발지, 목적지, 경로) 1시간 |
-| smb_files | action, path, name, prev_name, size | 전체 | 쓰기·이름 변경·삭제만, (출발지, 목적지, 동작, 경로, 파일) 10분 |
-| dce_rpc | endpoint, operation | 전체 | 주요 인터페이스만, (출발지, 목적지, 인터페이스, 호출) 10분 |
-| rdp | cookie, security_protocol, result | 전체 | 없음 |
-| ssh | auth_success, auth_attempts, direction, client, server | 전체 | 없음 |
-| ssl | version, cipher, server_name, established, ja3 | 경계 | 예외 도메인(SNI) 제외, (출발지, SNI, JA3) 1시간 |
-| http | method, host, uri_path, status_code, user_agent, request_body_len, response_body_len | 경계 | 예외 도메인(Host) 제외, (출발지, Host, 메서드, 경로, 상태) 10분 |
-| capture_loss, stats, reporter | 전체 필드 | - | 없음 |
-
-요약 로그(conn·dns는 행을 보내지 않고 노드 메모리에서 묶어 주기마다 씀):
-
-| 출력 | 묶는 키·주기 | 필드 | 선별 |
-| --- | --- | --- | --- |
-| flow_summary | (출발지, 목적지, 목적지 포트), 10분 | ts, ts_end, node, orig_h, resp_h, resp_p, proto, service, conns, orig_bytes, resp_bytes, duration, states(예: `SF:12,S0:3`), sample_uid | 경계 + 내부 관리 포트 |
-| dns_summary | (출발지, 등록 도메인, 유형, 결과), 1시간 | ts, ts_end, node, orig_h, domain, qtype_name, rcode_name, queries, unique_names, unique_names_capped, sample_names(최대 5), answers(최대 5), sample_uid | 역방향 조회·예외 도메인·내부 리졸버(`dns_tunnel_resolvers`) 출발지 제외. 출발지당 주기마다 도메인 행 100개까지, 넘는 도메인은 `domain=(other)` 한 행 |
-
-`meta_export_stats.log` 필드: `ts`, `node`(기록한 노드), `stream`, `sent`, `dropped_scope`(범위 밖), `dropped_filter`(스트림별 조건), `dropped_dedup`(중복 억제), `dropped_rate`(분당 상한), `summarized`(요약으로 묶은 행). 1분마다 건수가 있는 스트림만 씁니다.
+| 행 단위 | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http, 센서 상태 |
+| 요약 | conn → `flow_summary`(10분), dns → `dns_summary`(1시간) |
+| 판정 | 범위 → 스트림별 조건 → 중복 억제 → 노드당 분당 상한, 워커에서 판정 |
+| 탐지와의 관계 | 탐지 로그는 이 기능의 켬·끔·상한과 무관하게 기록됨 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -1066,24 +1038,9 @@ redef NSM::log_paths += {
 
 자산 식별 PoC를 함께 올리면 그 로그도 꺼지므로 `redef NSM::keep_log_streams += { AssetID::LOG };`가 필요합니다.
 
-#### 메타데이터 선별 전송 (5.3절, `metadata/main.zeek`)
+#### 메타데이터 선별 전송
 
-| 파라미터 | 기본값 | 의미 | 조정 가이드 |
-| --- | --- | --- | --- |
-| `meta_export_enable` | T | 선별 전송 전체 토글 | 수집 에이전트가 없는 센서는 F |
-| `meta_path_prefix` | `/log/zeek/meta/` | 출력 경로 앞부분 | 에이전트가 읽는 디렉터리에 맞춤 |
-| `meta_export_streams` | 5.3절 표 | 스트림별 `name`·`fields`·`scope`·`dedup`·`rate_limit` | 상한(`rate_limit`, 노드당 분당 행 수)은 운영 측정 후 지정. 항목을 바꿀 때는 표 전체를 다시 정의 |
-| `meta_admin_ports` | 22, 88, 135, 139, 389, 445, 636, 3268, 3269, 3389, 5985, 5986 | `META_ADMIN_INTERNAL` 범위의 내부 관리 포트 | 사내 관리 포트 `+=` |
-| `meta_smb_file_actions` | 쓰기·이름 변경·삭제 | smb_files에서 남길 동작 |  |
-| `meta_dce_rpc_endpoints` | drsuapi, svcctl, atsvc, ITaskSchedulerService, winreg, IRemoteSCMActivator, IWbemLevel1Login, IWbemServices, samr, lsarpc, netlogon, efsrpc | dce_rpc에서 남길 인터페이스(소문자로 비교) | `+=` |
-| `meta_dedup_max_entries` / `meta_dedup_expire` | 200000 / 1hr | 중복 억제 테이블 상한·보관 시간 | 넘치면 억제 없이 보냄 |
-| `meta_stats_interval` | 1min | 통계 로그 주기 |  |
-| `meta_keep_raw_local` / `meta_raw_path_prefix` | F / `/hdd_tmp/log/zeek/` | 대상 스트림 원본을 로컬에도 남길지와 경로 | 디스크 여유가 있는 센서만 |
-| `meta_domain_allowlist` | 비어 있음 | ssl(SNI)·http(Host)·dns(질의)에서 뺄 도메인(접미사 일치) | OS·백신 업데이트, CDN, 텔레메트리 도메인 `+=` |
-| `meta_flow_interval` / `meta_dns_interval` | 10min / 1hr | 요약 주기 | 짧게 하면 행이 늘고 지연이 줄어듦 |
-| `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 dns_summary 도메인 행 상한 | 넘는 도메인은 `(other)` 한 행 |
-| `meta_summary_max_keys` | 100000 | 노드당 요약 키 상한 | 넘으면 그 시점에 내보냄 |
-| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름·응답 수, 고유 이름을 셀 최대 수 |  |
+파라미터(`meta_*`)와 배포 설정 예시는 [메타데이터 선별 전송 SRS](SRS_METADATA_EXPORT.md) 6장에 있습니다.
 
 ### 7.7 설정 변경·검증 절차
 

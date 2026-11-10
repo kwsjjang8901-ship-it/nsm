@@ -1,6 +1,6 @@
 # 메타데이터 선별 전송 — 개발 계획과 스펙
 
-작성: 2026-11-10 · 상태: P0 결정 확정(2026-11-10, 5장), P1·P2·P3 구현(conn·dns는 요약), P4 예정 · 관련: [SRS](SRS.md) 5.2·7.6절, 자산 식별 PoC(`claudtest2`) 선별 전송, OCSF 변환기(`claudtest`)
+작성: 2026-11-10 · 상태: P0 결정 확정(2026-11-10, 5장), P1·P2·P3 구현(conn·dns는 요약), P4 예정 · 관련: [선별 전송 SRS](SRS_METADATA_EXPORT.md), [탐지 SRS](SRS.md) 5.2·5.3절, 자산 식별 PoC(`claudtest2`) 선별 전송, OCSF 변환기(`claudtest`)
 
 ## 1. 배경과 목표
 

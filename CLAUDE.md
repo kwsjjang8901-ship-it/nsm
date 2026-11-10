@@ -1,6 +1,6 @@
 # 작업 규칙
 
-Zeek 기반 NSM 탐지 룰 패키지(`nsm_rules/`). 요구사항·설정의 원본 문서는 `docs/SRS.md`.
+Zeek 기반 NSM 탐지 룰 패키지(`nsm_rules/`). 요구사항·설정의 원본 문서는 `docs/SRS.md`(탐지)와 `docs/SRS_METADATA_EXPORT.md`(메타데이터 선별 전송, `nsm_rules/metadata/`). 해당 기능을 바꾸는 PR에서 함께 고친다.
 
 ## 기본
 
