@@ -269,3 +269,17 @@ redef NSM::chain_max_expire              = 2hr;         # prime 최대 보관 �
 #   chain_group_rules : 단계 묶음 -> 단계 묶음 전이(정찰·C2·자격증명·도메인 장악·확산·유출·영향)
 #   묶음 구성은 corr_*_notes 집합. 예) 새 C2 탐지를 묶음에 넣기
 #     redef NSM::corr_c2_notes += { NSM::Encrypted_C2 };   (chain_group_rules 도 함께 다시 정의해야 반영됨)
+
+
+# =============================================================================
+# [메타데이터] 선별 전송 (T1) — docs/METADATA_EXPORT_PLAN.md
+# =============================================================================
+# 탐지 결과 외에 조사용 프로토콜 메타데이터를 골라 /log/zeek/meta/<이름>.log(JSON)에 쓴다.
+# 수집 에이전트가 /log/zeek/meta 를 Manager 로 보낸다. 운영 값은 룰 파일 기본값을 그대로 쓴다.
+# redef NSM::meta_export_enable   = T;                    # 전체 토글
+# redef NSM::meta_path_prefix     = "/log/zeek/meta/";    # 출력 경로 앞부분
+# redef NSM::meta_keep_raw_local  = F;                    # T: 선별 대상 원본을 /hdd_tmp/log/zeek 에도 남김(T2)
+# redef NSM::meta_admin_ports    += { 8530/tcp };         # 내부 관리 포트 추가
+# redef NSM::meta_dce_rpc_endpoints += { "epmapper" };    # 남길 RPC 인터페이스 추가
+# 스트림별 필드·범위·중복 억제·분당 상한은 NSM::meta_export_streams(metadata/main.zeek)에서 정한다.
+#   예) Kerberos 를 노드당 분당 5000행으로 제한: 그 항목에 $rate_limit=5000 을 넣어 표를 다시 정의한다.

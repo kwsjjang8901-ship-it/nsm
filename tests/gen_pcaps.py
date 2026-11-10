@@ -1295,13 +1295,56 @@ def gen_chain_ext(out):
     cap.write(os.path.join(out, "chain_ext.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 메타데이터 선별 전송(T1)
+
+def gen_meta_export(out):
+    """선별 전송 대상 프로토콜과 범위·중복 억제·분당 상한 검증용 트래픽.
+    .60 클라이언트: Kerberos 로그온 성공 1, RC4 서비스 티켓 1 / NTLM 로그온 성공 1·실패 1
+                    SMB 같은 공유 2번 연결(중복 억제) + 파일 이름 변경 1·열기만 1
+                    RPC drsuapi 1, ISystemActivator 같은 호출 2번(중복 억제), IOXIDResolver 1(인터페이스 제외)
+                    RDP 1, SSH 1
+    범위(conn): .61 -> 외부 443(경계), .61 -> 내부 445(관리 포트), .61 -> 내부 8080(제외),
+                외부 -> 내부 22(경계)
+    분당 상한(conn): .62 -> 외부 443 연결 30개(1분 안)
+    """
+    cap = Capture()
+    c, srv = "10.0.0.60", "10.0.30.5"
+    t = T0 + 1
+    t = krb_logon_ok(cap, c, "user01", t)
+    t = krb_service_ticket(cap, c, "user01", "MSSQLSvc/db01.corp.example:1433", KRB_RC4, t + 1)
+    t = ntlm_smb_login(cap, c, srv, "CORP", "user01", True, t + 1)
+    t = ntlm_smb_login(cap, c, srv, "CORP", "user02", False, t + 1)
+    s = Smb2Session(cap, c, srv, "share", t + 1)
+    s.rename(s.create("docs\\a.txt"), "docs\\b.txt")
+    s.create("docs\\c.txt")
+    t = s.close()
+    s = Smb2Session(cap, c, srv, "share", t + 1)
+    t = s.close()
+    t = dcom_call(cap, c, KDC, DRSUAPI, 3, t + 1, dport=49667)
+    t = dcom_call(cap, c, srv, ISYSTEMACTIVATOR, 4, t + 1)
+    t = dcom_call(cap, c, srv, ISYSTEMACTIVATOR, 4, t + 1)
+    t = dcom_call(cap, c, srv, IOXID_RESOLVER, 5, t + 1)
+    t = rdp_connect(cap, c, srv, "administrator", t + 1)
+    t = ssh_session(cap, c, srv, t + 1)
+    t = tcp_established(cap, "10.0.0.61", "93.184.215.120", 443, t + 1)
+    t = tcp_established(cap, "10.0.0.61", srv, 445, t + 1)
+    t = tcp_established(cap, "10.0.0.61", srv, 8080, t + 1)
+    t = tcp_established(cap, "93.184.215.121", "10.0.0.61", 22, t + 1)
+    t = T0 + 125                                    # 새 분 구간에서 시작
+    for i in range(30):
+        t = tcp_established(cap, "10.0.0.62", "93.184.215.122", 443, t + 1)
+    cap.tick(t + 10)                                # 연결 종료 타이머가 같은 분 안에 돌도록
+    cap.tick(T0 + 300)
+    cap.write(os.path.join(out, "meta_export.pcap"))
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
-              gen_chain_ext]
+              gen_chain_ext, gen_meta_export]
 
 
 def main():

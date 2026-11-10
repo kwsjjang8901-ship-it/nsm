@@ -53,6 +53,7 @@ flowchart LR
     R --> K["킬체인 상관<br/>중복 묶기"]
     K --> N
     N --> D["nsm_detection.log<br/>관제용 요약"]
+    Z -->|"프로토콜 로그"| M["메타데이터 선별 전송<br/>/log/zeek/meta"]
     D -.-> O["OCSF 변환기<br/>(5단계)"]
     A["자산 식별<br/>(5단계)"] -.-> CFG
     style R stroke:#2563eb,stroke-width:3px
@@ -71,6 +72,7 @@ flowchart LR
 | 상관·묶기 | `correlation_killchain.zeek`, `notice_aggregation.zeek` | 킬체인 상관, 중복 묶기 |
 | 설정 | `nsm_config_fixed.zeek`, `nsm_config_custom.zeek`, `intel_ja3.zeek` | 운영 기본값, 고객별 값, JA3 목록(7장) |
 | 로그 필터 | `rules/filter_log.zeek` | 남길 로그·경로·회전 |
+| 메타데이터 선별 전송 | `metadata/main.zeek` | 조사용 프로토콜 메타데이터를 골라 별도 경로로 기록(5.3절) |
 | 외부 패키지 | `rules/ja3/` | Salesforce JA3 지문 계산(BSD) |
 | 테스트 | `tests/` | btest·합성 pcap·생성기(9장) |
 
@@ -621,6 +623,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C7 | 운영에 필요한 로그만 남기고 나머지 Zeek 기본 로그는 끈다. 로그별 출력 경로를 지정하고 디렉터리를 만든다 | `rules/filter_log.zeek` |
 | FR-C8 | (선택) 짧은 시간 안 같은 notice를 하나로 묶어 중복 건수를 표시한다. 기본은 꺼짐 | `notice_aggregation.zeek` |
 | FR-C9 | 내부·외부 판정, 등록 도메인 추출(`co.kr` 등 2단계 접미사 포함), 시간 버킷 같은 공용 함수를 한 곳에서 제공한다 | `main.zeek` |
+| FR-C10 | 조사용 프로토콜 메타데이터를 행·필드를 줄여 별도 경로에 기록하고, 노드당 분당 상한을 넘는 행은 버리되 건수를 남긴다. 탐지 로그는 영향받지 않는다(5.3절) | `metadata/main.zeek` |
 
 ### 5.1 킬체인 상관 규칙
 
@@ -676,7 +679,37 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | stats | `/hdd_tmp/log/zeek/stats` |
 | reporter | `/hdd_tmp/log/zeek/reporter` |
 
-conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. 켜는 방법은 7.5절에 있습니다.
+conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. 켜는 방법은 7.6절에 있습니다. 메타데이터 선별 전송 대상 스트림은 꺼지지 않고, 원본 대신 선별본만 5.3절 경로에 남습니다.
+
+### 5.3 메타데이터 선별 전송
+
+탐지 결과 외에 조사·헌팅에 쓰는 프로토콜 메타데이터를 골라 `/log/zeek/meta/<이름>.log`(JSON)에 기록합니다. 수집 에이전트가 이 디렉터리를 Manager로 보냅니다. 전체 Zeek 로그를 보내기에는 양이 너무 많아(운영 pcap 기준 하루 약 180GB 규모) 행과 필드를 줄여 보냅니다. 설계와 단계별 계획은 `docs/METADATA_EXPORT_PLAN.md`에 있습니다.
+
+| 요구사항 | 내용 |
+| --- | --- |
+| 대상(1차) | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh와 센서 상태(capture_loss, stats, reporter). ssl·dns·http·conn은 다음 단계 |
+| 필드 축소 | 스트림마다 조사에 쓰는 필드만 남김(`fields`) |
+| 행 선별 | 범위(방향·내부 관리 포트) → 스트림별 조건(smb_files는 쓰기·이름 변경·삭제만, dce_rpc는 주요 인터페이스만) → 중복 억제 → 노드당 분당 상한 순으로 판정 |
+| 판정 위치 | 로그를 쓰는 노드(클러스터에서는 워커). 탈락한 행은 로거·디스크·네트워크로 가지 않음 |
+| 과부하 | 분당 상한을 넘는 행은 버리고 건수를 `meta_export_stats.log`에 남김. 탐지 로그(notice·nsm_detection·evidence)는 영향 없음 |
+| 원본 | 유지 목록(5.2절)에 없는 대상 스트림은 원본을 쓰지 않음. `meta_keep_raw_local = T`면 원본을 `/hdd_tmp/log/zeek/<이름>.log`에도 남김 |
+| 개인정보 | 계정 이름은 보냄. 인증 응답값은 보내지 않음(HTTP를 넣을 때 URL 쿼리 문자열도 제외) |
+| 예산(목표) | Zeek 전체 로그 대비 5% 이하, CPU 추가 부하 5% 이하. 측정: `tests/measure_meta_export.sh <pcap>` |
+
+스트림별 남기는 필드와 선별 조건:
+
+| 출력 | 남기는 필드(ts, uid, id 외) | 범위 | 선별·중복 억제 |
+| --- | --- | --- | --- |
+| kerberos | request_type, client, service, success, error_msg, cipher | 전체 | 없음 |
+| ntlm | username, domainname, hostname, success | 전체 | 없음 |
+| smb_mapping | path, share_type | 전체 | (출발지, 목적지, 경로) 1시간 |
+| smb_files | action, path, name, prev_name, size | 전체 | 쓰기·이름 변경·삭제만, (출발지, 목적지, 동작, 경로, 파일) 10분 |
+| dce_rpc | endpoint, operation | 전체 | 주요 인터페이스만, (출발지, 목적지, 인터페이스, 호출) 10분 |
+| rdp | cookie, security_protocol, result | 전체 | 없음 |
+| ssh | auth_success, auth_attempts, direction, client, server | 전체 | 없음 |
+| capture_loss, stats, reporter | 전체 필드 | - | 없음 |
+
+`meta_export_stats.log` 필드: `ts`, `node`(기록한 노드), `stream`, `sent`, `dropped_scope`(범위 밖), `dropped_filter`(스트림별 조건), `dropped_dedup`(중복 억제), `dropped_rate`(분당 상한). 1분마다 건수가 있는 스트림만 씁니다.
 
 ## 6. 출력(로그) 요구사항
 
@@ -742,10 +775,10 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 1. `rules/ja3`(JA3 패키지) → `main` → `evidence_log`
 2. 탐지 룰 23개(킬체인 순서)
-3. `detection_log` → `attack_mapping` → `notice_aggregation` → `correlation_killchain`
+3. `detection_log` → `attack_mapping` → `notice_aggregation` → `correlation_killchain` → `metadata`(메타데이터 선별 전송. 이때 `rules/filter_log`도 함께 로드)
 4. `nsm_config_fixed` → **`nsm_config_custom`** → `intel_ja3`
 5. `policy/protocols/conn/mac-logging`, `policy/tuning/json-logs`
-6. `rules/filter_log`(로그 필터·경로)
+6. `rules/filter_log`(로그 필터·경로. 3에서 이미 로드됨)
 
 따라서 **값의 우선순위는 custom > fixed > 룰 파일 기본값**입니다. 설정 파일은 `redef`만 담고 `@load`는 두지 않으며, 단독으로 실행하면 선언이 없어 오류가 납니다.
 
@@ -1024,6 +1057,20 @@ redef NSM::log_paths += {
 
 자산 식별 PoC를 함께 올리면 그 로그도 꺼지므로 `redef NSM::keep_log_streams += { AssetID::LOG };`가 필요합니다.
 
+#### 메타데이터 선별 전송 (5.3절, `metadata/main.zeek`)
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `meta_export_enable` | T | 선별 전송 전체 토글 | 수집 에이전트가 없는 센서는 F |
+| `meta_path_prefix` | `/log/zeek/meta/` | 출력 경로 앞부분 | 에이전트가 읽는 디렉터리에 맞춤 |
+| `meta_export_streams` | 5.3절 표 | 스트림별 `name`·`fields`·`scope`·`dedup`·`rate_limit` | 상한(`rate_limit`, 노드당 분당 행 수)은 운영 측정 후 지정. 항목을 바꿀 때는 표 전체를 다시 정의 |
+| `meta_admin_ports` | 22, 88, 135, 139, 389, 445, 636, 3268, 3269, 3389, 5985, 5986 | `META_ADMIN_INTERNAL` 범위의 내부 관리 포트 | 사내 관리 포트 `+=` |
+| `meta_smb_file_actions` | 쓰기·이름 변경·삭제 | smb_files에서 남길 동작 |  |
+| `meta_dce_rpc_endpoints` | drsuapi, svcctl, atsvc, ITaskSchedulerService, winreg, IRemoteSCMActivator, IWbemLevel1Login, IWbemServices, samr, lsarpc, netlogon, efsrpc | dce_rpc에서 남길 인터페이스(소문자로 비교) | `+=` |
+| `meta_dedup_max_entries` / `meta_dedup_expire` | 200000 / 1hr | 중복 억제 테이블 상한·보관 시간 | 넘치면 억제 없이 보냄 |
+| `meta_stats_interval` | 1min | 통계 로그 주기 |  |
+| `meta_keep_raw_local` / `meta_raw_path_prefix` | F / `/hdd_tmp/log/zeek/` | 대상 스트림 원본을 로컬에도 남길지와 경로 | 디스크 여유가 있는 센서만 |
+
 ### 7.7 설정 변경·검증 절차
 
 1. **파일 선택**: 고객별 값은 `nsm_config_custom.zeek`, 제품 공통 기본값은 `nsm_config_fixed.zeek`(저장소 PR로 변경).
@@ -1058,10 +1105,10 @@ redef NSM::log_paths += {
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 34개 — 룰·계약 테스트 31개(`tests/btest/rules`), 클러스터 테스트 3개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
-| 합성 pcap | 21개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
+| btest | 41개 — 룰·계약·선별 전송 테스트 36개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| 합성 pcap | 24개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
-| 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지) |
+| 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
 | 실행 | `tests/run_tests.sh`(로컬 zeek 없으면 Docker `zeek/zeek:9.0.1`), `ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh` |
 
 실행 결과는 테스트마다 `tests/btest/output/<테스트 이름>/`에 운영과 같은 JSON 로그로 남습니다(통과한 테스트 포함, 클러스터는 `manager/`·`worker-1/` 등 노드별 하위 폴더). 검사 도구(`assert-rows`, `assert-evidence-join`, zeek-cut 대용 `log-cut`)는 JSON·TSV를 모두 읽고, CI는 어떤 레코드에도 없는 필드를 검사한 경우(필드명 오타 의심) 경고를 모아 보여줍니다.
@@ -1100,6 +1147,7 @@ redef NSM::log_paths += {
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
+| 메타데이터 선별 전송 1차만 구현(AD·Windows 프로토콜) | ssl·dns·http·conn 메타데이터는 아직 안 보냄. 운영 pcap 기준 전송량·CPU 미측정 | 운영 pcap 측정 후 2차(행 선별·요약 로그). `docs/METADATA_EXPORT_PLAN.md` |
 
 ## 부록 A. 배포 설정 파일 예시 (nsm_config_custom.zeek)
 

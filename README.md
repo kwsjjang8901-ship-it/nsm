@@ -26,6 +26,8 @@ nsm_rules/
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
+  metadata/
+    main.zeek               # 메타데이터 선별 전송 (/log/zeek/meta, docs/METADATA_EXPORT_PLAN.md)
 tests/
   gen_pcaps.py              # 합성 pcap 생성기 (scapy)
   pcaps/                    # 룰별 테스트 pcap (생성기 출력, 커밋됨)
@@ -34,9 +36,10 @@ tests/
   btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, tools/, setup.zeek)
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
+  measure_meta_export.sh    # 선별 전송 전송량·처리 시간 측정 (pcap 입력)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
-  METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙(초안)
+  METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
 ```
 
