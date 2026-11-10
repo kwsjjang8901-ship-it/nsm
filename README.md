@@ -36,6 +36,7 @@ tests/
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
+  METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙(초안)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
 ```
 
