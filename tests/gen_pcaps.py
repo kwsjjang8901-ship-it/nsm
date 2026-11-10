@@ -1338,13 +1338,47 @@ def gen_meta_export(out):
     cap.tick(T0 + 300)
     cap.write(os.path.join(out, "meta_export.pcap"))
 
+
+def gen_meta_summary(out):
+    """선별 전송 2차(ssl·http 행 선별, conn·dns 요약) 검증용.
+    DNS: .70 같은 질의 5번(요약 1행) + 다른 질의 1, 역방향 조회·예외 도메인(제외), 리졸버 .54 의 질의(제외)
+    HTTP: .71 -> 외부 쿼리 문자열 있는 GET 2번(중복 억제 1행, 쿼리 제거), 예외 호스트·내부 서버(제외)
+    TLS: .72 -> 외부 SNI 2번(중복 억제 1행), 예외 SNI·내부 서버(제외)
+    conn: .73 -> 외부 443 3번(요약 1행 conns=3), 내부 445 2번(관리 포트, 요약 1행), 내부 8080(제외)
+    """
+    cap = Capture()
+    t = T0 + 1
+    for i in range(5):
+        dns_exchange(cap, "10.0.0.70", "www.example-news.com", 0, t + i, answer="93.184.215.130")
+    dns_exchange(cap, "10.0.0.70", "mail.partner.example", 3, t + 6)
+    dns_exchange(cap, "10.0.0.70", "5.0.0.10.in-addr.arpa", 3, t + 7)
+    dns_exchange(cap, "10.0.0.70", "telemetry.vendor.example", 0, t + 8, answer="93.184.215.139")
+    dns_exchange(cap, "10.0.0.54", "www.example-news.com", 0, t + 9, answer="93.184.215.130")
+    t = T0 + 20
+    for i in range(2):
+        t = http_req(cap, "10.0.0.71", "93.184.215.131", "GET", "/download/file.zip?token=SECRET123", t + 1,
+                     host="files.example-cdn.net")
+    t = http_req(cap, "10.0.0.71", "93.184.215.134", "GET", "/update.bin?id=1", t + 1, host="update.vendor.example")
+    t = http_req(cap, "10.0.0.71", "10.0.30.5", "GET", "/intranet?q=1", t + 1)
+    for i in range(2):
+        t = tls_session(cap, "10.0.0.72", "93.184.215.132", t + 1, sni="api.example-saas.com")
+    t = tls_session(cap, "10.0.0.72", "93.184.215.135", t + 1, sni="cdn.vendor.example")
+    t = tls_session(cap, "10.0.0.72", "10.0.30.6", t + 1, sni="portal.corp.example")
+    for i in range(3):
+        t = tcp_established(cap, "10.0.0.73", "93.184.215.133", 443, t + 1)
+    for i in range(2):
+        t = tcp_established(cap, "10.0.0.73", "10.0.30.5", 445, t + 1)
+    t = tcp_established(cap, "10.0.0.73", "10.0.30.5", 8080, t + 1)
+    cap.tick(T0 + 300)
+    cap.write(os.path.join(out, "meta_summary.pcap"))
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
-              gen_chain_ext, gen_meta_export]
+              gen_chain_ext, gen_meta_export, gen_meta_summary]
 
 
 def main():
