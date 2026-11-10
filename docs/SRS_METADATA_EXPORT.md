@@ -50,8 +50,8 @@ flowchart LR
     W -->|"default 필터"| R["원본 로그<br/>(유지 목록·T2만)"]
     W -->|"nsm_meta 필터<br/>범위→조건→중복→상한"| M["/log/zeek/meta/*.log<br/>행 단위 선별본"]
     W -->|"nsm_meta 필터<br/>(conn·dns)"| S["노드 메모리 요약"]
-    S -->|"10분·1시간마다"| M2["/log/zeek/meta/<br/>flow_summary · dns_summary"]
-    W --> ST["meta_export_stats<br/>1분마다 건수"]
+    S -->|"30분·1시간마다"| M2["/log/zeek/meta/<br/>flow_summary · dns_summary"]
+    W --> ST["meta_export_stats<br/>5분마다 건수"]
     M --> A["수집 에이전트"]
     M2 --> A
     ST --> A
@@ -93,9 +93,9 @@ flowchart LR
 | FR-M5 | 스트림별 조건: smb_files는 쓰기·이름 변경·삭제만, dce_rpc는 지정 인터페이스만, ssl·http는 예외 도메인(SNI·Host) 제외, dns는 빈 질의·역방향 조회·예외 도메인·내부 리졸버 출발지 제외 | `rules/meta-export`, `-summary` |
 | FR-M6 | 중복 억제: 스트림별 키가 같은 행은 설정한 기간 동안 한 번만 쓴다. 노드별 상태다 | `rules/meta-export` |
 | FR-M7 | 분당 상한: 노드·스트림별로 1분(로그를 쓰는 시각의 분 단위)에 쓸 최대 행 수를 넘으면 버린다 | `rules/meta-export-rate` |
-| FR-M8 | conn은 `flow_summary`로, DNS는 `dns_summary`로 요약해 주기마다(10분·1시간) 쓴다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
+| FR-M8 | conn은 `flow_summary`로, DNS는 `dns_summary`로 요약해 주기마다(30분·1시간) 쓴다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
 | FR-M9 | DNS 요약은 등록 도메인 단위로 묶고, 출발지 하나가 주기마다 만드는 도메인 행이 상한을 넘으면 나머지를 `domain=(other)` 한 행에 더한다 | `rules/meta-export-summary` |
-| FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 1분마다 쓴다. 경로는 선별 로그와 같은 `meta_path_prefix`를 따른다 | `rules/meta-export*` |
+| FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 5분마다 쓴다. 경로는 선별 로그와 같은 `meta_path_prefix`를 따른다 | `rules/meta-export*` |
 | FR-M11 | 유지 목록에 없는 선별 대상 스트림은 원본을 쓰지 않는다. T2를 켜면 원본을 `meta_raw_path_prefix + 이름`.log에 쓴다 | `rules/meta-export-off` |
 | FR-M12 | `meta_export_enable = F`면 선별 로그·요약·통계를 쓰지 않고, 대상 스트림은 운영 필터대로 꺼진다 | `rules/meta-export-off` |
 | FR-M13 | http는 URL 쿼리 문자열을 뺀 `uri_path`만 보낸다 | `rules/meta-export-summary`(쿼리 값이 선별 로그에 없음) |
@@ -113,7 +113,7 @@ flowchart LR
 | dce_rpc | dce_rpc.log | 전체 | 인터페이스가 `meta_dce_rpc_endpoints` | (출발지, 목적지, 인터페이스, 호출) · 10분 |
 | rdp | rdp.log | 전체 | 없음 | 없음 |
 | ssh | ssh.log | 전체 | 없음 | 없음 |
-| ssl | ssl.log | 경계 | SNI가 예외 도메인이 아님 | (출발지, SNI, JA3) · 1시간 |
+| ssl | ssl.log | 경계 | SNI가 예외 도메인이 아님 | (출발지, SNI, JA3) · 24시간 |
 | http | http.log | 경계 | Host가 예외 도메인이 아님 | (출발지, Host, 메서드, 경로, 상태 코드) · 10분 |
 | flow_summary | conn.log | 경계 또는 내부 관리 | 없음 | 요약(5.3절) |
 | dns_summary | dns.log | 전체 | 빈 질의·역방향 조회(`.in-addr.arpa`, `.ip6.arpa`)·예외 도메인·내부 리졸버 출발지 제외 | 요약(5.4절) |
@@ -139,10 +139,10 @@ flowchart LR
 | 파일 | 종류 | 기록 시점 |
 | --- | --- | --- |
 | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http | 행 단위 | 원본 로그가 쓰일 때 |
-| flow_summary | 요약 | 10분마다, 키 상한 도달 시, 종료 시 |
+| flow_summary | 요약 | 30분마다, 키 상한 도달 시, 종료 시 |
 | dns_summary | 요약 | 1시간마다, 키 상한 도달 시, 종료 시 |
 | capture_loss, stats, reporter | 행 단위(센서 상태) | 원본과 같음 |
-| meta_export_stats | 통계 | 1분마다, 종료 시 |
+| meta_export_stats | 통계 | 5분마다, 종료 시 |
 
 ### 5.1 행 단위 로그 공통 필드
 
@@ -169,7 +169,7 @@ flowchart LR
 
 ### 5.3 flow_summary
 
-(출발지, 목적지, 목적지 포트)별로 10분 주기마다 한 행입니다.
+(출발지, 목적지, 목적지 포트)별로 30분 주기마다 한 행입니다.
 
 | 필드 | 형식 | 뜻 |
 | --- | --- | --- |
@@ -201,7 +201,7 @@ flowchart LR
 
 ### 5.5 meta_export_stats
 
-노드·스트림별로 1분마다, 건수가 하나라도 있는 스트림만 씁니다. 다른 선별 로그와 같이 `meta_path_prefix`를 따르므로 기본 경로는 `/log/zeek/meta/meta_export_stats.log`이고, 접두어를 바꾸면 함께 옮겨 갑니다. `NSM::log_paths`에 `NSM::META_STATS_LOG` 경로를 직접 적으면 그 값이 우선합니다. 회전된 파일은 `meta_export_stats.<날짜-시각>.log`로 같은 디렉터리에 남습니다.
+노드·스트림별로 5분마다, 건수가 하나라도 있는 스트림만 씁니다. 다른 선별 로그와 같이 `meta_path_prefix`를 따르므로 기본 경로는 `/log/zeek/meta/meta_export_stats.log`이고, 접두어를 바꾸면 함께 옮겨 갑니다. `NSM::log_paths`에 `NSM::META_STATS_LOG` 경로를 직접 적으면 그 값이 우선합니다. 회전된 파일은 `meta_export_stats.<날짜-시각>.log`로 같은 디렉터리에 남습니다.
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -213,7 +213,7 @@ flowchart LR
 | dropped_rate | 분당 상한을 넘어 버린 행 |
 | summarized | 요약으로 묶은 행 |
 
-통계의 1분 구간은 기동 시점부터 잰 주기라 분당 상한의 분 경계(시각의 분 단위)와 맞지 않을 수 있습니다. 상한에 걸린 건수는 두 행에 나뉘어 보일 수 있습니다.
+통계 주기(5분)는 기동 시점부터 잰 주기이고, 분당 상한은 시각의 분 단위로 셉니다. 한 통계 행의 `dropped_rate`는 그 5분 동안 여러 분에서 버린 건수의 합입니다.
 
 ### 5.6 행 예시
 
@@ -243,13 +243,13 @@ flowchart LR
 | `meta_dce_rpc_endpoints` | 4.1절 목록 | dce_rpc에서 남길 인터페이스(소문자) | `+=` |
 | `meta_domain_allowlist` | 비어 있음 | ssl(SNI)·http(Host)·dns(질의)에서 뺄 도메인(접미사 일치, `example.com`이면 `a.example.com`도 포함) | OS·백신 업데이트, CDN, 텔레메트리 |
 | `meta_dedup_max_entries` | 200000 | 중복 억제 테이블 항목 상한(노드당) | 넘으면 새 키는 억제하지 않고 보냄(누락보다 중복) |
-| `meta_dedup_expire` | 1hr | 중복 억제 항목 보관 시간 | 가장 긴 `dedup`보다 길게 |
-| `meta_flow_interval` | 10min | flow_summary 주기 | 짧으면 행이 늘고 지연이 줄어듦 |
+| `meta_dedup_check_interval` | 10min | 중복 억제 항목의 만료 확인 주기. 항목은 각자의 억제 기간(`dedup`)이 끝나면 지워짐 | 보통 바꿀 필요 없음 |
+| `meta_flow_interval` | 30min | flow_summary 주기 | 짧으면 행이 늘고 지연이 줄어듦 |
 | `meta_dns_interval` | 1hr | dns_summary 주기 | 위와 같음 |
 | `meta_summary_max_keys` | 100000 | 요약 종류별 노드당 키 상한 | 넘으면 그 시점에 내보내고 새로 시작 |
 | `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 DNS 도메인 행 상한 | 넘는 도메인은 `(other)` |
 | `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름 수, 응답 수, 고유 이름을 셀 최대 수 | |
-| `meta_stats_interval` | 1min | 통계 주기 | |
+| `meta_stats_interval` | 5min | 통계 주기 | |
 | `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 남김 | 디스크 여유가 있는 센서만 |
 | `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분 | |
 | `dns_tunnel_resolvers`(탐지 08과 공용) | 비어 있음 | 내부 재귀 리졸버. DNS 요약에서 출발지로 빼고 탐지 08에서도 뺌 | 배포 시 등록 권장 |
@@ -326,6 +326,7 @@ redef NSM::meta_domain_allowlist += { "windowsupdate.com", "update.microsoft.com
 | `rules/meta-export-rate` | meta_export.pcap | 분당 상한(32행 중 10행 기록, 22행 탈락 기록), 다른 스트림·원본은 영향 없음 |
 | `rules/meta-export-off` | meta_export.pcap | 끔이면 선별 로그 없음·대상 스트림 꺼짐, T2를 켜면 원본이 전체 필드로 남음 |
 | `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, flow_summary 묶음·범위, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`) |
+| `rules/meta-export-dedup` | meta_dedup.pcap | 중복 억제 기간: 기본(ssl 24시간)은 1시간 뒤 같은 SNI도 억제, 10분으로 줄이면 기간이 끝난 뒤 다시 보냄 |
 | `cluster/meta-export-worker` | (워커가 직접 행 기록) | 판정 위치가 워커(통계 node=worker-1), 로거에는 통과 행·요약만 |
 
 CI는 Zeek 9.0.1과 8.0.9에서 위 테스트를 포함한 전체 btest를 돌립니다. 합성 pcap은 `tests/gen_pcaps.py`가 고정 시드로 만들고, CI가 재현성을 검사합니다.
@@ -349,7 +350,8 @@ tests/measure_meta_export.sh <pcap> [반복 횟수=3]
 | 측정 | 결과 | 판단 |
 | --- | --- | --- |
 | 합성 pcap 25개 합본(9,806패킷) | 전체 로그 대비 20.15%, 처리 시간 7~11% 증가(절대값 약 0.1초) | 판단에 쓰지 않음. 공격 트래픽 비중이 커서 비율이 높고, pcap이 작아 고정 비용·오차가 큼 |
-| 운영 미러 구간(1시간 이상, DC 구간 포함) | 대기 | NFR-M1·M2 판정 기준 |
+| 공개 데이터셋 CIC-IDS2017 Monday(정상 8시간), 조정 전 기본값 | 7.16\~7.27%, 처리 시간 +2.8% | 전송량 초과 → flow 30분·ssl 24시간·통계 5분으로 조정, 재측정 대기. 상세는 계획 문서 부록 A.2 |
+| 고객 운영 미러 구간(1시간 이상, DC 구간 포함) | 대기 | NFR-M1·M2 판정 기준 |
 
 ## 9. 운영 절차
 

@@ -1372,13 +1372,22 @@ def gen_meta_summary(out):
     cap.tick(T0 + 300)
     cap.write(os.path.join(out, "meta_summary.pcap"))
 
+
+def gen_meta_dedup(out):
+    """중복 억제 기간 검증용: .80 -> 외부 같은 SNI TLS 를 T+1, T+60, T+3700(1시간 지난 뒤) 세 번."""
+    cap = Capture()
+    for dt in (1, 60, 3700):
+        tls_session(cap, "10.0.0.80", "93.184.215.140", T0 + dt, sni="app.example-saas.com")
+    cap.tick(T0 + 3800)
+    cap.write(os.path.join(out, "meta_dedup.pcap"))
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
-              gen_chain_ext, gen_meta_export, gen_meta_summary]
+              gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup]
 
 
 def main():

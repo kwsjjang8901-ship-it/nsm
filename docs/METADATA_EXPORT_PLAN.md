@@ -77,10 +77,10 @@
 | 1 | dce_rpc | 전체(인터페이스로 선별) | ts, uid, id, endpoint, operation | 주요 인터페이스만(drsuapi, svcctl, atsvc·ITaskSchedulerService, winreg, IRemoteSCMActivator, IWbemLevel1Login·IWbemServices, samr, lsarpc, netlogon, efsrpc), (출발지, 목적지, 인터페이스, 호출) 10분 중복 억제 | 적음 |
 | 1 | rdp | 전체 | ts, uid, id, cookie, security_protocol, result | 없음 | 적음 |
 | 1 | ssh | 전체 | ts, uid, id, auth_success, auth_attempts, client, server, direction | 없음 | 적음 |
-| 2 | ssl | 경계 | ts, uid, id, version, cipher, server_name, established, ja3 | 예외 도메인(SNI) 제외, (출발지, SNI, JA3) 1시간 중복 억제 | 중간 |
+| 2 | ssl | 경계 | ts, uid, id, version, cipher, server_name, established, ja3 | 예외 도메인(SNI) 제외, (출발지, SNI, JA3) 24시간 중복 억제 | 중간 |
 | 2 | dns → `dns_summary` | 전체(내부 리졸버의 질의 제외) | 3.3절 요약 스키마 | 역방향 조회·예외 도메인·`dns_tunnel_resolvers` 출발지 제외, (출발지, 등록 도메인, 유형, 결과)별 1시간 요약, 출발지당 도메인 행 100개 상한 | 큼 → 축소 |
 | 2 | http | 경계 | ts, uid, id, method, host, uri_path(쿼리 제거), status_code, user_agent, 요청·응답 본문 길이 | 예외 도메인(Host) 제외, (출발지, Host, 메서드, 경로, 상태) 10분 중복 억제 | 큼 → 축소 |
-| 3 | conn → `flow_summary` | 경계 + 내부 관리 포트 | 3.3절 요약 스키마 | (출발지, 목적지, 목적지 포트)별 10분 요약 | 가장 큼 → 축소 |
+| 3 | conn → `flow_summary` | 경계 + 내부 관리 포트 | 3.3절 요약 스키마 | (출발지, 목적지, 목적지 포트)별 30분 요약 | 가장 큼 → 축소 |
 | 3 | asset_signal | 전체 | 자산 식별 SPEC 스키마 그대로 | 자산 식별 모듈의 중복 억제 | 원본 대비 0.1~0.3% |
 | - | 상태 | - | capture_loss, reporter, stats, meta_export_stats | 없음 | 적음 |
 
@@ -91,7 +91,7 @@
 
 conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림에 행을 쓰지 않는 필터를 붙여 policy 훅에서 묶고, 주기마다 요약 행을 씁니다. 범위·조건 판정은 행 단위 스트림과 같습니다.
 
-**flow_summary** — (출발지, 목적지, 목적지 포트)별, 10분(`meta_flow_interval`) 주기
+**flow_summary** — (출발지, 목적지, 목적지 포트)별, 30분(`meta_flow_interval`) 주기
 
 | 필드 | 의미 |
 | --- | --- |
@@ -126,8 +126,8 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 
 - 중복 억제: 스트림별 키와 기간을 설정합니다(`table` + `create_expire`). 워커별 상태라 클러스터에서는 최대 워커 수만큼 중복될 수 있습니다.
 - 분당 상한: 스트림별로 노드당 1분(로그를 쓰는 시각의 분 단위)에 보낼 최대 행 수(`rate_limit`)를 두고, 넘으면 그 분의 나머지는 버립니다.
-- `meta_export_stats`: 1분마다 노드·스트림별 `sent`, `dropped_scope`, `dropped_filter`, `dropped_dedup`, `dropped_rate` 건수를 남깁니다. 상한에 걸린 분이 생기면 Manager에서 경고할 수 있습니다.
-- 메모리 상한: 중복 억제 테이블은 전체 항목 수 상한(`meta_dedup_max_entries`, 20만)을 두고, 넘치면 새 키는 억제하지 않고 보냅니다(누락보다 중복을 택함). 항목은 `meta_dedup_expire`(1시간) 뒤 지워집니다.
+- `meta_export_stats`: 5분마다 노드·스트림별 `sent`, `dropped_scope`, `dropped_filter`, `dropped_dedup`, `dropped_rate` 건수를 남깁니다. 상한에 걸린 분이 생기면 Manager에서 경고할 수 있습니다.
+- 메모리 상한: 중복 억제 테이블은 전체 항목 수 상한(`meta_dedup_max_entries`, 20만)을 두고, 넘치면 새 키는 억제하지 않고 보냅니다(누락보다 중복을 택함). 항목은 각자의 억제 기간이 끝나면 지워집니다(만료 확인 주기 `meta_dedup_check_interval` 10분).
 
 ### 3.5 설정
 
@@ -141,12 +141,12 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 | `meta_admin_ports` | 22, 88, 135, 139, 389, 445, 636, 3268, 3269, 3389, 5985, 5986 | `META_ADMIN_INTERNAL` 범위의 내부 관리 포트 | P1 |
 | `meta_smb_file_actions` | 쓰기·이름 변경·삭제 | smb_files에서 남길 동작 | P2 |
 | `meta_dce_rpc_endpoints` | 3.2절 목록 | dce_rpc에서 남길 인터페이스 | P2 |
-| `meta_dedup_max_entries` / `meta_dedup_expire` | 200000 / 1hr | 중복 억제 테이블 상한·보관 시간 | P1 |
-| `meta_stats_interval` | 1min | 통계 로그 주기 | P1 |
+| `meta_dedup_max_entries` / `meta_dedup_check_interval` | 200000 / 10min | 중복 억제 테이블 상한, 만료 확인 주기 | P1 |
+| `meta_stats_interval` | 5min | 통계 로그 주기 | P1 |
 | `meta_keep_raw_local` / `meta_raw_path_prefix` | F / `/hdd_tmp/log/zeek/` | T2 원본 로컬 보관과 경로 | P1 |
 | `meta_domain_allowlist` | 비어 있음 | ssl(SNI)·http(Host)·dns(질의)에서 뺄 도메인(접미사 일치) | P3 |
 | `meta_export_streams` 의 `summary` | conn·dns = T | 행 대신 요약 로그로 묶음(Conn::LOG, DNS::LOG만 지원) | P3 |
-| `meta_flow_interval` / `meta_dns_interval` | 10min / 1hr | 요약 주기 | P3 |
+| `meta_flow_interval` / `meta_dns_interval` | 30min / 1hr | 요약 주기 | P3 |
 | `meta_summary_max_keys` | 100000 | 노드당 요약 키 상한(넘으면 즉시 내보냄) | P3 |
 | `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 도메인 행 상한(넘으면 `(other)`) | P3 |
 | `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름·응답 수, 고유 이름을 셀 최대 수 | P3 |
@@ -230,6 +230,26 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 - 처리 시간은 pcap이 작아(1초 미만) 로그 파일 생성 같은 고정 비용과 측정 오차가 큽니다. 예산 판단에는 쓰지 않습니다.
 - 질의 이름 단위 요약(초기 구현)에서는 dns_summary가 1,467행·303KB였고, 등록 도메인 단위로 바꿔 538행·152KB가 됐습니다.
 
-### A.2 운영 pcap
+### A.2 공개 데이터셋 pcap (CIC-IDS2017 Monday-WorkingHours, 2026-11-10)
+
+정상 업무 트래픽 8시간(연구용 사무실망). 사용자 환경(VM), 반복 1회, P3 기본값(조정 전).
+
+| 선별 전송 로그 | 바이트 | 행 | 비중 |
+| --- | --- | --- | --- |
+| flow_summary | 13,691,780 | 48,312 | 39% |
+| http | 10,474,051 | 27,201 | 30% |
+| ssl | 6,153,808 | 20,308 | 17% |
+| dns_summary | 3,824,303 | 10,363 | 11% |
+| meta_export_stats | 493,855 | 3,166 | 1.4% |
+| kerberos, ssh, dce_rpc, smb_mapping, ntlm, capture_loss, stats | 710,920 | 2,718 | 2% |
+| **합계** | **35,348,717** | | |
+
+- Zeek 전체 로그 486,467,695바이트 대비 7.16\~7.27%(두 번 측정, 두 번째는 `meta_export_stats` 포함). 목표 5%를 넘는다.
+- 처리 시간: 1회차 off 405.7초 → on 417.0초(+2.8%, 목표 충족). 2회차는 off 실행만 556초로 튀어(VM 공유 폴더 입출력) 비교에서 뺐다.
+- AD 계열(kerberos·ntlm·smb·dce_rpc)은 합쳐 0.4MB로 작고, flow·http·ssl이 86%를 차지한다.
+
+조정(2026-11-10, 정보 손실이 작은 것부터): flow_summary 주기 10분 → 30분, ssl 중복 억제 1시간 → 24시간, 통계 주기 1분 → 5분. ssl 24시간 억제가 실제로 유지되도록 중복 억제 항목을 각자의 억제 기간이 끝날 때 지우게 바꿨다(이전에는 모든 항목이 1시간 뒤 지워져 1시간보다 긴 억제가 동작하지 않았다). 조정 후 같은 pcap으로 다시 측정한다. 그래도 5%를 넘으면 http의 User-Agent·경로 처리(행 크기의 큰 부분)를 다음 후보로 검토한다.
+
+### A.3 고객 운영 pcap
 
 측정 대기. 운영 미러 구간(1시간 이상, DC 구간 포함) pcap으로 `tests/measure_meta_export.sh`를 실행해 이 절에 남깁니다.

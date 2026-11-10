@@ -43,7 +43,7 @@
 # @TEST-EXEC: assert-rows meta/meta_export_stats.log ge 1 stream=smb_mapping dropped_dedup=1
 # @TEST-EXEC: assert-rows meta/meta_export_stats.log ge 1 stream=smb_files dropped_filter=2
 # @TEST-EXEC: assert-rows meta/meta_export_stats.log ge 1 stream=dce_rpc dropped_filter=1 dropped_dedup=1
-# @TEST-EXEC: assert-rows meta/meta_export_stats.log ge 1 stream=conn dropped_scope=2
+# @TEST-EXEC: assert-rows meta/meta_export_stats.log ge 1 stream=conn dropped_scope=3
 #
 # 탐지 경로는 영향 없음
 # @TEST-EXEC: test -f notice.log && test -f nsm_detection.log
