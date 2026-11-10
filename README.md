@@ -39,6 +39,7 @@ tests/
   measure_meta_export.sh    # 선별 전송 전송량·처리 시간 측정 (pcap 입력)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
+  SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
 ```
@@ -104,6 +105,7 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 ## 요구사항 명세(SRS)
 
 [docs/SRS.md](docs/SRS.md) — 탐지 룰별 요구사항, 로그 형식, 상관 규칙, 설정 파라미터와 고객별 설정 예시, 테스트, 한계.
+[docs/SRS_METADATA_EXPORT.md](docs/SRS_METADATA_EXPORT.md) — 메타데이터 선별 전송(탐지와 별도 기능)의 요구사항, 출력 명세, 설정, 운영 절차.
 룰·설정·로그 형식을 바꾸는 PR에서는 이 문서도 함께 고칩니다.
 
 ## 검토 결과와 작업 계획
