@@ -241,7 +241,6 @@ event http_request(c: connection, method: string, original_URI: string, unescape
     local parts = split_string1(original_URI, /\?/);
     c$http$uri_path = parts[0];
     }
-redef NSM::log_paths += { [NSM::META_STATS_LOG] = "/log/zeek/meta/meta_export_stats" };
 
 # ---------------------------------------------------------------- 상태
 
@@ -613,6 +612,9 @@ event zeek_init() &priority=-2
         return;
         }
 
+    # 통계 로그도 선별 로그와 같은 경로를 따른다(log_paths 에 직접 지정했으면 그 값을 존중).
+    if ( META_STATS_LOG !in log_paths )
+        change_log_path(META_STATS_LOG, meta_path_prefix + "meta_export_stats");
     change_log_path(META_FLOW_LOG, meta_path_prefix + "flow_summary");
     change_log_path(META_DNS_LOG, meta_path_prefix + "dns_summary");
     local want_flow = F;

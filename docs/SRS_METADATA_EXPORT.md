@@ -95,7 +95,7 @@ flowchart LR
 | FR-M7 | 분당 상한: 노드·스트림별로 1분(로그를 쓰는 시각의 분 단위)에 쓸 최대 행 수를 넘으면 버린다 | `rules/meta-export-rate` |
 | FR-M8 | conn은 `flow_summary`로, DNS는 `dns_summary`로 요약해 주기마다(10분·1시간) 쓴다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
 | FR-M9 | DNS 요약은 등록 도메인 단위로 묶고, 출발지 하나가 주기마다 만드는 도메인 행이 상한을 넘으면 나머지를 `domain=(other)` 한 행에 더한다 | `rules/meta-export-summary` |
-| FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 1분마다 쓴다 | `rules/meta-export*` |
+| FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 1분마다 쓴다. 경로는 선별 로그와 같은 `meta_path_prefix`를 따른다 | `rules/meta-export*` |
 | FR-M11 | 유지 목록에 없는 선별 대상 스트림은 원본을 쓰지 않는다. T2를 켜면 원본을 `meta_raw_path_prefix + 이름`.log에 쓴다 | `rules/meta-export-off` |
 | FR-M12 | `meta_export_enable = F`면 선별 로그·요약·통계를 쓰지 않고, 대상 스트림은 운영 필터대로 꺼진다 | `rules/meta-export-off` |
 | FR-M13 | http는 URL 쿼리 문자열을 뺀 `uri_path`만 보낸다 | `rules/meta-export-summary`(쿼리 값이 선별 로그에 없음) |
@@ -201,7 +201,7 @@ flowchart LR
 
 ### 5.5 meta_export_stats
 
-노드·스트림별로 1분마다, 건수가 하나라도 있는 스트림만 씁니다. 경로는 `/log/zeek/meta/meta_export_stats`입니다(`NSM::log_paths`로 지정).
+노드·스트림별로 1분마다, 건수가 하나라도 있는 스트림만 씁니다. 다른 선별 로그와 같이 `meta_path_prefix`를 따르므로 기본 경로는 `/log/zeek/meta/meta_export_stats.log`이고, 접두어를 바꾸면 함께 옮겨 갑니다. `NSM::log_paths`에 `NSM::META_STATS_LOG` 경로를 직접 적으면 그 값이 우선합니다. 회전된 파일은 `meta_export_stats.<날짜-시각>.log`로 같은 디렉터리에 남습니다.
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -236,7 +236,7 @@ flowchart LR
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `meta_export_enable` | T | 기능 전체 토글 | 수집 에이전트가 없는 센서는 F |
-| `meta_path_prefix` | `/log/zeek/meta/` | 출력 경로 앞부분 | 에이전트가 읽는 디렉터리에 맞춤. 끝에 `/` 포함 |
+| `meta_path_prefix` | `/log/zeek/meta/` | 출력 경로 앞부분(선별 로그·요약 로그·`meta_export_stats` 모두) | 에이전트가 읽는 디렉터리에 맞춤. 끝에 `/` 포함 |
 | `meta_export_streams` | 4.1절 | 스트림별 설정 표(6.3절) | 스트림 추가·제거·상한 지정 |
 | `meta_admin_ports` | 22, 88(tcp·udp), 135, 139, 389(tcp·udp), 445, 636, 3268, 3269, 3389, 5985, 5986 | 내부 관리 연결로 보는 목적지 포트 | 사내 관리 포트 `+=` |
 | `meta_smb_file_actions` | 쓰기·이름 변경·삭제 | smb_files에서 남길 동작 | 읽기까지 남기면 양이 크게 늘어남 |

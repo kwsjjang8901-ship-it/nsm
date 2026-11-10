@@ -11,14 +11,14 @@
 # @TEST-EXEC: btest-bg-wait 60
 #
 # 워커-1 이 Kerberos 1행, conn 경계 1행·내부 1행을 쓴다 -> 매니저(로거)에 Kerberos 1행, conn 경계 1행만
-# @TEST-EXEC: assert-rows manager/meta_kerberos.log eq 1 client=user01/CORP.EXAMPLE
-# @TEST-EXEC: assert-rows manager/meta_conn.log eq 1 id.resp_h=93.184.215.200
-# @TEST-EXEC: assert-rows manager/meta_conn.log eq 0 id.resp_h=10.0.0.201
+# @TEST-EXEC: assert-rows manager/meta/kerberos.log eq 1 client=user01/CORP.EXAMPLE
+# @TEST-EXEC: assert-rows manager/meta/conn.log eq 1 id.resp_h=93.184.215.200
+# @TEST-EXEC: assert-rows manager/meta/conn.log eq 0 id.resp_h=10.0.0.201
 # 탈락 집계가 워커-1 의 통계로 남는다(판정 위치 = 워커)
-# @TEST-EXEC: assert-rows manager/meta_export_stats.log ge 1 node=worker-1 stream=conn dropped_scope=1
-# @TEST-EXEC: assert-rows manager/meta_export_stats.log eq 0 node=manager stream=conn
+# @TEST-EXEC: assert-rows manager/meta/meta_export_stats.log ge 1 node=worker-1 stream=conn dropped_scope=1
+# @TEST-EXEC: assert-rows manager/meta/meta_export_stats.log eq 0 node=manager stream=conn
 # 요약(dns)은 워커 메모리에서 묶여 주기마다 1행으로 로거에 간다
-# @TEST-EXEC: assert-rows manager/meta_dns_summary.log eq 1 node=worker-1 orig_h=10.0.0.200 domain=example.com queries=2 unique_names=1
+# @TEST-EXEC: assert-rows manager/meta/dns_summary.log eq 1 node=worker-1 orig_h=10.0.0.200 domain=example.com queries=2 unique_names=1
 
 @load policy/frameworks/cluster/experimental
 

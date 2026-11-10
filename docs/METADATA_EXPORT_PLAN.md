@@ -56,7 +56,7 @@
                      ├ policy 훅: 범위 판정 → 예외 → 중복 억제 → 분당 상한
                      └ include: 스트림별 필드 목록
  요약 로그(신규) ─────────────────▶ /log/zeek/meta/flow_summary, dns_summary
- 선별 전송 통계(신규) ────────────▶ /log/zeek/meta/meta_export_stats   (스트림별 보냄·버림 건수, 1분)
+ 선별 전송 통계(신규) ────────────▶ /log/zeek/meta/meta_export_stats   (스트림별 보냄·버림 건수, 1분, meta_path_prefix 를 따름)
 ```
 
 - 새 모듈 `nsm_rules/metadata/`(가칭)에 둡니다. 룰과 마찬가지로 설정은 `&redef` 상수이고 운영 값은 `nsm_config_fixed.zeek`, 고객별 값은 `nsm_config_custom.zeek`에 둡니다.

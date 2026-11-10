@@ -4,8 +4,10 @@
 
 # 운영 경로(/log/zeek, /hdd_tmp/...) 대신 현재 디렉터리에 기록
 redef NSM::log_paths = {};
-redef NSM::create_log_dirs = F;
-redef NSM::meta_path_prefix = "meta_";   # 메타데이터 선별 전송도 현재 디렉터리에
+redef NSM::create_log_dirs = T;
+# 메타데이터 선별 전송은 운영과 같이 하위 디렉터리(meta/)에 쓴다. 디렉터리는 선별 전송 모듈이 만든다
+#   (log_paths 가 비어 있으므로 filter_log 는 만들 디렉터리가 없다).
+redef NSM::meta_path_prefix = "meta/";
 
 # 운영 필터의 4시간 로그 회전을 끈다. pcap 재생 시 회전은 네트워크 시각 기준이라
 # notice.log 가 notice.<날짜>.log 로 회전돼 버린다.
