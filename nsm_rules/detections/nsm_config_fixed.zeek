@@ -282,7 +282,7 @@ redef NSM::chain_max_expire              = 2hr;         # prime 최대 보관 �
 # redef NSM::meta_admin_ports    += { 8530/tcp };         # 내부 관리 포트 추가
 # redef NSM::meta_dce_rpc_endpoints += { "epmapper" };    # 남길 RPC 인터페이스 추가
 # redef NSM::meta_domain_allowlist += { "windowsupdate.com" };  # ssl·http·dns 에서 뺄 도메인(접미사 일치)
-# redef NSM::meta_flow_interval    = 10min;               # conn 요약(flow_summary) 주기
+# redef NSM::meta_flow_interval    = 30min;               # conn 요약(flow_summary) 주기
 # redef NSM::meta_dns_interval     = 1hr;                 # dns 요약(dns_summary) 주기
 # redef NSM::meta_dns_max_domains_per_src = 100;          # 출발지별 dns_summary 도메인 행 상한
 # 스트림별 필드·범위·중복 억제·분당 상한은 NSM::meta_export_streams(metadata/main.zeek)에서 정한다.

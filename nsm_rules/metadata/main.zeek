@@ -105,7 +105,7 @@ export {
     const meta_domain_allowlist: set[string] = {} &redef;
 
     ## 요약 로그 주기와 노드당 최대 키 수(넘으면 그 시점에 내보내고 새로 시작)
-    const meta_flow_interval = 10min &redef;
+    const meta_flow_interval = 30min &redef;
     const meta_dns_interval = 1hr &redef;
     const meta_summary_max_keys = 100000 &redef;
 
@@ -144,7 +144,7 @@ export {
         [SSH::LOG] = [$name="ssh",
                       $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
                                   "auth_success", "auth_attempts", "direction", "client", "server")],
-        [SSL::LOG] = [$name="ssl", $scope=META_BOUNDARY, $dedup=1hr,
+        [SSL::LOG] = [$name="ssl", $scope=META_BOUNDARY, $dedup=24hr,
                       $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
                                   "version", "cipher", "server_name", "established", "ja3")],
         # URL 은 쿼리 문자열을 뺀 uri_path 만 보낸다(개인정보).
@@ -161,12 +161,13 @@ export {
         [Reporter::LOG]    = [$name="reporter"],
     } &redef;
 
-    ## 중복 억제 상태: 항목 수 상한(넘으면 새 키는 억제하지 않고 보낸다)과 최대 보관 시간
+    ## 중복 억제 상태: 항목 수 상한(넘으면 새 키는 억제하지 않고 보낸다).
+    ##   항목은 각자의 억제 기간(스트림 dedup)이 끝나면 지워지고, 만료 여부는 meta_dedup_check_interval 마다 확인한다.
     const meta_dedup_max_entries = 200000 &redef;
-    const meta_dedup_expire = 1hr &redef;
+    const meta_dedup_check_interval = 10min &redef;
 
     ## meta_export_stats.log 기록 주기
-    const meta_stats_interval = 1min &redef;
+    const meta_stats_interval = 5min &redef;
 
     type MetaStats: record {
         ts:             time    &log;
@@ -244,7 +245,15 @@ event http_request(c: connection, method: string, original_URI: string, unescape
 
 # ---------------------------------------------------------------- 상태
 
-global meta_dedup: table[string] of time &create_expire=meta_dedup_expire;
+# 값 = 억제가 끝나는 시각. 확인 시점에 아직 남았으면 남은 시간만큼 더 둔다(스트림마다 억제 기간이 다르다).
+function meta_dedup_expire(t: table[string] of time, k: string): interval
+    {
+    local left = t[k] - network_time();
+    return left > 0secs ? left : 0secs;
+    }
+
+global meta_dedup: table[string] of time &create_expire=meta_dedup_check_interval
+                                         &expire_func=meta_dedup_expire;
 global meta_rate_bucket: count = 0;
 global meta_rate_count: table[string] of count = table();
 global meta_counters: table[string] of MetaStats = table();
