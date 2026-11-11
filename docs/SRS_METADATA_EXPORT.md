@@ -96,7 +96,7 @@ flowchart LR
 | FR-M8 | conn은 `flow_summary`로(30분), DNS는 `dns_summary`로(1시간), http의 User-Agent는 `http_ua_summary`로(24시간) 요약해 주기마다 쓴다. http 행에는 User-Agent를 싣지 않는다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
 | FR-M9 | DNS 요약은 (출발지, 등록 도메인) 하나로 묶고 질의 유형·결과는 필드로 모은다. 출발지 하나가 주기마다 만드는 도메인 행이 상한을 넘으면 나머지를 `domain=(other)` 한 행에 더한다 | `rules/meta-export-summary`, `-dns-merge` |
 | FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 5분마다 쓴다. 경로는 선별 로그와 같은 `meta_path_prefix`를 따른다 | `rules/meta-export*` |
-| FR-M11 | 유지 목록에 없는 선별 대상 스트림은 원본을 쓰지 않는다. T2를 켜면 원본을 `meta_raw_path_prefix + 이름`.log에 쓴다 | `rules/meta-export-off` |
+| FR-M11 | 유지 목록에 없는 선별 대상 스트림은 원본을 쓰지 않는다. T2를 켜면 원본을 `meta_raw_path_prefix` + Zeek 기본 이름(`conn.log`, `dns.log`, `kerberos.log` …)에 쓴다. 선별 로그 이름(`flow_summary` 등)은 쓰지 않는다 | `rules/meta-export-off` |
 | FR-M12 | `meta_export_enable = F`면 선별 로그·요약·통계를 쓰지 않고, 대상 스트림은 운영 필터대로 꺼진다 | `rules/meta-export-off` |
 | FR-M13 | http는 URL 쿼리 문자열을 뺀 `uri_path`만 보낸다 | `rules/meta-export-summary`(쿼리 값이 선별 로그에 없음) |
 | FR-M14 | 탐지 로그(notice·nsm_detection·evidence)는 이 기능의 켬·끔·상한과 무관하게 기록된다 | 전체 btest |
@@ -182,7 +182,7 @@ flowchart LR
 | conns | 수 | 연결 수 |
 | orig_bytes, resp_bytes | 수 | 바이트 합(페이로드) |
 | states | 문자열 | 연결 상태별 건수(예: `SF:12,S0:3`) |
-| sample_uid | 문자열 | 대표 연결 uid(첫 연결). 원본 보관(`meta_keep_raw_local`, T2)을 켰을 때만 쓴다. 끄면 조인할 원본이 없어 필드가 없다 |
+| sample_uid | 문자열 | 대표 연결 uid(첫 연결). 원본 conn 로그가 남을 때만 쓴다: 원본 보관(`meta_keep_raw_local`, T2)을 켰거나 `keep_log_streams`에 `Conn::LOG`가 있을 때. 아니면 조인할 원본이 없어 필드가 없다 |
 
 ### 5.4 dns_summary
 
@@ -200,7 +200,7 @@ flowchart LR
 | unique_names_capped | 참 | 1000개에 닿아 그 뒤는 세지 않았을 때만 기록 |
 | sample_names | 문자열 목록 | 처음 관측한 질의 이름(최대 3개) |
 | answers | 문자열 목록 | 처음 관측한 응답(최대 3개) |
-| sample_uid | 문자열 | 대표 uid. flow_summary와 같이 원본 보관(T2)을 켰을 때만 쓴다 |
+| sample_uid | 문자열 | 대표 uid. 원본 dns 로그가 남을 때만 쓴다: T2를 켰거나 `keep_log_streams`에 `DNS::LOG`가 있을 때 |
 
 ### 5.5 http_ua_summary
 
@@ -269,8 +269,8 @@ flowchart LR
 | `meta_ua_summary` | T | http의 User-Agent를 `http_ua_summary`로 보냄(http 행에는 싣지 않음) | F면 User-Agent를 보내지 않음 |
 | `meta_ua_interval` | 24hr | http_ua_summary 주기 | |
 | `meta_stats_interval` | 5min | 통계 주기 | |
-| `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 남김. 켜면 flow_summary·dns_summary에 `sample_uid`를 붙여 원본과 조인할 수 있다 | 디스크 여유가 있는 센서만 |
-| `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분 | |
+| `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 Zeek 기본 이름(`conn.log`, `dns.log` …)으로 남김. 켜면 flow_summary·dns_summary에 `sample_uid`를 붙여 원본과 조인할 수 있다 | 디스크 여유가 있는 센서만 |
+| `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분(예: `/hdd_tmp/log/zeek/conn.log`) | |
 | `dns_tunnel_resolvers`(탐지 08과 공용) | 비어 있음 | 내부 재귀 리졸버. DNS 요약에서 출발지로 빼고 탐지 08에서도 뺌 | 배포 시 등록 권장 |
 
 ### 6.3 스트림 설정(`meta_export_streams`)
@@ -343,8 +343,8 @@ redef NSM::meta_domain_allowlist += { "windowsupdate.com", "update.microsoft.com
 | --- | --- | --- |
 | `rules/meta-export` | meta_export.pcap | 스트림별 출력, 허용 필드만 있는지(`assert-fields`), SMB 동작·RPC 인터페이스 조건, 중복 억제, conn 범위(테스트에서 행 단위로 바꿔 검사), 원본 미출력, 통계 |
 | `rules/meta-export-rate` | meta_export.pcap | 분당 상한(32행 중 10행 기록, 22행 탈락 기록), 다른 스트림·원본은 영향 없음 |
-| `rules/meta-export-off` | meta_export.pcap | 끔이면 선별 로그 없음·대상 스트림 꺼짐, T2를 켜면 원본이 전체 필드로 남음 |
-| `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, http_ua_summary(요청 수·Host), flow_summary 묶음·범위·필드, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`) |
+| `rules/meta-export-off` | meta_export.pcap | 끔이면 선별 로그 없음·대상 스트림 꺼짐, T2를 켜면 원본이 Zeek 기본 이름·전체 필드로 남고 흐름 요약의 `sample_uid`로 원본 conn 행을 찾음 |
+| `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, http_ua_summary(요청 수·Host), flow_summary 묶음·범위·필드, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`), 원본 conn·dns가 없으면 `sample_uid` 없음, 원본 conn만 유지 목록에 있으면 흐름 요약에만 있음 |
 | `rules/meta-export-dns-merge` | meta_dns_qtypes.pcap | 같은 도메인의 A·AAAA·NXDOMAIN 질의가 한 행으로(`qtypes=A,AAAA`, `rcodes=NOERROR:2,NXDOMAIN:1`), 거짓인 `unique_names_capped`는 쓰지 않음 |
 | `rules/meta-export-dedup` | meta_dedup.pcap | 중복 억제 기간: 기본(ssl 24시간)은 1시간 뒤 같은 SNI도 억제, 10분으로 줄이면 기간이 끝난 뒤 다시 보냄 |
 | `cluster/meta-export-worker` | (워커가 직접 행 기록) | 판정 위치가 워커(통계 node=worker-1), 로거에는 통과 행·요약만 |
@@ -404,7 +404,7 @@ pcap과 `TMPDIR`은 로컬 디스크에 둡니다. VM 공유 폴더에서 읽으
 | `/log/zeek/meta`에 아무 로그가 없음 | 기능이 꺼짐, 디렉터리 권한, 대상 트래픽 없음 | `meta_export_enable`, 디렉터리 권한, `meta_export_stats.log`의 건수 |
 | ssl·http·flow가 비어 있음 | `local_nets` 미설정 또는 센서가 경계 구간을 못 봄 | `dropped_scope` 건수, 미러 위치 |
 | DNS 요약에 클라이언트가 아니라 리졸버만 보임(리졸버를 등록했다면 행이 거의 없음) | 센서가 리졸버 → 인터넷 구간만 봄 | 클라이언트 → 리졸버 구간 미러 추가 |
-| 원본 conn.log·dns.log가 필요함 | 기본은 원본을 남기지 않음 | `meta_keep_raw_local = T`(T2) 또는 `keep_log_streams`에 추가 |
+| 원본 conn.log·dns.log가 필요함 | 기본은 원본을 남기지 않음 | `meta_keep_raw_local = T`(T2, `/hdd_tmp/log/zeek/conn.log` 등) 또는 `keep_log_streams`에 추가. 어느 쪽이든 요약에 `sample_uid`가 붙는다 |
 | http.log에 `uri_path` 열이 생김 | 선별 전송이 추가한 열 | 정상. 원본의 `uri`는 그대로 |
 
 ## 10. 알려진 한계와 향후 과제
