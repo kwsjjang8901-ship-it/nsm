@@ -16,7 +16,9 @@
 # @TEST-EXEC: assert-rows meta/flow_summary.log eq 0 resp_p=8080
 # @TEST-EXEC: assert-rows meta/flow_summary.log eq 1 orig_h=10.0.0.72 resp_h=93.184.215.132 service=ssl conns=2
 # @TEST-EXEC: assert-rows meta/flow_summary.log eq 0 resp_p=53
-# @TEST-EXEC: assert-fields meta/flow_summary.log ts node orig_h resp_h resp_p proto service conns orig_bytes resp_bytes states sample_uid
+# @TEST-EXEC: assert-fields meta/flow_summary.log ts node orig_h resp_h resp_p proto service conns orig_bytes resp_bytes states
+# 원본 보관(T2)을 끈 기본 설정에서는 조인할 원본이 없으므로 sample_uid 를 쓰지 않는다
+# @TEST-EXEC: ! grep -q sample_uid meta/flow_summary.log meta/dns_summary.log
 #
 # HTTP: 외부만, 같은 요청 2번 -> 1행, 예외 호스트 제외, 경로만(쿼리 문자열 없음)
 # @TEST-EXEC: assert-rows meta/http.log eq 1 host=files.example-cdn.net uri_path=/download/file.zip method=GET status_code=200

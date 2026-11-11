@@ -102,7 +102,7 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 | conns | 연결 수 |
 | orig_bytes, resp_bytes | 바이트 합 |
 | states | 연결 상태별 건수(예: `SF:12,S0:3`) |
-| sample_uid | 대표 연결 uid 1개(T2 원본 조회용) |
+| sample_uid | 대표 연결 uid 1개(T2 원본 조회용). 원본 보관(`meta_keep_raw_local`)을 켰을 때만 기록(#36) |
 
 **dns_summary** — (출발지, 등록 도메인)별, 1시간(`meta_dns_interval`) 주기
 
@@ -116,7 +116,7 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 | unique_names, unique_names_capped | 고유 질의 이름 수(1000개까지 셈, 넘으면 capped = T, 거짓이면 쓰지 않음) |
 | sample_names | 처음 관측한 질의 이름(최대 3개) |
 | answers | 처음 관측한 응답(최대 3개) |
-| sample_uid | 대표 uid |
+| sample_uid | 대표 uid. 원본 보관을 켰을 때만 기록(#36) |
 
 **http_ua_summary** — (출발지, User-Agent)별, 24시간(`meta_ua_interval`) 주기: ts, ts_end, node, orig_h, user_agent, requests(요청 수), hosts(고유 Host 수), sample_host. http 행과 같은 범위·조건을 통과한 요청을 중복 억제 전에 센다.
 

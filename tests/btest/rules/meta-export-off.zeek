@@ -9,5 +9,7 @@
 # @TEST-EXEC: assert-rows raw/raw_kerberos.log eq 3
 # @TEST-EXEC: assert-rows raw/raw_kerberos.log eq 3 forwardable=T
 # @TEST-EXEC: assert-rows raw/raw_dce_rpc.log eq 4
+# 원본을 남기면 흐름 요약에 대표 연결 uid(sample_uid)를 붙여 원본과 조인할 수 있다
+# @TEST-EXEC: grep -q sample_uid raw/meta/flow_summary.log
 
 redef NSM::meta_export_enable = F;
