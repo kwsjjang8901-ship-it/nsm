@@ -4,6 +4,7 @@
 @load ./attack_mapping
 @load ./evidence_log   # evidence_count_of (evidence_id 별 실제 근거 건수) 참조
 @load ./notice_aggregation   # dup_count / dedup_emit_first 참조
+@load ./exceptions           # exception_id / disposition 참조
 
 module NSM;
 
@@ -25,6 +26,8 @@ export {
         victims:          string &log &optional;
         evidence_count:   count  &log &default=0;
         evidence_ids:     string &log &optional;
+        disposition:      string &log &optional;   # suppress 예외에 맞은 탐지: suppressed(Manager 는 알림 안 함)
+        exception_id:     string &log &optional;   # 맞은 예외 id
     };
 
     global write_detection: function(d: DetectionInfo);
@@ -111,6 +114,11 @@ hook Notice::policy(n: Notice::Info) &priority=-6
 
     if ( n$note in stage_name_map )
         d$killchain_stages = stage_name_map[n$note];
+
+    if ( n?$disposition )
+        d$disposition = n$disposition;
+    if ( n?$exception_id )
+        d$exception_id = n$exception_id;
 
     if ( n?$attack )
         d$techniques = n$attack;

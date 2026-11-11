@@ -73,6 +73,11 @@ function ssh_evidence_id(src: addr): string
 
 event zeek_init()
     {
+    # 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+    if ( |ssh_lm_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:ssh_lm_allowlist",
+            [$scope=set("SSH_Lateral"), $src=ssh_lm_allowlist]);
+
     local r = SumStats::Reducer($stream="nsm.ssh_lm",
                                 $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
                                 $num_samples=lm_num_samples);
@@ -153,7 +158,8 @@ function observe_ssh(c: connection)
     # 내부간 이동만: 로컬 src -> 로컬 dst
     if ( src !in Site::local_nets || dst !in Site::local_nets )
         return;
-    if ( src in ssh_lm_allowlist )
+    # 예외(예외 파일 + 기존 ssh_lm_allowlist). 집계 전 판정: 쌍 예외도 여기서 거른다
+    if ( NSM::exception_drop_agg(SSH_Lateral, c) )
         return;
 
     # 관측만 한다. 증적은 탐지 시점(threshold_crossed)에서 표본으로 적재한다.

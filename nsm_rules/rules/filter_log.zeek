@@ -21,6 +21,7 @@
 @load policy/misc/stats
 @load ../detections/detection_log
 @load ../detections/evidence_log
+@load ../detections/exceptions
 
 module NSM;
 
@@ -31,6 +32,7 @@ export {
     const keep_log_streams: set[Log::ID] = {
         NSM::DETECTION_LOG,
         NSM::EVIDENCE_LOG,
+        NSM::EXCEPTION_LOG,
         Notice::LOG,
         CaptureLoss::LOG,
         LoadedScripts::LOG,
@@ -42,6 +44,7 @@ export {
     const log_paths: table[Log::ID] of string = {
         [NSM::DETECTION_LOG]  = "/log/zeek/nsm_detection",
         [NSM::EVIDENCE_LOG]   = "/log/zeek/evidence",
+        [NSM::EXCEPTION_LOG]  = "/log/zeek/nsm_exception",
         [Notice::LOG]         = "/hdd_tmp/log/zeek/notice",
         [CaptureLoss::LOG]    = "/hdd_tmp/log/zeek/capture_loss",
         [LoadedScripts::LOG]  = "/hdd_tmp/log/zeek/loadedscripts",

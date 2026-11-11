@@ -22,6 +22,7 @@
 @load ./detection_log
 @load ./notice_aggregation
 @load ./attack_mapping
+@load ./exceptions
 
 module NSM;
 
@@ -177,6 +178,15 @@ function merge_transition(best: table[string] of Transition, tr: Transition)
 
 event zeek_init() &priority=10
     {
+    # 예외 엔진의 범위 묶음(group:<이름>)을 상관 단계 묶음과 같게 둔다(한 곳에서 관리).
+    NSM::exception_groups["recon"]   = corr_recon_notes;
+    NSM::exception_groups["c2"]      = corr_c2_notes;
+    NSM::exception_groups["cred"]    = corr_cred_notes;
+    NSM::exception_groups["domain"]  = corr_domain_notes;
+    NSM::exception_groups["lateral"] = corr_lateral_notes;
+    NSM::exception_groups["exfil"]   = corr_exfil_notes;
+    NSM::exception_groups["impact"]  = corr_impact_notes;
+
     local best: table[string] of Transition = table();
 
     for ( i in chain_rules )
@@ -508,6 +518,9 @@ event Notice::log_notice(rec: Notice::Info)
     if ( rec$note == Correlated_KillChain )
         return;
     if ( rec?$dup_count )
+        return;
+    # suppress 예외로 표시된 탐지는 상관에서 뺀다(E5 에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정).
+    if ( rec?$disposition )
         return;
     if ( ! rec?$src )
         return;
