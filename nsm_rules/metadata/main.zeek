@@ -14,7 +14,7 @@
 ##!   원본 스트림 처리
 ##!     - keep_log_streams 에 있는 스트림: default 필터(원본)를 그대로 둔다.
 ##!     - 없는 스트림: filter_log 가 끈 스트림을 다시 켜고 default 필터를 지운다.
-##!       meta_keep_raw_local = T 면 default 필터를 지우지 않고 meta_raw_path_prefix 로 보낸다(T2).
+##!       meta_keep_raw_local = T 면 default 필터를 지우지 않고 meta_raw_path_prefix + Zeek 기본 이름(conn, dns …)으로 보낸다(T2).
 ##!
 ##!   요약 모드(MetaSpec$summary = T): 행을 보내지 않고 노드 메모리에서 묶어 주기마다 요약 행을 쓴다.
 ##!     - conn → flow_summary.log : (출발지, 목적지, 목적지 포트, 프로토콜)별, meta_flow_interval(10분)
@@ -200,7 +200,7 @@ export {
         orig_bytes: count  &log &default=0;
         resp_bytes: count  &log &default=0;
         states:     string &log &optional;  ##< 연결 상태별 건수(예: SF:12,S0:3)
-        sample_uid: string &log &optional;  ##< 대표 연결 uid. 원본 보관(meta_keep_raw_local)을 켰을 때만(조인할 원본이 있을 때만 쓸모가 있다)
+        sample_uid: string &log &optional;  ##< 대표 연결 uid. 원본 conn 로그가 남을 때만(T2 또는 keep_log_streams 에 Conn::LOG)
         svc_set:    set[string] &default=set();
         state_cnt:  table[string] of count &default=table();
     };
@@ -219,7 +219,7 @@ export {
         unique_names_capped: bool &log &optional;   ##< 참일 때만 기록: meta_dns_max_unique 에 닿아 그 뒤는 세지 않음
         sample_names: vector of string &log;        ##< 처음 관측한 질의 이름(최대 meta_dns_max_samples)
         answers:      vector of string &log &optional;  ##< 처음 관측한 응답(최대 meta_dns_max_answers)
-        sample_uid:   string &log &optional;  ##< flow_summary 와 같음(원본 보관을 켰을 때만)
+        sample_uid:   string &log &optional;  ##< 대표 uid. 원본 dns 로그가 남을 때만(T2 또는 keep_log_streams 에 DNS::LOG)
         names:        set[string] &default=set();
         qtype_set:    set[string] &default=set();
         rcode_cnt:    table[string] of count &default=table();
@@ -388,6 +388,10 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
 
 # ---------------------------------------------------------------- 요약
 
+# 원본 conn·dns 로그가 남는지(T2 이거나 keep_log_streams 에 있음). 남을 때만 요약에 sample_uid 를 붙인다.
+global meta_flow_raw = F;
+global meta_dns_raw = F;
+
 global meta_flows: table[string] of FlowSummary = table();
 global meta_dns: table[string] of DnsSummary = table();
 global meta_dns_src_domains: table[addr] of count = table();
@@ -489,7 +493,7 @@ function meta_summarize(rec: any)
             meta_flows[k] = FlowSummary($ts=cn$ts, $node=peer_description,
                                         $orig_h=cn$id$orig_h, $resp_h=cn$id$resp_h, $resp_p=cn$id$resp_p,
                                         $proto=cn$proto);
-            if ( meta_keep_raw_local )
+            if ( meta_flow_raw )
                 meta_flows[k]$sample_uid = cn$uid;
             }
         local fs = meta_flows[k];
@@ -529,7 +533,7 @@ function meta_summarize(rec: any)
                 meta_flush_dns();
             meta_dns[dk] = DnsSummary($ts=dn$ts, $ts_end=dn$ts, $node=peer_description,
                                       $orig_h=dn$id$orig_h, $domain=dom, $sample_names=vector());
-            if ( meta_keep_raw_local )
+            if ( meta_dns_raw )
                 meta_dns[dk]$sample_uid = dn$uid;
             }
         local ds = meta_dns[dk];
@@ -723,6 +727,8 @@ event zeek_init() &priority=-2
     change_log_path(META_UA_LOG, meta_path_prefix + "http_ua_summary");
     local want_flow = F;
     local want_dns = F;
+    meta_flow_raw = meta_keep_raw_local || Conn::LOG in keep_log_streams;
+    meta_dns_raw = meta_keep_raw_local || DNS::LOG in keep_log_streams;
 
     if ( create_log_dirs )
         {
@@ -745,8 +751,13 @@ event zeek_init() &priority=-2
         if ( id !in keep_log_streams )
             {
             # 원래 꺼질 스트림: 원본(default) 출력은 지우거나 T2 경로로 보낸다.
+            # 원본은 Zeek 기본 이름(conn, dns …)으로 쓴다. 선별 로그 이름(flow_summary 등)을 쓰면
+            # 요약 로그와 이름이 겹쳐 헷갈린다.
             if ( meta_keep_raw_local )
-                change_log_path(id, meta_raw_path_prefix + spec$name);
+                {
+                local st = Log::active_streams[id];
+                change_log_path(id, meta_raw_path_prefix + ( st?$path ? st$path : spec$name ));
+                }
             else
                 Log::remove_filter(id, "default");
             }

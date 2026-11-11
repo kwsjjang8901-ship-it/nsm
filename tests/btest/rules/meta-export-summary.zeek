@@ -1,5 +1,6 @@
 # @TEST-DOC: 메타데이터 선별 전송 2차 — ssl·http 행 선별(경계·도메인 예외·중복 억제·쿼리 문자열 제거), conn·dns 요약 로그
-# @TEST-EXEC: zeek -C -r $TRACES/meta_summary.pcap $PKG $SETUP %INPUT
+# 원본 conn·dns 를 남기지 않는 운영 기본값으로 실행한다
+# @TEST-EXEC: zeek -C -r $TRACES/meta_summary.pcap $PKG $SETUP $FILES/meta-no-raw.zeek %INPUT
 #
 # DNS 요약((출발지, 등록 도메인) 단위, 유형·결과는 필드): 같은 질의 5번 -> 1행 queries=5, 역방향 조회·예외 도메인·리졸버(.54)의 질의는 제외
 # @TEST-EXEC: assert-rows meta/dns_summary.log eq 1 orig_h=10.0.0.70 domain=example-news.com qtypes=A rcodes=NOERROR:5 queries=5 unique_names=1 sample_names=www.example-news.com answers=93.184.215.130
@@ -17,8 +18,11 @@
 # @TEST-EXEC: assert-rows meta/flow_summary.log eq 1 orig_h=10.0.0.72 resp_h=93.184.215.132 service=ssl conns=2
 # @TEST-EXEC: assert-rows meta/flow_summary.log eq 0 resp_p=53
 # @TEST-EXEC: assert-fields meta/flow_summary.log ts node orig_h resp_h resp_p proto service conns orig_bytes resp_bytes states
-# 원본 보관(T2)을 끈 기본 설정에서는 조인할 원본이 없으므로 sample_uid 를 쓰지 않는다
+# 원본 conn·dns 가 남지 않는 기본 설정에서는 조인할 원본이 없으므로 sample_uid 를 쓰지 않는다
 # @TEST-EXEC: ! grep -q sample_uid meta/flow_summary.log meta/dns_summary.log
+# 원본 conn.log 를 유지 목록(keep_log_streams)으로 남기면 흐름 요약에만 sample_uid 를 붙인다(원본 dns 는 없음)
+# @TEST-EXEC: mkdir keep && cd keep && zeek -C -r $TRACES/meta_summary.pcap $PKG $SETUP $FILES/meta-keep-conn.zeek
+# @TEST-EXEC: test -f keep/conn.log && grep -q sample_uid keep/meta/flow_summary.log && ! grep -q sample_uid keep/meta/dns_summary.log
 #
 # HTTP: 외부만, 같은 요청 2번 -> 1행, 예외 호스트 제외, 경로만(쿼리 문자열 없음)
 # @TEST-EXEC: assert-rows meta/http.log eq 1 host=files.example-cdn.net uri_path=/download/file.zip method=GET status_code=200
