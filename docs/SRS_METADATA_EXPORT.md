@@ -16,7 +16,7 @@
 
 | 구분 | 포함 | 제외 |
 | --- | --- | --- |
-| 대상 로그 | Kerberos, NTLM, SMB 공유 연결, SMB 파일 변경, 주요 DCE-RPC, RDP, SSH, SSL, HTTP(행 단위) / conn, DNS(요약) / 센서 상태 | files, x509, weird 등 그 밖의 Zeek 로그 |
+| 대상 로그 | Kerberos, NTLM, SMB 공유 연결, SMB 파일 변경, 주요 DCE-RPC, RDP, SSH, SSL, HTTP(행 단위) / conn, DNS, HTTP User-Agent(요약) / 센서 상태 | files, x509, weird 등 그 밖의 Zeek 로그 |
 | 처리 | 범위 판정, 스트림별 조건, 필드 축소, 중복 억제, 분당 상한, 요약, 통계 | Manager로의 전송 자체(수집 에이전트 몫), Manager 저장·조회 |
 | 탐지 로그 | 영향 없음(notice·nsm_detection·evidence는 탐지 SRS 범위) | |
 
@@ -50,7 +50,7 @@ flowchart LR
     W -->|"default 필터"| R["원본 로그<br/>(유지 목록·T2만)"]
     W -->|"nsm_meta 필터<br/>범위→조건→중복→상한"| M["/log/zeek/meta/*.log<br/>행 단위 선별본"]
     W -->|"nsm_meta 필터<br/>(conn·dns)"| S["노드 메모리 요약"]
-    S -->|"30분·1시간마다"| M2["/log/zeek/meta/<br/>flow_summary · dns_summary"]
+    S -->|"30분·1시간·24시간마다"| M2["/log/zeek/meta/<br/>flow_summary · dns_summary<br/>http_ua_summary"]
     W --> ST["meta_export_stats<br/>5분마다 건수"]
     M --> A["수집 에이전트"]
     M2 --> A
@@ -93,8 +93,8 @@ flowchart LR
 | FR-M5 | 스트림별 조건: smb_files는 쓰기·이름 변경·삭제만, dce_rpc는 지정 인터페이스만, ssl·http는 예외 도메인(SNI·Host) 제외, dns는 빈 질의·역방향 조회·예외 도메인·내부 리졸버 출발지 제외 | `rules/meta-export`, `-summary` |
 | FR-M6 | 중복 억제: 스트림별 키가 같은 행은 설정한 기간 동안 한 번만 쓴다. 노드별 상태다 | `rules/meta-export` |
 | FR-M7 | 분당 상한: 노드·스트림별로 1분(로그를 쓰는 시각의 분 단위)에 쓸 최대 행 수를 넘으면 버린다 | `rules/meta-export-rate` |
-| FR-M8 | conn은 `flow_summary`로, DNS는 `dns_summary`로 요약해 주기마다(30분·1시간) 쓴다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
-| FR-M9 | DNS 요약은 등록 도메인 단위로 묶고, 출발지 하나가 주기마다 만드는 도메인 행이 상한을 넘으면 나머지를 `domain=(other)` 한 행에 더한다 | `rules/meta-export-summary` |
+| FR-M8 | conn은 `flow_summary`로(30분), DNS는 `dns_summary`로(1시간), http의 User-Agent는 `http_ua_summary`로(24시간) 요약해 주기마다 쓴다. http 행에는 User-Agent를 싣지 않는다. 종료 시에도 남은 요약을 쓴다 | `rules/meta-export-summary` |
+| FR-M9 | DNS 요약은 (출발지, 등록 도메인) 하나로 묶고 질의 유형·결과는 필드로 모은다. 출발지 하나가 주기마다 만드는 도메인 행이 상한을 넘으면 나머지를 `domain=(other)` 한 행에 더한다 | `rules/meta-export-summary`, `-dns-merge` |
 | FR-M10 | `meta_export_stats.log`에 노드·스트림별 보냄·탈락 사유별·요약 건수를 5분마다 쓴다. 경로는 선별 로그와 같은 `meta_path_prefix`를 따른다 | `rules/meta-export*` |
 | FR-M11 | 유지 목록에 없는 선별 대상 스트림은 원본을 쓰지 않는다. T2를 켜면 원본을 `meta_raw_path_prefix + 이름`.log에 쓴다 | `rules/meta-export-off` |
 | FR-M12 | `meta_export_enable = F`면 선별 로그·요약·통계를 쓰지 않고, 대상 스트림은 운영 필터대로 꺼진다 | `rules/meta-export-off` |
@@ -115,6 +115,7 @@ flowchart LR
 | ssh | ssh.log | 전체 | 없음 | 없음 |
 | ssl | ssl.log | 경계 | SNI가 예외 도메인이 아님 | (출발지, SNI, JA3) · 24시간 |
 | http | http.log | 경계 | Host가 예외 도메인이 아님 | (출발지, Host, 메서드, 경로, 상태 코드) · 10분 |
+| http_ua_summary | http.log의 User-Agent | http와 같음(범위·조건 통과, 중복 억제 전) | User-Agent가 있음 | 요약(5.5절) |
 | flow_summary | conn.log | 경계 또는 내부 관리 | 없음 | 요약(5.3절) |
 | dns_summary | dns.log | 전체 | 빈 질의·역방향 조회(`.in-addr.arpa`, `.ip6.arpa`)·예외 도메인·내부 리졸버 출발지 제외 | 요약(5.4절) |
 | capture_loss, stats, reporter | 같은 이름 | (연결 정보 없음) | 없음 | 없음 |
@@ -141,6 +142,7 @@ flowchart LR
 | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http | 행 단위 | 원본 로그가 쓰일 때 |
 | flow_summary | 요약 | 30분마다, 키 상한 도달 시, 종료 시 |
 | dns_summary | 요약 | 1시간마다, 키 상한 도달 시, 종료 시 |
+| http_ua_summary | 요약 | 24시간마다, 키 상한 도달 시, 종료 시 |
 | capture_loss, stats, reporter | 행 단위(센서 상태) | 원본과 같음 |
 | meta_export_stats | 통계 | 5분마다, 종료 시 |
 
@@ -165,7 +167,7 @@ flowchart LR
 | rdp | cookie, security_protocol, result | 접속 계정 힌트(`mstshash`), 보안 프로토콜, 결과 |
 | ssh | auth_success, auth_attempts, direction, client, server | 인증 성공, 시도 수, 방향, 클라이언트·서버 버전 문자열 |
 | ssl | version, cipher, server_name, established, ja3 | TLS 버전, 암호, SNI, 핸드셰이크 완료, JA3 지문 |
-| http | method, host, uri_path, status_code, user_agent, request_body_len, response_body_len | 메서드, Host, 쿼리를 뺀 경로, 상태 코드, User-Agent, 본문 길이 |
+| http | method, host, uri_path, status_code, request_body_len, response_body_len | 메서드, Host, 쿼리를 뺀 경로, 상태 코드, 본문 길이. User-Agent는 `http_ua_summary`(5.5절) |
 
 ### 5.3 flow_summary
 
@@ -173,33 +175,47 @@ flowchart LR
 
 | 필드 | 형식 | 뜻 |
 | --- | --- | --- |
-| ts, ts_end | 시각 | 주기 안 첫·마지막 연결의 시작 시각 |
+| ts | 시각 | 주기 안 첫 연결의 시작 시각 |
 | node | 문자열 | 기록한 노드 |
 | orig_h, resp_h, resp_p, proto | 주소, 주소, 포트, 프로토콜 | 묶는 키 |
 | service | 문자열 | 관측된 서비스(쉼표 구분, 예: `ssl`, `ntlm,gssapi,smb`) |
 | conns | 수 | 연결 수 |
 | orig_bytes, resp_bytes | 수 | 바이트 합(페이로드) |
-| duration | 실수 | 연결 지속 시간 합(초) |
 | states | 문자열 | 연결 상태별 건수(예: `SF:12,S0:3`) |
 | sample_uid | 문자열 | 대표 연결 uid(첫 연결) |
 
 ### 5.4 dns_summary
 
-(출발지, 등록 도메인, 질의 유형, 결과)별로 1시간 주기마다 한 행입니다.
+(출발지, 등록 도메인)별로 1시간 주기마다 한 행입니다. 같은 도메인의 A·AAAA·HTTPS 질의와 성공·실패가 한 행에 모입니다.
 
 | 필드 | 형식 | 뜻 |
 | --- | --- | --- |
-| ts, ts_end, node, orig_h | | flow_summary와 같음 |
+| ts, ts_end | 시각 | 주기 안 첫·마지막 질의 시각 |
+| node, orig_h | | flow_summary와 같음 |
 | domain | 문자열 | 등록 도메인. 출발지 상한을 넘은 도메인은 `(other)` |
-| qtype_name, rcode_name | 문자열 | 질의 유형(A, AAAA, TXT …), 결과(NOERROR, NXDOMAIN …) |
+| qtypes | 문자열 | 관측된 질의 유형(이름순, 예: `A,AAAA,HTTPS`) |
+| rcodes | 문자열 | 결과별 질의 수(이름순, 예: `NOERROR:12,NXDOMAIN:1`) |
 | queries | 수 | 질의 수 |
 | unique_names | 수 | 고유 질의 이름 수(1000개까지 셈) |
-| unique_names_capped | 참·거짓 | 1000개에 닿아 그 뒤는 세지 않았으면 참 |
-| sample_names | 문자열 목록 | 처음 관측한 질의 이름(최대 5개) |
-| answers | 문자열 목록 | 처음 관측한 응답(최대 5개) |
+| unique_names_capped | 참 | 1000개에 닿아 그 뒤는 세지 않았을 때만 기록 |
+| sample_names | 문자열 목록 | 처음 관측한 질의 이름(최대 3개) |
+| answers | 문자열 목록 | 처음 관측한 응답(최대 3개) |
 | sample_uid | 문자열 | 대표 uid |
 
-### 5.5 meta_export_stats
+### 5.5 http_ua_summary
+
+(출발지, User-Agent)별로 24시간 주기마다 한 행입니다. http 행과 같은 범위·조건을 통과한 요청을 중복 억제 전에 셉니다.
+
+| 필드 | 형식 | 뜻 |
+| --- | --- | --- |
+| ts, ts_end | 시각 | 주기 안 첫·마지막 요청 시각 |
+| node, orig_h | | flow_summary와 같음 |
+| user_agent | 문자열 | User-Agent |
+| requests | 수 | 요청 수 |
+| hosts | 수 | 고유 Host 수(100개까지 셈) |
+| sample_host | 문자열 | 처음 관측한 Host |
+
+### 5.6 meta_export_stats
 
 노드·스트림별로 5분마다, 건수가 하나라도 있는 스트림만 씁니다. 다른 선별 로그와 같이 `meta_path_prefix`를 따르므로 기본 경로는 `/log/zeek/meta/meta_export_stats.log`이고, 접두어를 바꾸면 함께 옮겨 갑니다. `NSM::log_paths`에 `NSM::META_STATS_LOG` 경로를 직접 적으면 그 값이 우선합니다. 회전된 파일은 `meta_export_stats.<날짜-시각>.log`로 같은 디렉터리에 남습니다.
 
@@ -215,13 +231,14 @@ flowchart LR
 
 통계 주기(5분)는 기동 시점부터 잰 주기이고, 분당 상한은 시각의 분 단위로 셉니다. 한 통계 행의 `dropped_rate`는 그 5분 동안 여러 분에서 버린 건수의 합입니다.
 
-### 5.6 행 예시
+### 5.7 행 예시
 
 ```json
 {"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","id.orig_h":"10.0.0.60","id.orig_p":62228,"id.resp_h":"10.0.0.10","id.resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
-{"ts":1794182421.003,"uid":"CZeZh24qKWTT7YYj8k","id.orig_h":"10.0.0.71","id.orig_p":47984,"id.resp_h":"93.184.215.131","id.resp_p":80,"method":"GET","host":"files.example-cdn.net","user_agent":"Mozilla/5.0","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
-{"ts":1794182429.495996,"ts_end":1794182431.607996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"duration":0.162,"states":"SF:3","sample_uid":"CulwkK1OBoRoJvREY8"}
-{"ts":1794182401.0,"ts_end":1794182405.0,"node":"zeek","orig_h":"10.0.0.70","domain":"example-news.com","qtype_name":"A","rcode_name":"NOERROR","queries":5,"unique_names":1,"unique_names_capped":false,"sample_names":["www.example-news.com"],"answers":["93.184.215.130"],"sample_uid":"CLJ78X3tH5SbVlPFH7"}
+{"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","id.orig_h":"10.0.0.71","id.orig_p":47984,"id.resp_h":"93.184.215.131","id.resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
+{"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
+{"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3","sample_uid":"CUzktn17LAqCw4A1g3"}
+{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":"A,AAAA","rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"],"sample_uid":"C3UAH8iswCb0tOkol"}
 {"ts":1794182700.0,"node":"zeek","stream":"http","sent":1,"dropped_scope":1,"dropped_filter":1,"dropped_dedup":1,"dropped_rate":0,"summarized":0}
 ```
 
@@ -248,7 +265,9 @@ flowchart LR
 | `meta_dns_interval` | 1hr | dns_summary 주기 | 위와 같음 |
 | `meta_summary_max_keys` | 100000 | 요약 종류별 노드당 키 상한 | 넘으면 그 시점에 내보내고 새로 시작 |
 | `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 DNS 도메인 행 상한 | 넘는 도메인은 `(other)` |
-| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름 수, 응답 수, 고유 이름을 셀 최대 수 | |
+| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 3 / 3 / 1000 | 표본 이름 수, 응답 수, 고유 이름을 셀 최대 수 | |
+| `meta_ua_summary` | T | http의 User-Agent를 `http_ua_summary`로 보냄(http 행에는 싣지 않음) | F면 User-Agent를 보내지 않음 |
+| `meta_ua_interval` | 24hr | http_ua_summary 주기 | |
 | `meta_stats_interval` | 5min | 통계 주기 | |
 | `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 남김 | 디스크 여유가 있는 센서만 |
 | `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분 | |
@@ -325,7 +344,8 @@ redef NSM::meta_domain_allowlist += { "windowsupdate.com", "update.microsoft.com
 | `rules/meta-export` | meta_export.pcap | 스트림별 출력, 허용 필드만 있는지(`assert-fields`), SMB 동작·RPC 인터페이스 조건, 중복 억제, conn 범위(테스트에서 행 단위로 바꿔 검사), 원본 미출력, 통계 |
 | `rules/meta-export-rate` | meta_export.pcap | 분당 상한(32행 중 10행 기록, 22행 탈락 기록), 다른 스트림·원본은 영향 없음 |
 | `rules/meta-export-off` | meta_export.pcap | 끔이면 선별 로그 없음·대상 스트림 꺼짐, T2를 켜면 원본이 전체 필드로 남음 |
-| `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, flow_summary 묶음·범위, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`) |
+| `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, http_ua_summary(요청 수·Host), flow_summary 묶음·범위·필드, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`) |
+| `rules/meta-export-dns-merge` | meta_dns_qtypes.pcap | 같은 도메인의 A·AAAA·NXDOMAIN 질의가 한 행으로(`qtypes=A,AAAA`, `rcodes=NOERROR:2,NXDOMAIN:1`), 거짓인 `unique_names_capped`는 쓰지 않음 |
 | `rules/meta-export-dedup` | meta_dedup.pcap | 중복 억제 기간: 기본(ssl 24시간)은 1시간 뒤 같은 SNI도 억제, 10분으로 줄이면 기간이 끝난 뒤 다시 보냄 |
 | `cluster/meta-export-worker` | (워커가 직접 행 기록) | 판정 위치가 워커(통계 node=worker-1), 로거에는 통과 행·요약만 |
 
@@ -345,12 +365,17 @@ tests/measure_meta_export.sh <pcap> [반복 횟수=3]
 | off | nsm_rules, 선별 전송 끔 |
 | on | nsm_rules, 선별 전송 켬 |
 
-출력은 선별 로그별 바이트·행 수, Zeek 전체 로그 대비 비율, off 대비 on의 처리 시간 증가율(반복 중 최솟값 기준)입니다.
+출력은 선별 로그별 바이트·행 수, Zeek 전체 로그 대비 비율, off 대비 on의 처리 시간 증가율(반복 중 최솟값 기준)입니다. python3가 있으면 조정 근거도 출력합니다. 로그별 필드 비중 상위 4개, flow_summary의 내부↔내부 비율·연결 1개뿐인 행 비율·목적지 포트 분포, dns_summary의 출발지당 행 수, http의 (출발지, Host) 조합 수입니다. 주소·도메인 원문은 출력하지 않습니다. `KEEP_DIR=<디렉터리>`를 주면 선별 로그를 그 디렉터리에 남깁니다.
+
+pcap과 `TMPDIR`은 로컬 디스크에 둡니다. VM 공유 폴더에서 읽으면 처리 시간이 수십 초씩 흔들립니다.
 
 | 측정 | 결과 | 판단 |
 | --- | --- | --- |
 | 합성 pcap 25개 합본(9,806패킷) | 전체 로그 대비 20.15%, 처리 시간 7~11% 증가(절대값 약 0.1초) | 판단에 쓰지 않음. 공격 트래픽 비중이 커서 비율이 높고, pcap이 작아 고정 비용·오차가 큼 |
-| 공개 데이터셋 CIC-IDS2017 Monday(정상 8시간), 조정 전 기본값 | 7.16\~7.27%, 처리 시간 +2.8% | 전송량 초과 → flow 30분·ssl 24시간·통계 5분으로 조정, 재측정 대기. 상세는 계획 문서 부록 A.2 |
+| 공개 데이터셋 CIC-IDS2017 Monday(정상 8시간), 1차 기본값 | 7.16\~7.27%, 처리 시간 +2.8% | 전송량 초과 → flow 30분·ssl 24시간·통계 5분 |
+| 같은 pcap, 2차 기본값(로컬 디스크) | 6.28%, 처리 시간 +5.1% | 전송량 초과 → 3차(DNS 키 변경, UA 요약, flow 필드 정리) |
+| 운영 미러 eth5(16)(수 분, AD 트래픽 없음), 2차 | 5.36% | 3차 적용 후 재측정 |
+| 운영 미러 eth5(수 분), 2차 | 8.08%(dns_summary 46%), 처리 시간 +4.0% | 3차 적용 후 재측정 |
 | 고객 운영 미러 구간(1시간 이상, DC 구간 포함) | 대기 | NFR-M1·M2 판정 기준 |
 
 ## 9. 운영 절차

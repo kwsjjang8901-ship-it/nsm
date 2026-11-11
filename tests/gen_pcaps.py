@@ -1381,13 +1381,32 @@ def gen_meta_dedup(out):
     cap.tick(T0 + 3800)
     cap.write(os.path.join(out, "meta_dedup.pcap"))
 
+
+def gen_meta_dns_qtypes(out):
+    """dns_summary 가 (출발지, 등록 도메인) 하나로 질의 유형·결과를 묶는지: .90 이 같은 도메인에 A·AAAA(성공), 다른 이름 A(NXDOMAIN)."""
+    cap = Capture()
+    c, t = "10.0.0.90", T0 + 1
+    for qname, qtype, rcode, ans in (("www.example-mixed.com", "A", 0, "93.184.215.150"),
+                                     ("www.example-mixed.com", "AAAA", 0, "2001:db8::150"),
+                                     ("api.example-mixed.com", "A", 3, None)):
+        qid, sport = RNG.randint(1, 65535), RNG.randint(20000, 60000)
+        cap.add(cap.l3(c, DNS_SERVER) / UDP(sport=sport, dport=53)
+                / DNS(id=qid, rd=1, qd=DNSQR(qname=qname, qtype=qtype)), t)
+        an = DNSRR(rrname=qname, type=qtype, ttl=60, rdata=ans) if ans else None
+        cap.add(cap.l3(DNS_SERVER, c) / UDP(sport=53, dport=sport)
+                / DNS(id=qid, qr=1, rd=1, ra=1, rcode=rcode, qd=DNSQR(qname=qname, qtype=qtype), an=an), t + 0.002)
+        t += 1
+    cap.tick(T0 + 60)
+    cap.write(os.path.join(out, "meta_dns_qtypes.pcap"))
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
               gen_winrm_dcom, gen_smb_ransomware,
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
-              gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup]
+              gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
+              gen_meta_dns_qtypes]
 
 
 def main():

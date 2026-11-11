@@ -55,7 +55,7 @@
                 └─ nsm_meta 필터 ──▶ T1 선별: /log/zeek/meta/<stream>      (JSON, 전송 대상)
                      ├ policy 훅: 범위 판정 → 예외 → 중복 억제 → 분당 상한
                      └ include: 스트림별 필드 목록
- 요약 로그(신규) ─────────────────▶ /log/zeek/meta/flow_summary, dns_summary
+ 요약 로그(신규) ─────────────────▶ /log/zeek/meta/flow_summary, dns_summary, http_ua_summary
  선별 전송 통계(신규) ────────────▶ /log/zeek/meta/meta_export_stats   (스트림별 보냄·버림 건수, 1분, meta_path_prefix 를 따름)
 ```
 
@@ -78,8 +78,8 @@
 | 1 | rdp | 전체 | ts, uid, id, cookie, security_protocol, result | 없음 | 적음 |
 | 1 | ssh | 전체 | ts, uid, id, auth_success, auth_attempts, client, server, direction | 없음 | 적음 |
 | 2 | ssl | 경계 | ts, uid, id, version, cipher, server_name, established, ja3 | 예외 도메인(SNI) 제외, (출발지, SNI, JA3) 24시간 중복 억제 | 중간 |
-| 2 | dns → `dns_summary` | 전체(내부 리졸버의 질의 제외) | 3.3절 요약 스키마 | 역방향 조회·예외 도메인·`dns_tunnel_resolvers` 출발지 제외, (출발지, 등록 도메인, 유형, 결과)별 1시간 요약, 출발지당 도메인 행 100개 상한 | 큼 → 축소 |
-| 2 | http | 경계 | ts, uid, id, method, host, uri_path(쿼리 제거), status_code, user_agent, 요청·응답 본문 길이 | 예외 도메인(Host) 제외, (출발지, Host, 메서드, 경로, 상태) 10분 중복 억제 | 큼 → 축소 |
+| 2 | dns → `dns_summary` | 전체(내부 리졸버의 질의 제외) | 3.3절 요약 스키마 | 역방향 조회·예외 도메인·`dns_tunnel_resolvers` 출발지 제외, (출발지, 등록 도메인)별 1시간 요약(유형·결과는 필드), 출발지당 도메인 행 100개 상한 | 큼 → 축소 |
+| 2 | http | 경계 | ts, uid, id, method, host, uri_path(쿼리 제거), status_code, 요청·응답 본문 길이. User-Agent는 `http_ua_summary`((출발지, UA)별 24시간) | 예외 도메인(Host) 제외, (출발지, Host, 메서드, 경로, 상태) 10분 중복 억제 | 큼 → 축소 |
 | 3 | conn → `flow_summary` | 경계 + 내부 관리 포트 | 3.3절 요약 스키마 | (출발지, 목적지, 목적지 포트)별 30분 요약 | 가장 큼 → 축소 |
 | 3 | asset_signal | 전체 | 자산 식별 SPEC 스키마 그대로 | 자산 식별 모듈의 중복 억제 | 원본 대비 0.1~0.3% |
 | - | 상태 | - | capture_loss, reporter, stats, meta_export_stats | 없음 | 적음 |
@@ -95,29 +95,32 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 
 | 필드 | 의미 |
 | --- | --- |
-| ts, ts_end | 주기 안 첫·마지막 연결 시작 시각 |
+| ts | 주기 안 첫 연결 시작 시각 |
 | node | 기록한 노드 |
 | orig_h, resp_h, resp_p, proto | 묶는 키 |
 | service | 관측된 서비스(쉼표 구분) |
 | conns | 연결 수 |
-| orig_bytes, resp_bytes, duration | 바이트 합, 지속 시간 합(초) |
+| orig_bytes, resp_bytes | 바이트 합 |
 | states | 연결 상태별 건수(예: `SF:12,S0:3`) |
 | sample_uid | 대표 연결 uid 1개(T2 원본 조회용) |
 
-**dns_summary** — (출발지, 등록 도메인, 유형, 결과)별, 1시간(`meta_dns_interval`) 주기
+**dns_summary** — (출발지, 등록 도메인)별, 1시간(`meta_dns_interval`) 주기
 
 | 필드 | 의미 |
 | --- | --- |
-| ts, ts_end, node, orig_h | flow_summary와 같음 |
+| ts, ts_end | 주기 안 첫·마지막 질의 시각 |
+| node, orig_h | flow_summary와 같음 |
 | domain | 등록 도메인(`parent_domain`, co.kr 등 2단계 접미사 처리). 출발지 상한을 넘은 도메인은 `(other)` |
-| qtype_name, rcode_name | 질의 유형, 결과 |
+| qtypes, rcodes | 관측된 질의 유형(이름순), 결과별 질의 수(예: `NOERROR:12,NXDOMAIN:1`) |
 | queries | 질의 수 |
-| unique_names, unique_names_capped | 고유 질의 이름 수(1000개까지 셈, 넘으면 capped = T) |
-| sample_names | 처음 관측한 질의 이름(최대 5개) |
-| answers | 처음 관측한 응답(최대 5개) |
+| unique_names, unique_names_capped | 고유 질의 이름 수(1000개까지 셈, 넘으면 capped = T, 거짓이면 쓰지 않음) |
+| sample_names | 처음 관측한 질의 이름(최대 3개) |
+| answers | 처음 관측한 응답(최대 3개) |
 | sample_uid | 대표 uid |
 
-- 질의 이름 단위가 아니라 등록 도메인 단위로 묶습니다. CDN·터널링처럼 서브도메인이 매번 다른 트래픽이 도메인 하나로 묶입니다.
+**http_ua_summary** — (출발지, User-Agent)별, 24시간(`meta_ua_interval`) 주기: ts, ts_end, node, orig_h, user_agent, requests(요청 수), hosts(고유 Host 수), sample_host. http 행과 같은 범위·조건을 통과한 요청을 중복 억제 전에 센다.
+
+- 질의 이름 단위가 아니라 등록 도메인 단위로 묶고, 질의 유형·결과는 키가 아니라 필드로 모읍니다. 요즘 클라이언트는 도메인 하나에 A·AAAA·HTTPS를 함께 물어, 유형을 키에 넣으면 도메인 하나가 2~3행이 됩니다. CDN·터널링처럼 서브도메인이 매번 다른 트래픽이 도메인 하나로 묶입니다.
 - DGA처럼 등록 도메인 자체가 매번 다르면 등록 도메인 단위로도 줄지 않습니다. 그래서 출발지 하나가 한 주기에 만드는 도메인 행을 `meta_dns_max_domains_per_src`(100)로 제한하고, 넘는 도메인은 `(other)` 한 행에 질의 수·고유 이름 수만 더합니다.
 - 요약 상태는 노드 메모리에 둡니다. 키 수 상한(`meta_summary_max_keys`)을 넘으면 그 시점에 내보내고 새로 시작합니다.
 - 클러스터에서는 워커별로 따로 요약합니다. 같은 키가 워커 수만큼 여러 행이 될 수 있으며, Manager에서 합칩니다.
@@ -149,7 +152,8 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 | `meta_flow_interval` / `meta_dns_interval` | 30min / 1hr | 요약 주기 | P3 |
 | `meta_summary_max_keys` | 100000 | 노드당 요약 키 상한(넘으면 즉시 내보냄) | P3 |
 | `meta_dns_max_domains_per_src` | 100 | 출발지별 주기당 도메인 행 상한(넘으면 `(other)`) | P3 |
-| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 5 / 5 / 1000 | 표본 이름·응답 수, 고유 이름을 셀 최대 수 | P3 |
+| `meta_dns_max_samples` / `meta_dns_max_answers` / `meta_dns_max_unique` | 3 / 3 / 1000 | 표본 이름·응답 수, 고유 이름을 셀 최대 수 | P3 |
+| `meta_ua_summary` / `meta_ua_interval` | T / 24hr | http User-Agent를 `http_ua_summary`로(http 행에는 싣지 않음), 주기 | P3 |
 
 범위(`scope`) 값: `META_ALL`(제한 없음), `META_BOUNDARY`(내부↔외부), `META_ADMIN_INTERNAL`(내부→내부 관리 포트), `META_BOUNDARY_OR_ADMIN`(둘 중 하나). 연결 정보가 없는 상태 로그는 범위와 무관하게 통과합니다.
 
@@ -250,6 +254,25 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 
 조정(2026-11-10, 정보 손실이 작은 것부터): flow_summary 주기 10분 → 30분, ssl 중복 억제 1시간 → 24시간, 통계 주기 1분 → 5분. ssl 24시간 억제가 실제로 유지되도록 중복 억제 항목을 각자의 억제 기간이 끝날 때 지우게 바꿨다(이전에는 모든 항목이 1시간 뒤 지워져 1시간보다 긴 억제가 동작하지 않았다). 조정 후 같은 pcap으로 다시 측정한다. 그래도 5%를 넘으면 http의 User-Agent·경로 처리(행 크기의 큰 부분)를 다음 후보로 검토한다.
 
-### A.3 고객 운영 pcap
+2차 기본값 재측정(같은 pcap, pcap을 로컬 디스크로 옮겨 반복 3회): 30,546,715바이트, 6.28%(−4.8MB). flow_summary 11.33MB(39,896행, −17%), ssl 4.09MB(13,490행, −34%), 통계 0.15MB. 처리 시간 off 311.6초 → on 327.6초(+5.1%). 공유 폴더(`/mnt/hgfs`)에서 읽은 같은 측정은 +10.3%로 흔들렸다.
+
+### A.3 운영 미러 pcap (2차 기본값, 2026-11-11)
+
+자산 식별 PoC와 같은 운영 미러 구간의 짧은 캡처(통계 행 2개로 보아 수 분)다. 요약 로그는 같은 키가 반복될수록 줄어들므로 짧은 캡처에서는 비율이 높게 나온다.
+
+| pcap | 전체 로그 | 선별 전송 | 비율 | 큰 로그 | 처리 시간 |
+| --- | --- | --- | --- | --- | --- |
+| eth5_172-20-31-93(16) | 120.1MB | 6.44MB | 5.36% | flow 39%, dns 33%, http 24%(AD 트래픽 없음) | +8.0%(공유 폴더, 판단 제외) |
+| eth5 | 90.2MB | 7.29MB | 8.08% | dns 46%(9,439행), flow 35%, http 14% | +4.0% |
+
+3차 조정(2026-11-11): 세 측정 모두 flow·http·dns 요약이 대부분이고, eth5에서는 dns_summary가 절반에 가까웠다. 원인은 dns_summary 키에 질의 유형·결과가 들어 있어 도메인 하나가 A·AAAA·HTTPS·결과별로 여러 행이 되는 것이었다.
+- dns_summary: 키를 (출발지, 등록 도메인)으로, 유형·결과는 `qtypes`·`rcodes` 필드로. 표본 이름·응답 5개 → 3개, `unique_names_capped`는 참일 때만.
+- http: User-Agent를 행에서 빼고 `http_ua_summary`((출발지, UA)별 24시간)로.
+- flow_summary: `ts_end`·`duration` 제거.
+- 측정 스크립트: 조정 근거(필드 비중, 요약 로그 키 분포)를 출력하고 `KEEP_DIR`로 선별 로그를 남길 수 있게 했다.
+
+합성 pcap 합본으로는 361,437 → 338,314바이트(−6%)였다. 세 pcap으로 다시 측정한다.
+
+### A.4 고객 운영 pcap(1시간 이상, DC 구간 포함)
 
 측정 대기. 운영 미러 구간(1시간 이상, DC 구간 포함) pcap으로 `tests/measure_meta_export.sh`를 실행해 이 절에 남깁니다.
