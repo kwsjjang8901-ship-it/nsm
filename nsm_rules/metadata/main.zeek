@@ -18,8 +18,10 @@
 ##!
 ##!   요약 모드(MetaSpec$summary = T): 행을 보내지 않고 노드 메모리에서 묶어 주기마다 요약 행을 쓴다.
 ##!     - conn → flow_summary.log : (출발지, 목적지, 목적지 포트, 프로토콜)별, meta_flow_interval(10분)
-##!     - dns  → dns_summary.log  : (출발지, 등록 도메인, 유형, 결과)별, meta_dns_interval(1시간)
+##!     - dns  → dns_summary.log  : (출발지, 등록 도메인)별, meta_dns_interval(1시간). 유형·결과는 필드로 모은다
 ##!       질의 이름이 매번 다른 트래픽(DGA·터널링·CDN)도 도메인 하나로 묶이도록 등록 도메인 단위로 센다.
+##!     - http 의 User-Agent → http_ua_summary.log : (출발지, User-Agent)별, meta_ua_interval(24시간).
+##!       http 행에는 User-Agent 를 싣지 않는다(행 크기의 큰 부분).
 ##!
 ##!   meta_export_stats.log : meta_stats_interval 마다 스트림별 보냄·요약·탈락 건수(노드별).
 ##!
@@ -47,7 +49,7 @@
 module NSM;
 
 export {
-    redef enum Log::ID += { META_STATS_LOG, META_FLOW_LOG, META_DNS_LOG };
+    redef enum Log::ID += { META_STATS_LOG, META_FLOW_LOG, META_DNS_LOG, META_UA_LOG };
 
     ## 행을 고르는 범위(연결 방향 기준). 연결 정보가 없는 로그(상태 로그)는 범위와 무관하게 통과한다.
     type MetaScope: enum {
@@ -107,11 +109,15 @@ export {
     ## 요약 로그 주기와 노드당 최대 키 수(넘으면 그 시점에 내보내고 새로 시작)
     const meta_flow_interval = 30min &redef;
     const meta_dns_interval = 1hr &redef;
+    const meta_ua_interval = 24hr &redef;
+
+    ## http 의 User-Agent 를 (출발지, User-Agent)별 요약 로그로 보낼지
+    const meta_ua_summary = T &redef;
     const meta_summary_max_keys = 100000 &redef;
 
     ## dns_summary 에 남길 응답·표본 이름 최대 개수, 고유 이름을 셀 최대 개수(넘으면 unique_names_capped)
-    const meta_dns_max_answers = 5 &redef;
-    const meta_dns_max_samples = 5 &redef;
+    const meta_dns_max_answers = 3 &redef;
+    const meta_dns_max_samples = 3 &redef;
     const meta_dns_max_unique = 1000 &redef;
 
     ## 출발지 하나가 한 주기에 만드는 dns_summary 도메인 행 상한. 넘는 도메인은 domain="(other)" 한 행에
@@ -150,7 +156,7 @@ export {
         # URL 은 쿼리 문자열을 뺀 uri_path 만 보낸다(개인정보).
         [HTTP::LOG] = [$name="http", $scope=META_BOUNDARY, $dedup=10min,
                        $fields=set("ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
-                                   "method", "host", "uri_path", "status_code", "user_agent",
+                                   "method", "host", "uri_path", "status_code",
                                    "request_body_len", "response_body_len")],
         # 양이 큰 conn·dns 는 요약 로그로 보낸다.
         [Conn::LOG] = [$name="flow_summary", $scope=META_BOUNDARY_OR_ADMIN, $summary=T],
@@ -183,8 +189,7 @@ export {
 
     ## flow_summary.log
     type FlowSummary: record {
-        ts:         time   &log;            ##< 창의 첫 연결 시작 시각
-        ts_end:     time   &log;            ##< 창의 마지막 연결 시작 시각
+        ts:         time   &log;            ##< 주기 안 첫 연결 시작 시각
         node:       string &log;
         orig_h:     addr   &log;
         resp_h:     addr   &log;
@@ -194,7 +199,6 @@ export {
         conns:      count  &log &default=0;
         orig_bytes: count  &log &default=0;
         resp_bytes: count  &log &default=0;
-        duration:   double &log &default=0.0; ##< 연결 지속 시간 합(초)
         states:     string &log &optional;  ##< 연결 상태별 건수(예: SF:12,S0:3)
         sample_uid: string &log;            ##< 대표 연결 uid(원본 조회용)
         svc_set:    set[string] &default=set();
@@ -208,15 +212,30 @@ export {
         node:         string &log;
         orig_h:       addr   &log;
         domain:       string &log;                  ##< 등록 도메인(parent_domain, co.kr 등 2단계 접미사 처리)
-        qtype_name:   string &log &optional;
-        rcode_name:   string &log &optional;
+        qtypes:       string &log &optional;        ##< 관측된 질의 유형(쉼표 구분, 예: A,AAAA,HTTPS)
+        rcodes:       string &log &optional;        ##< 결과별 질의 수(예: NOERROR:12,NXDOMAIN:1)
         queries:      count  &log &default=0;       ##< 질의 수
         unique_names: count  &log &default=0;       ##< 고유 질의 이름 수
-        unique_names_capped: bool &log &default=F;  ##< T: meta_dns_max_unique 에 닿아 그 뒤는 세지 않음
+        unique_names_capped: bool &log &optional;   ##< 참일 때만 기록: meta_dns_max_unique 에 닿아 그 뒤는 세지 않음
         sample_names: vector of string &log;        ##< 처음 관측한 질의 이름(최대 meta_dns_max_samples)
         answers:      vector of string &log &optional;  ##< 처음 관측한 응답(최대 meta_dns_max_answers)
         sample_uid:   string &log;
         names:        set[string] &default=set();
+        qtype_set:    set[string] &default=set();
+        rcode_cnt:    table[string] of count &default=table();
+    };
+
+    ## http_ua_summary.log
+    type UaSummary: record {
+        ts:         time   &log;            ##< 주기 안 첫 요청 시각
+        ts_end:     time   &log;            ##< 주기 안 마지막 요청 시각
+        node:       string &log;
+        orig_h:     addr   &log;
+        user_agent: string &log;
+        requests:   count  &log &default=0; ##< 선별 대상(범위·조건 통과) http 요청 수(중복 억제 전)
+        hosts:      count  &log &default=0; ##< 고유 Host 수(100개까지 셈)
+        sample_host: string &log &optional;
+        host_set:   set[string] &default=set();
     };
 
     ## 한 행의 판정 재료. 스트림마다 meta_extract 가 채운다.
@@ -373,17 +392,36 @@ global meta_flows: table[string] of FlowSummary = table();
 global meta_dns: table[string] of DnsSummary = table();
 global meta_dns_src_domains: table[addr] of count = table();
 
+## 이름순으로 쉼표로 잇는다(출력이 실행마다 같도록)
+function meta_join_sorted(ss: set[string]): string
+    {
+    local v: vector of string = vector();
+    for ( x in ss )
+        v += x;
+    sort(v, strcmp);
+    return join_string_vec(v, ",");
+    }
+
+## "A:3,B:1" 같은 건수 문자열(이름순)
+function meta_count_str(t: table[string] of count): string
+    {
+    local ks: set[string] = set();
+    for ( k in t )
+        add ks[k];
+    local out = "";
+    for ( _i, k2 in split_string(meta_join_sorted(ks), /,/) )
+        out = out == "" ? fmt("%s:%d", k2, t[k2]) : fmt("%s,%s:%d", out, k2, t[k2]);
+    return out;
+    }
+
 function meta_flush_flows()
     {
     for ( _k, fs in meta_flows )
         {
         if ( |fs$svc_set| > 0 )
-            fs$service = join_string_set(fs$svc_set, ",");
-        local st = "";
-        for ( s, n in fs$state_cnt )
-            st = st == "" ? fmt("%s:%d", s, n) : fmt("%s,%s:%d", st, s, n);
-        if ( st != "" )
-            fs$states = st;
+            fs$service = meta_join_sorted(fs$svc_set);
+        if ( |fs$state_cnt| > 0 )
+            fs$states = meta_count_str(fs$state_cnt);
         Log::write(META_FLOW_LOG, fs);
         }
     meta_flows = table();
@@ -392,9 +430,50 @@ function meta_flush_flows()
 function meta_flush_dns()
     {
     for ( _k, ds in meta_dns )
+        {
+        if ( |ds$qtype_set| > 0 )
+            ds$qtypes = meta_join_sorted(ds$qtype_set);
+        if ( |ds$rcode_cnt| > 0 )
+            ds$rcodes = meta_count_str(ds$rcode_cnt);
         Log::write(META_DNS_LOG, ds);
+        }
     meta_dns = table();
     meta_dns_src_domains = table();
+    }
+
+global meta_ua: table[string] of UaSummary = table();
+
+function meta_flush_ua()
+    {
+    for ( _k, us in meta_ua )
+        Log::write(META_UA_LOG, us);
+    meta_ua = table();
+    }
+
+## http 행(범위·조건 통과, 중복 억제 전)의 User-Agent 를 (출발지, User-Agent)별로 센다.
+function meta_summarize_ua(hp: HTTP::Info)
+    {
+    if ( ! hp?$user_agent || hp$user_agent == "" )
+        return;
+    local k = cat(hp$id$orig_h, "|", hp$user_agent);
+    if ( k !in meta_ua )
+        {
+        if ( |meta_ua| >= meta_summary_max_keys )
+            meta_flush_ua();
+        meta_ua[k] = UaSummary($ts=hp$ts, $ts_end=hp$ts, $node=peer_description,
+                               $orig_h=hp$id$orig_h, $user_agent=hp$user_agent);
+        }
+    local us = meta_ua[k];
+    if ( hp$ts < us$ts ) us$ts = hp$ts;
+    if ( hp$ts > us$ts_end ) us$ts_end = hp$ts;
+    ++us$requests;
+    if ( hp?$host && hp$host !in us$host_set && |us$host_set| < 100 )
+        {
+        add us$host_set[hp$host];
+        us$hosts = |us$host_set|;
+        if ( ! us?$sample_host )
+            us$sample_host = hp$host;
+        }
     }
 
 function meta_summarize(rec: any)
@@ -407,17 +486,15 @@ function meta_summarize(rec: any)
             {
             if ( |meta_flows| >= meta_summary_max_keys )
                 meta_flush_flows();
-            meta_flows[k] = FlowSummary($ts=cn$ts, $ts_end=cn$ts, $node=peer_description,
+            meta_flows[k] = FlowSummary($ts=cn$ts, $node=peer_description,
                                         $orig_h=cn$id$orig_h, $resp_h=cn$id$resp_h, $resp_p=cn$id$resp_p,
                                         $proto=cn$proto, $sample_uid=cn$uid);
             }
         local fs = meta_flows[k];
         if ( cn$ts < fs$ts ) fs$ts = cn$ts;
-        if ( cn$ts > fs$ts_end ) fs$ts_end = cn$ts;
         ++fs$conns;
         if ( cn?$orig_bytes ) fs$orig_bytes += cn$orig_bytes;
         if ( cn?$resp_bytes ) fs$resp_bytes += cn$resp_bytes;
-        if ( cn?$duration ) fs$duration += interval_to_double(cn$duration);
         if ( cn?$service )
             for ( _si, sv in split_string(cn$service, /,/) )
                 add fs$svc_set[sv];
@@ -432,14 +509,14 @@ function meta_summarize(rec: any)
         local qt = dn?$qtype_name ? dn$qtype_name : "-";
         local rc = dn?$rcode_name ? dn$rcode_name : "-";
         local src = dn$id$orig_h;
-        local dk = cat(src, "|", dom, "|", qt, "|", rc);
+        local dk = cat(src, "|", dom);
         if ( dk !in meta_dns )
             {
             local nd = src in meta_dns_src_domains ? meta_dns_src_domains[src] : 0;
             if ( nd >= meta_dns_max_domains_per_src )
                 {
                 dom = "(other)";
-                dk = cat(src, "|", dom, "|", qt, "|", rc);
+                dk = cat(src, "|", dom);
                 }
             else
                 meta_dns_src_domains[src] = nd + 1;
@@ -451,13 +528,14 @@ function meta_summarize(rec: any)
             meta_dns[dk] = DnsSummary($ts=dn$ts, $ts_end=dn$ts, $node=peer_description,
                                       $orig_h=dn$id$orig_h, $domain=dom, $sample_names=vector(),
                                       $sample_uid=dn$uid);
-            if ( dn?$qtype_name ) meta_dns[dk]$qtype_name = dn$qtype_name;
-            if ( dn?$rcode_name ) meta_dns[dk]$rcode_name = dn$rcode_name;
             }
         local ds = meta_dns[dk];
         if ( dn$ts < ds$ts ) ds$ts = dn$ts;
         if ( dn$ts > ds$ts_end ) ds$ts_end = dn$ts;
         ++ds$queries;
+        if ( qt != "-" )
+            add ds$qtype_set[qt];
+        ds$rcode_cnt[rc] = ( rc in ds$rcode_cnt ? ds$rcode_cnt[rc] : 0 ) + 1;
         if ( q !in ds$names )
             {
             if ( |ds$names| < meta_dns_max_unique )
@@ -482,6 +560,12 @@ function meta_summarize(rec: any)
             ds$answers = av;
             }
         }
+    }
+
+event meta_ua_tick()
+    {
+    meta_flush_ua();
+    schedule meta_ua_interval { meta_ua_tick() };
     }
 
 event meta_flow_tick()
@@ -517,6 +601,10 @@ hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
         ++st$dropped_filter;
         break;
         }
+
+    # http 의 User-Agent 는 행에 싣지 않고 (출발지, User-Agent)별로 따로 센다(중복 억제 전)
+    if ( id == HTTP::LOG && meta_ua_summary && rec is HTTP::Info )
+        meta_summarize_ua(rec as HTTP::Info);
 
     # 요약 모드: 행은 보내지 않고 묶는다
     if ( spec$summary )
@@ -588,6 +676,7 @@ event zeek_done()
         return;
     meta_flush_flows();
     meta_flush_dns();
+    meta_flush_ua();
     meta_flush_stats();
     }
 
@@ -598,6 +687,7 @@ event zeek_init() &priority=5
     Log::create_stream(META_STATS_LOG, [$columns=MetaStats, $path="meta_export_stats"]);
     Log::create_stream(META_FLOW_LOG, [$columns=FlowSummary, $path="flow_summary"]);
     Log::create_stream(META_DNS_LOG, [$columns=DnsSummary, $path="dns_summary"]);
+    Log::create_stream(META_UA_LOG, [$columns=UaSummary, $path="http_ua_summary"]);
     }
 
 # filter_log(우선순위 -1)가 끄지 않도록 대상 스트림을 알린다(스트림은 우선순위 5 에서 만들어진다).
@@ -610,6 +700,7 @@ event zeek_init() &priority=0
             add keep_enabled_streams[id];
     add keep_enabled_streams[META_FLOW_LOG];
     add keep_enabled_streams[META_DNS_LOG];
+    add keep_enabled_streams[META_UA_LOG];
     }
 
 # filter_log(우선순위 -1)가 스트림을 정리한 뒤에 실행한다.
@@ -626,6 +717,7 @@ event zeek_init() &priority=-2
         change_log_path(META_STATS_LOG, meta_path_prefix + "meta_export_stats");
     change_log_path(META_FLOW_LOG, meta_path_prefix + "flow_summary");
     change_log_path(META_DNS_LOG, meta_path_prefix + "dns_summary");
+    change_log_path(META_UA_LOG, meta_path_prefix + "http_ua_summary");
     local want_flow = F;
     local want_dns = F;
 
@@ -684,6 +776,10 @@ event zeek_init() &priority=-2
         Log::disable_stream(META_DNS_LOG);
     else
         schedule meta_dns_interval { meta_dns_tick() };
+    if ( ! meta_ua_summary || HTTP::LOG !in meta_export_streams )
+        Log::disable_stream(META_UA_LOG);
+    else
+        schedule meta_ua_interval { meta_ua_tick() };
 
     schedule meta_stats_interval { meta_stats_tick() };
     }

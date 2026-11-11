@@ -8,12 +8,15 @@
 #     off  : nsm_rules, 선별 전송 끔(현재 운영 형상)
 #     on   : nsm_rules, 선별 전송 켬
 #   출력: 선별 전송 로그(meta/*.log)의 스트림별 바이트·행 수, 전체 로그 대비 비율,
-#         off 대비 on 의 처리 시간 증가율(반복 중 최솟값 기준).
+#         off 대비 on 의 처리 시간 증가율(반복 중 최솟값 기준),
+#         python3 가 있으면 조정 근거(로그별 필드 비중, 요약 로그의 키 분포). 주소·도메인 원문은 출력하지 않는다.
+#   KEEP_DIR=<디렉터리> 를 주면 on 실행의 선별 로그를 그 디렉터리에 복사해 남긴다.
+#   pcap 과 TMPDIR 은 로컬 디스크에 둔다(공유 폴더는 처리 시간이 흔들린다).
 #   운영 판단에는 운영 미러 구간 pcap(1시간 이상, DC 구간 포함)을 쓴다.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    sed -n '2,13p' "$0"
+    sed -n '2,16p' "$0"
     exit 2
 fi
 
@@ -68,4 +71,67 @@ if grep -qiE "error|fatal" "$WORK"/*/stderr.txt; then
     echo
     echo "경고: Zeek 오류 출력이 있습니다."
     grep -iE "error|fatal" "$WORK"/*/stderr.txt | head -5
+fi
+
+# 조정 근거: 로그별 필드 비중, 요약 로그의 키 분포(숫자만)
+if command -v python3 > /dev/null 2>&1; then
+    echo
+    python3 - "$WORK/on/meta" <<'PY'
+import collections, ipaddress, json, os, sys
+d = sys.argv[1]
+J = lambda v: len(json.dumps(v, separators=(",", ":"), ensure_ascii=False).encode())
+def rows(n):
+    p = os.path.join(d, n + ".log")
+    if not os.path.exists(p):
+        return []
+    return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
+def private(a):
+    try:
+        return ipaddress.ip_address(a).is_private
+    except ValueError:
+        return False
+print("조정 근거(로그별 필드 비중 상위 4)")
+sizes = {f[:-4]: os.path.getsize(os.path.join(d, f)) for f in os.listdir(d) if f.endswith(".log")}
+for name, sz in sorted(sizes.items(), key=lambda x: -x[1])[:6]:
+    rs = rows(name)
+    if not rs:
+        continue
+    fb = collections.Counter()
+    for r in rs:
+        for k, v in r.items():
+            fb[k] += J(v) + len(k) + 4
+    tot = sum(fb.values()) or 1
+    top = ", ".join(f"{k} {100*v/tot:.0f}%" for k, v in fb.most_common(4))
+    print(f"  {name:16s} 행 {len(rs):>8,}  행당 {sz/len(rs):6.0f}B  | {top}")
+fl = rows("flow_summary")
+if fl:
+    inner = sum(1 for r in fl if private(r["orig_h"]) and private(r["resp_h"]))
+    one = sum(1 for r in fl if r.get("conns", 0) == 1)
+    ports = collections.Counter(r["resp_p"] for r in fl).most_common(5)
+    print(f"  flow_summary: 내부↔내부 {100*inner/len(fl):.0f}%, 연결 1개뿐인 행 {100*one/len(fl):.0f}%, "
+          f"행 많은 목적지 포트 {', '.join(f'{p}({100*n/len(fl):.0f}%)' for p, n in ports)}")
+dn = rows("dns_summary")
+if dn:
+    one = sum(1 for r in dn if r.get("queries", 0) == 1)
+    other = sum(1 for r in dn if r.get("domain") == "(other)")
+    srcs = collections.Counter(r["orig_h"] for r in dn)
+    top = srcs.most_common(1)[0][1]
+    print(f"  dns_summary: 출발지 {len(srcs):,}개, 출발지당 평균 {len(dn)/len(srcs):.1f}행(최대 {top}), "
+          f"질의 1건뿐인 행 {100*one/len(dn):.0f}%, (other) 행 {other}")
+ht = rows("http")
+if ht:
+    hosts = len({(r["id.orig_h"], r.get("host")) for r in ht})
+    print(f"  http: (출발지, Host) 조합 {hosts:,}개, 조합당 평균 {len(ht)/hosts:.1f}행")
+sl = rows("ssl")
+if sl:
+    sni = sum(1 for r in sl if not r.get("server_name"))
+    print(f"  ssl: SNI 없는 행 {100*sni/len(sl):.0f}%")
+PY
+fi
+
+if [ -n "${KEEP_DIR:-}" ]; then
+    mkdir -p "$KEEP_DIR"
+    cp "$WORK"/on/meta/*.log "$KEEP_DIR"/ 2> /dev/null || true
+    echo
+    echo "선별 로그를 $KEEP_DIR 에 남겼습니다."
 fi

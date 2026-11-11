@@ -688,7 +688,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 항목 | 요약 |
 | --- | --- |
 | 행 단위 | kerberos, ntlm, smb_mapping, smb_files, dce_rpc, rdp, ssh, ssl, http, 센서 상태 |
-| 요약 | conn → `flow_summary`(30분), dns → `dns_summary`(1시간) |
+| 요약 | conn → `flow_summary`(30분), dns → `dns_summary`(1시간), http User-Agent → `http_ua_summary`(24시간) |
 | 판정 | 범위 → 스트림별 조건 → 중복 억제 → 노드당 분당 상한, 워커에서 판정 |
 | 탐지와의 관계 | 탐지 로그는 이 기능의 켬·끔·상한과 무관하게 기록됨 |
 
@@ -1076,8 +1076,8 @@ redef NSM::log_paths += {
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 43개 — 룰·계약·선별 전송 테스트 38개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
-| 합성 pcap | 26개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
+| btest | 44개 — 룰·계약·선별 전송 테스트 39개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
 | 실행 | `tests/run_tests.sh`(로컬 zeek 없으면 Docker `zeek/zeek:9.0.1`), `ZEEK_IMAGE=zeek/zeek:8.0.9 tests/run_tests.sh` |
