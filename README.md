@@ -44,6 +44,7 @@ docs/
   DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고
   METADATA_EXPORT_POC_RESULT.md # 메타데이터 선별 전송 PoC 결과 보고
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
+  EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
 ```
 
 ## 탐지 룰
@@ -114,6 +115,8 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 
 [docs/NSM_RULES_REVIEW.md](docs/NSM_RULES_REVIEW.md) 참고 — 우선 수정 항목(Critical/High), 비활성 룰 재활성화 조건,
 신규 룰 후보(P1/P2), 자산 식별 PoC 머지 이슈, 작업 순서를 정리했습니다.
+
+[docs/EXCEPTION_ENGINE_REVIEW.md](docs/EXCEPTION_ENGINE_REVIEW.md) — 룰별 예외를 공통 예외 엔진(데이터·동적 로딩·사유/만료 필수)으로 옮기는 구조의 개발 검토와 단계별 계획.
 
 ## 관련 저장소
 
