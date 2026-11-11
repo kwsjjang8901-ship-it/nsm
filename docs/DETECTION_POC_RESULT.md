@@ -203,7 +203,7 @@
 ```bash
 mkdir -p /root/detect_run && cd /root/detect_run
 zeek -C -r /tmp/<pcap 파일> /path/to/nsm/nsm_rules \
-  -e 'redef NSM::log_paths = {}; redef NSM::create_log_dirs = F; redef NSM::meta_export_enable = F;'
+  -e 'redef NSM::log_paths = {}; redef NSM::create_log_dirs = F; redef NSM::meta_export_enable = F; redef Log::default_rotation_interval = 0secs;'
 python3 - <<'EOF'
 import json, collections
 by, src = collections.Counter(), collections.defaultdict(set)
