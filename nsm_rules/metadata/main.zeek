@@ -200,7 +200,7 @@ export {
         orig_bytes: count  &log &default=0;
         resp_bytes: count  &log &default=0;
         states:     string &log &optional;  ##< 연결 상태별 건수(예: SF:12,S0:3)
-        sample_uid: string &log;            ##< 대표 연결 uid(원본 조회용)
+        sample_uid: string &log &optional;  ##< 대표 연결 uid. 원본 보관(meta_keep_raw_local)을 켰을 때만(조인할 원본이 있을 때만 쓸모가 있다)
         svc_set:    set[string] &default=set();
         state_cnt:  table[string] of count &default=table();
     };
@@ -219,7 +219,7 @@ export {
         unique_names_capped: bool &log &optional;   ##< 참일 때만 기록: meta_dns_max_unique 에 닿아 그 뒤는 세지 않음
         sample_names: vector of string &log;        ##< 처음 관측한 질의 이름(최대 meta_dns_max_samples)
         answers:      vector of string &log &optional;  ##< 처음 관측한 응답(최대 meta_dns_max_answers)
-        sample_uid:   string &log;
+        sample_uid:   string &log &optional;  ##< flow_summary 와 같음(원본 보관을 켰을 때만)
         names:        set[string] &default=set();
         qtype_set:    set[string] &default=set();
         rcode_cnt:    table[string] of count &default=table();
@@ -488,7 +488,9 @@ function meta_summarize(rec: any)
                 meta_flush_flows();
             meta_flows[k] = FlowSummary($ts=cn$ts, $node=peer_description,
                                         $orig_h=cn$id$orig_h, $resp_h=cn$id$resp_h, $resp_p=cn$id$resp_p,
-                                        $proto=cn$proto, $sample_uid=cn$uid);
+                                        $proto=cn$proto);
+            if ( meta_keep_raw_local )
+                meta_flows[k]$sample_uid = cn$uid;
             }
         local fs = meta_flows[k];
         if ( cn$ts < fs$ts ) fs$ts = cn$ts;
@@ -526,8 +528,9 @@ function meta_summarize(rec: any)
             if ( |meta_dns| >= meta_summary_max_keys )
                 meta_flush_dns();
             meta_dns[dk] = DnsSummary($ts=dn$ts, $ts_end=dn$ts, $node=peer_description,
-                                      $orig_h=dn$id$orig_h, $domain=dom, $sample_names=vector(),
-                                      $sample_uid=dn$uid);
+                                      $orig_h=dn$id$orig_h, $domain=dom, $sample_names=vector());
+            if ( meta_keep_raw_local )
+                meta_dns[dk]$sample_uid = dn$uid;
             }
         local ds = meta_dns[dk];
         if ( dn$ts < ds$ts ) ds$ts = dn$ts;

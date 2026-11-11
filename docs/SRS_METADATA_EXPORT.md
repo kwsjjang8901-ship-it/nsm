@@ -1,6 +1,6 @@
 # 메타데이터 선별 전송 SRS (소프트웨어 요구사항 명세)
 
-최종 수정: 2026-11-10 · 원본: 이 파일(`docs/SRS_METADATA_EXPORT.md`). 선별 전송 동작·설정을 바꾸는 PR에서 함께 고칩니다.
+최종 수정: 2026-11-11 · 원본: 이 파일(`docs/SRS_METADATA_EXPORT.md`). 선별 전송 동작·설정을 바꾸는 PR에서 함께 고칩니다.
 
 이 문서는 nsm_rules의 **메타데이터 선별 전송** 기능만 다룹니다. 탐지 룰·킬체인 상관·탐지 로그는 [탐지 SRS](SRS.md)에 있고, 설계 배경과 단계별 계획은 [개발 계획](METADATA_EXPORT_PLAN.md)에 있습니다. 기준은 main `b2c83fa`(PR #28·#29 반영)입니다.
 
@@ -182,7 +182,7 @@ flowchart LR
 | conns | 수 | 연결 수 |
 | orig_bytes, resp_bytes | 수 | 바이트 합(페이로드) |
 | states | 문자열 | 연결 상태별 건수(예: `SF:12,S0:3`) |
-| sample_uid | 문자열 | 대표 연결 uid(첫 연결) |
+| sample_uid | 문자열 | 대표 연결 uid(첫 연결). 원본 보관(`meta_keep_raw_local`, T2)을 켰을 때만 쓴다. 끄면 조인할 원본이 없어 필드가 없다 |
 
 ### 5.4 dns_summary
 
@@ -200,7 +200,7 @@ flowchart LR
 | unique_names_capped | 참 | 1000개에 닿아 그 뒤는 세지 않았을 때만 기록 |
 | sample_names | 문자열 목록 | 처음 관측한 질의 이름(최대 3개) |
 | answers | 문자열 목록 | 처음 관측한 응답(최대 3개) |
-| sample_uid | 문자열 | 대표 uid |
+| sample_uid | 문자열 | 대표 uid. flow_summary와 같이 원본 보관(T2)을 켰을 때만 쓴다 |
 
 ### 5.5 http_ua_summary
 
@@ -237,8 +237,8 @@ flowchart LR
 {"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","id.orig_h":"10.0.0.60","id.orig_p":62228,"id.resp_h":"10.0.0.10","id.resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
 {"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","id.orig_h":"10.0.0.71","id.orig_p":47984,"id.resp_h":"93.184.215.131","id.resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
-{"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3","sample_uid":"CUzktn17LAqCw4A1g3"}
-{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":"A,AAAA","rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"],"sample_uid":"C3UAH8iswCb0tOkol"}
+{"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
+{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":"A,AAAA","rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
 {"ts":1794182700.0,"node":"zeek","stream":"http","sent":1,"dropped_scope":1,"dropped_filter":1,"dropped_dedup":1,"dropped_rate":0,"summarized":0}
 ```
 
@@ -269,7 +269,7 @@ flowchart LR
 | `meta_ua_summary` | T | http의 User-Agent를 `http_ua_summary`로 보냄(http 행에는 싣지 않음) | F면 User-Agent를 보내지 않음 |
 | `meta_ua_interval` | 24hr | http_ua_summary 주기 | |
 | `meta_stats_interval` | 5min | 통계 주기 | |
-| `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 남김 | 디스크 여유가 있는 센서만 |
+| `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 남김. 켜면 flow_summary·dns_summary에 `sample_uid`를 붙여 원본과 조인할 수 있다 | 디스크 여유가 있는 센서만 |
 | `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분 | |
 | `dns_tunnel_resolvers`(탐지 08과 공용) | 비어 있음 | 내부 재귀 리졸버. DNS 요약에서 출발지로 빼고 탐지 08에서도 뺌 | 배포 시 등록 권장 |
 
