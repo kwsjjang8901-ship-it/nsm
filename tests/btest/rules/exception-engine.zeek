@@ -108,10 +108,12 @@ event ssl_established(c: connection) &priority=10
 	if ( swapped || c$id$orig_h != 10.0.0.71 )
 		return;
 	swapped = T;
-	# system() 은 백그라운드로 돌므로 직접 쓴다
-	local f = open("ex.tsv");
+	# Manager 배포 방식대로 임시 파일에 쓰고 이름을 바꾼다(같은 초 안의 제자리 덮어쓰기는 감지되지 않는다).
+	# system() 은 백그라운드로 돌므로 Zeek 에서 직접 쓴다.
+	local f = open("ex.tsv.tmp");
 	write_file(f, "#separator \\x09\x0a#set_separator\x09,\x0a#empty_field\x09(empty)\x0a#unset_field\x09-\x0a#fields\x09id\x09scope\x09src\x09dst\x09dst_port\x09service\x09domain\x09ja4\x09disposition\x09reason\x09owner\x09expires\x09ref\x0aE-v2\x09Encrypted_C2\x09-\x0993.184.215.24/32\x09-\x09-\x09-\x09-\x09-\x09v2\x09kim\x09-\x09-\x0a");
 	close(f);
+	rename("ex.tsv.tmp", "ex.tsv");
 	waiting = T;
 	suspend_processing();
 	Input::force_update("nsm-exceptions");
