@@ -28,12 +28,15 @@ nsm_rules/
     filter_log.zeek         # 로그 출력 필터/경로
   metadata/
     main.zeek               # 메타데이터 선별 전송 (/log/zeek/meta, docs/METADATA_EXPORT_PLAN.md)
+  asset-id/                 # 자산 식별 센서 (asset_signal.log, claudtest2 PoC 에서 머지, docs/asset-id/)
 tests/
   gen_pcaps.py              # 합성 pcap 생성기 (scapy)
   pcaps/                    # 룰별 테스트 pcap (생성기 출력, 커밋됨)
   pcaps/zeek/               # Zeek 공개 테스트 trace 발췌 (실제 프로토콜 동작 검증용)
+  pcaps/asset-id/           # 자산 식별 테스트 pcap (PoC 에서 가져온 고정 파일, 생성기 재현 대상 아님)
+  asset-id/                 # 자산 식별 PoC 의 합성 pcap 생성기(출처 기록용, 바이트 재현되지 않음)
   extract_zeek_traces.py    # 위 발췌 스크립트
-  btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, tools/, setup.zeek)
+  btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, asset-id/: 자산 식별 단독 + Baseline/, tools/, setup.zeek)
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
   measure_meta_export.sh    # 선별 전송 전송량·처리 시간 측정 (pcap 입력)
@@ -43,6 +46,7 @@ docs/
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고
   METADATA_EXPORT_POC_RESULT.md # 메타데이터 선별 전송 PoC 결과 보고
+  asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (claudtest2 에서 가져옴)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
 ```
@@ -120,5 +124,5 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 
 ## 관련 저장소
 
-- 자산 식별 PoC: `kwsjjang8901-ship-it/claudtest2` — `nsm_rules/asset-id/`로 머지 예정
+- 자산 식별 PoC: `kwsjjang8901-ship-it/claudtest2` — 센서 패키지는 `nsm_rules/asset-id/`로 머지됨. PoC 도구(리졸버·리포트)는 그 저장소에 남음
 - OCSF 변환기(zeek-bzar-ocsf, Go): `kwsjjang8901-ship-it/claudtest`

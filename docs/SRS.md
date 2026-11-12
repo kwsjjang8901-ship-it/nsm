@@ -628,6 +628,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C10 | 조사용 프로토콜 메타데이터를 행·필드를 줄여 별도 경로에 기록하고, 노드당 분당 상한을 넘는 행은 버리되 건수를 남긴다. 탐지 로그는 영향받지 않는다(5.3절) | `metadata/main.zeek` |
 | FR-C11 | 예외는 예외 파일에서 읽고, 파일이 바뀌면 재시작 없이 다시 읽는다. 룰은 입구에서 공통 함수로 판정하며, `drop` 예외에 맞으면 notice·근거·탐지 요약을 남기지 않는다(5.4절) | `exceptions.zeek`, 각 룰 |
 | FR-C12 | 예외마다 적재 결과(적용·거부·만료)와 주기별 적중 수를 `nsm_exception.log`에 남긴다 | `exceptions.zeek` |
+| FR-C13 | 자산 신호(머신 계정·DHCP·MAC·호스트명·OS·서비스 등)를 `asset_signal.log`에 남긴다. 탐지 결과에는 영향이 없다(5.5절) | `asset-id/` |
 
 ### 5.1 킬체인 상관 규칙
 
@@ -683,6 +684,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | stats | `/hdd_tmp/log/zeek/stats` |
 | reporter | `/hdd_tmp/log/zeek/reporter` |
 | nsm_exception | `/log/zeek/nsm_exception` |
+| asset_signal | `/log/zeek/asset_signal` |
 
 conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. 켜는 방법은 7.6절에 있습니다. 메타데이터 선별 전송 대상 스트림은 꺼지지 않고, 원본 대신 선별본만 5.3절 경로에 남습니다.
 
@@ -717,6 +719,20 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
 | 킬체인 상관 | `suppress`로 표시된 탐지는 상관에 넣지 않는다(`drop`과 같음). 상관에 넣는 방안은 보류했다. 대량 접속 서버에 `suppress`를 걸면 그 피해 host가 다음 단계 출발지 후보로 등록돼 가짜 체인 알림이 생길 수 있기 때문이다. `suppress` 사용이 시작되면 예외마다 상관 여부를 고르는 방식으로 다시 검토한다 |
 | 이관 현황 | 23개 룰 모두 이관했다(예외 설정이 없던 10·14 포함). 기존 `*_allowlist`는 호환용으로 남아 drop 예외로 등록되며 폐기 예정이다 |
+
+### 5.5 자산 식별
+
+미러 트래픽에서 자산 신호(머신 계정, DHCP client-id, MAC, 호스트명, OS·서비스 등)를 뽑아 `asset_signal.log`에 남기는 센서 기능입니다. 자산을 묶는 판정(엔티티 리졸루션, IP-자산 시계열)은 Manager가 합니다. PoC(`kwsjjang8901-ship-it/claudtest2`)의 센서 패키지를 `nsm_rules/asset-id/`로 옮겼습니다. 신호 정의·판정 규칙은 [자산 식별 SPEC](asset-id/SPEC.md), 설계 배경은 [DESIGN](asset-id/DESIGN.md), PoC 결과는 [POC_RESULT](asset-id/POC_RESULT.md)에 있습니다.
+
+| 항목 | 내용 |
+| --- | --- |
+| 위치·로드 | `nsm_rules/asset-id/`, `__load__.zeek`에서 탐지 룰 뒤에 로드. 모듈 `AssetID`(전역 이름·기존 Info 레코드를 건드리지 않음) |
+| 출력 | `asset_signal.log`(JSON), 기본 경로 `/log/zeek/asset_signal`. 로그 필터 기본 유지 목록에 포함 |
+| 대상 대역 | `AssetID::asset_nets`(기본 비어 있음 → `Site::local_nets`, 그것도 비면 사설 대역). 배포 때 `Site::local_nets`를 적으면 따로 설정할 필요 없음 |
+| 로그량 | 같은 (IP, 신호, 값)은 `AssetID::suppress_interval`(기본 1시간) 동안 다시 쓰지 않음. 신호 소스별 켜기·끄기는 `AssetID::enable_*`(option) |
+| 탐지와의 관계 | 탐지 결과에 영향 없음(같은 이벤트에 핸들러만 추가). 서버 역할(DC·DNS·파일 서버)을 탐지 조건·예외에 자동 반영하는 것은 다음 단계(예외 엔진 E4) |
+| 머지 때 고친 점 | SMB2 클라이언트 GUID용 시그니처가 Zeek 시그니처 프레임워크 기본 동작으로 SMB2 연결마다 `Signatures::Sensitive_Signature` notice(패킷 바이트 포함)를 남기던 것을 막음(`SIG_IGNORE`). 운영 필터가 `asset_signal.log`를 끄던 것(검토 C3)을 유지 목록에 추가해 해결 |
+| 남은 것 | Manager 리졸버(PoC `tools/asset_resolver.py`)는 이 저장소 밖. 선별 전송(메타데이터) 포함 여부는 [메타데이터 SRS](SRS_METADATA_EXPORT.md) P4에서 결정 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -1079,7 +1095,7 @@ redef NSM::log_paths += {
 };
 ```
 
-자산 식별 PoC를 함께 올리면 그 로그도 꺼지므로 `redef NSM::keep_log_streams += { AssetID::LOG };`가 필요합니다.
+자산 식별 로그(`AssetID::LOG`, `asset_signal.log`)는 기본 유지 목록에 들어 있어 따로 켤 필요가 없습니다(5.5절).
 
 #### 메타데이터 선별 전송
 
@@ -1157,7 +1173,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 49개 — 룰·계약·선별 전송·예외 엔진 테스트 43개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| btest | 77개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합 테스트 44개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 27개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 4개는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1183,7 +1199,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 ## 10. 알려진 한계와 향후 과제
 
-다음 단계(5단계)는 자산 식별 PoC 머지와 OCSF 변환기 연동이며, 아래 한계 중 상관 규칙 확장과 DC·파일 서버 자동 예외가 그 작업과 이어집니다.
+자산 식별은 머지했습니다(5.5절). 다음 단계는 OCSF 변환기 연동과, 자산 식별의 서버 역할을 탐지 조건·예외에 반영하는 작업(예외 엔진 E4)입니다.
 
 | 한계 | 영향 | 대응·계획 |
 | --- | --- | --- |
@@ -1198,7 +1214,8 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
 | 기존 `*_allowlist` 설정이 호환용으로 남아 있음 | `redef`라 바꾸면 재시작이 필요하고 사유·만료를 남기지 못함 | 새 예외는 예외 파일로. 고객 설정을 예외 파일로 옮긴 뒤 다음 메이저 버전에서 제거 검토. 자산 그룹(E4). suppress 탐지의 상관 처리(E5)는 보류(5.4절) |
-| 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
+| 자산 식별의 서버 역할을 센서에서 쓰지 못함 | 역할 판정(DC·파일 서버·DNS 서버)은 Manager 리졸버에서 하므로, DC 목록·리졸버 목록을 여전히 설정에 적어야 함 | 자산 그룹을 예외 엔진 축으로(E4), 역할 목록을 Manager가 센서로 배포하는 방식 검토 |
+| 자산 식별 신호의 처리 부하 미측정 | 자산 식별이 연결·DNS·HTTP 등에 핸들러를 더함 | 운영 pcap으로 `tests/measure_meta_export.sh` 측정(off·on 모두 자산 식별 포함, full은 미포함) |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
 | 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |
 

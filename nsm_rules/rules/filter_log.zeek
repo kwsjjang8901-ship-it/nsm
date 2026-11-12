@@ -4,8 +4,8 @@
 ##!   - keep_log_streams 에 없는 스트림은 모두 비활성화한다(디스크·전송량 절감).
 ##!   - log_paths 에 지정된 스트림은 출력 경로를 바꾼다(없으면 Zeek 기본 경로).
 ##!   - 두 값 모두 &redef 이므로 고객 환경 설정(nsm_config_custom.zeek)에서 조정한다.
-##!       예) 자산 식별(asset-id) 머지 후:
-##!           redef NSM::keep_log_streams += { AssetID::LOG };
+##!       예) 다른 패키지의 로그를 남길 때(자산 식별 AssetID::LOG 는 기본으로 남긴다):
+##!           redef NSM::keep_log_streams += { Software::LOG };
 ##!       예) evidence 의 uid 로 원본을 조인해야 하는 환경:
 ##!           redef NSM::keep_log_streams += { Conn::LOG, DNS::LOG, SSL::LOG };
 ##!
@@ -22,6 +22,7 @@
 @load ../detections/detection_log
 @load ../detections/evidence_log
 @load ../detections/exceptions
+@load ../asset-id
 
 module NSM;
 
@@ -33,6 +34,7 @@ export {
         NSM::DETECTION_LOG,
         NSM::EVIDENCE_LOG,
         NSM::EXCEPTION_LOG,
+        AssetID::LOG,
         Notice::LOG,
         CaptureLoss::LOG,
         LoadedScripts::LOG,
@@ -45,6 +47,7 @@ export {
         [NSM::DETECTION_LOG]  = "/log/zeek/nsm_detection",
         [NSM::EVIDENCE_LOG]   = "/log/zeek/evidence",
         [NSM::EXCEPTION_LOG]  = "/log/zeek/nsm_exception",
+        [AssetID::LOG]        = "/log/zeek/asset_signal",
         [Notice::LOG]         = "/hdd_tmp/log/zeek/notice",
         [CaptureLoss::LOG]    = "/hdd_tmp/log/zeek/capture_loss",
         [LoadedScripts::LOG]  = "/hdd_tmp/log/zeek/loadedscripts",
