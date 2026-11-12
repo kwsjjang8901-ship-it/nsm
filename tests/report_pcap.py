@@ -670,21 +670,26 @@ function drawGraph(s,steps){
  const ci=Object.keys(cols).map(Number).sort((a,b)=>a-b);
  const firstSeen=ip=>steps.findIndex(x=>(x.d.attacker&&x.d.attacker.ip)===ip||x.d.victims.some(v=>v.ip===ip)||('grp:'+x.k)===ip);
  ci.forEach(c=>cols[c].sort((p,q)=>((node[p].ext?1:0)-(node[q].ext?1:0))||(firstSeen(p)-firstSeen(q))));
- const maxN=Math.max(...ci.map(c=>cols[c].length)),H=Math.max(140,maxN*(NH+RG)+24),pos={};
- ci.forEach((c,i)=>{const a=cols[c],tot=a.length*(NH+RG)-RG,y0=Math.max(18,(H-tot)/2);a.forEach((ip,j)=>pos[ip]={x:P+i*(NW+CG),y:y0+j*(NH+RG)})});
+ // 대상 없는 탐지 번호는 상자 안 부제 아래 줄에 8개씩(최대 3줄, 넘으면 +N). 번호가 있는 상자만 그만큼 높인다
+ const BPR=8,BMAX=24,nloc=ip=>(local[ip]||[]).length,brows=ip=>Math.ceil(Math.min(nloc(ip),BMAX)/BPR),hgt=ip=>NH+(nloc(ip)?6+brows(ip)*24:0);
+ const colH=c=>cols[c].reduce((t,ip)=>t+hgt(ip),0)+RG*(cols[c].length-1);
+ const H=Math.max(140,Math.max(...ci.map(colH))+36),pos={};
+ ci.forEach((c,i)=>{let y=Math.max(18,(H-colH(c))/2);cols[c].forEach(ip=>{pos[ip]={x:P+i*(NW+CG),y,h:hgt(ip)};y+=hgt(ip)+RG})});
  const W=P+ci.length*(NW+CG)-CG+P,g=[],nb=[],pairN={};
  edges.forEach(e=>{const A=pos[e.a],B=pos[e.b],cls='st'+stIdx(e.x.d.stages),cand=e.x.c?'':' cand',key=e.a+'>'+e.b,n=pairN[key]=(pairN[key]||0)+1,off=(n-1)*14;
   let d,lx,ly;
   if(B.x>A.x){const x1=A.x+NW,y1=A.y+NH/2+off,x2=B.x,y2=B.y+NH/2+off,mx=(x1+x2)/2;d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2-5},${y2}`;lx=x2-20-(n-1)*20;ly=y2}
-  else{const x1=A.x+NW/2+off,y1=B.y>A.y?A.y+NH:A.y,x2=B.x+NW/2+off,y2=B.y>A.y?B.y:B.y+NH,dy=B.y>A.y?28:-28;d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2-Math.sign(dy)*5}`;lx=(x1+x2)/2;ly=(y1+y2)/2}
+  else{const x1=A.x+NW/2+off,y1=B.y>A.y?A.y+A.h:A.y,x2=B.x+NW/2+off,y2=B.y>A.y?B.y:B.y+B.h,dy=B.y>A.y?28:-28;d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2-Math.sign(dy)*5}`;lx=(x1+x2)/2;ly=(y1+y2)/2}
   g.push(`<path class="ln ${cls}${cand}" d="${d}"/>`);nb.push({x:e.x,lx,ly})});
  Object.keys(pos).forEach(ip=>{const p=pos[ip],n=node[ip]||{ip},cls=ip===seed?' seed':n.grp?' grp':n.ext?' ext':'';
-  g.push(`<rect class="node${cls}" x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="8"/>`);
+  g.push(`<rect class="node${cls}" x="${p.x}" y="${p.y}" width="${NW}" height="${p.h}" rx="8"/>`);
   if(n.grp)g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">외 ${n.grp}대</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${n.ext?'외부':'내부'} 대상(번호의 탐지 참고)</text>`);
   else{const l=L[ip]||n,nm=l.ext?ip:(l.name||l.asset||ip);
-   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,(local[ip]||[]).length?Math.max(12,24-3*Math.min(4,(local[ip]||[]).length)):30))}</text>`)}
+   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,30))}</text>`)}
   if(ip===seed)g.push(`<text class="mt" x="${p.x}" y="${p.y-6}">시작</text>`);
-  (local[ip]||[]).slice(0,7).forEach((x,i)=>nb.push({x,lx:p.x+NW-14-i*22,ly:p.y+NH-13}))});
+  const lc=local[ip]||[],shown=lc.length>BMAX?lc.slice(0,BMAX-1):lc;
+  shown.forEach((x,i)=>nb.push({x,lx:p.x+21+(i%BPR)*22,ly:p.y+NH+8+Math.floor(i/BPR)*24}));
+  if(lc.length>BMAX)g.push(`<text class="mt" x="${p.x+12+(BMAX-1)%BPR*22}" y="${p.y+NH+12+Math.floor((BMAX-1)/BPR)*24}">+${lc.length-BMAX+1}</text>`)});
  nb.forEach(o=>g.push(`<g class="nb st${stIdx(o.x.d.stages)}${o.x.c?'':' cand'}" data-k="${o.x.k}"><circle cx="${o.lx}" cy="${o.ly}" r="9"/><text x="${o.lx}" y="${o.ly+3.6}" text-anchor="middle">${o.x.k}</text></g>`));
  const el=document.getElementById('storygraph');el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="확산 경로">${g.join('')}</svg>`;
  el.querySelectorAll('g.nb').forEach(c=>{const x=steps.find(y=>y.k===+c.dataset.k);c.onclick=()=>jump(x.k);c.onmousemove=e=>showTip(e,tipHtml(x));c.onmouseleave=hideTip});
