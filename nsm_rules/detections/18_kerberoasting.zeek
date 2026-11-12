@@ -25,6 +25,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -61,11 +62,20 @@ redef record connection += {
 ## 사전인증으로 인정하는 PA-DATA 유형: PA-ENC-TIMESTAMP(2), PA-FX-FAST(136, 사전인증이 FAST 안에 암호화됨)
 const krb_preauth_padata: set[count] = { 2, 136 };
 
-function krb_roast_target(c: connection): bool
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
     {
-    if ( c$id$orig_h in krb_roast_allowlist )
-        return F;
+    if ( |krb_roast_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:krb_roast_allowlist",
+            [$scope=set("Kerberoasting", "ASREP_Roasting"), $src=krb_roast_allowlist]);
+    }
+
+function krb_roast_target(c: connection, note: Notice::Type): bool
+    {
     if ( krb_roast_local_kdc_only && ! Site::is_local_addr(c$id$resp_h) )
+        return F;
+    # 예외(예외 파일 + 기존 krb_roast_allowlist). 집계 전 판정
+    if ( NSM::exception_drop_agg(note, c) )
         return F;
     return T;
     }
@@ -136,7 +146,7 @@ event krb_tgs_response(c: connection, msg: KRB::KDC_Response)
         return;
     if ( krb_roast_excluded_services in to_lower(msg$ticket$service_name) )
         return;
-    if ( ! krb_roast_target(c) )
+    if ( ! krb_roast_target(c, Kerberoasting) )
         return;
 
     local spn = to_lower(msg$ticket$service_name);
@@ -177,7 +187,7 @@ event krb_as_response(c: connection, msg: KRB::KDC_Response)
     local weak = msg$enc_part$cipher in krb_weak_ciphers;
     if ( asrep_require_weak_cipher && ! weak )
         return;
-    if ( ! krb_roast_target(c) )
+    if ( ! krb_roast_target(c, ASREP_Roasting) )
         return;
 
     local cipher = weak ? krb_weak_ciphers[msg$enc_part$cipher] : cat(msg$enc_part$cipher);

@@ -15,6 +15,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -86,17 +87,27 @@ event zeek_init()
     ]);
     }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |host_scan_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:host_scan_allowlist",
+            [$scope=set("Host_Scan"), $src=host_scan_allowlist]);
+    }
+
 function observe_host_scan(c: connection, failed: bool)
     {
     if ( ! detect_host_scan )
         return;
     if ( host_scan_local_only && ! Site::is_local_addr(c$id$orig_h) )
         return;
-    if ( c$id$orig_h in host_scan_allowlist )
-        return;
+    # 80·443·53 기본 제외는 탐지 정의라 룰에 둔다
     if ( c$id$resp_p in host_scan_exclude_ports )
         return;
     if ( ! failed && ! host_scan_count_established )
+        return;
+    # 예외(예외 파일 + 기존 host_scan_allowlist). 집계 전 판정
+    if ( NSM::exception_drop_agg(Host_Scan, c) )
         return;
 
     # (src, dst_port) 그룹에 목적지 host 를 관측 -> 고유 host 수 집계

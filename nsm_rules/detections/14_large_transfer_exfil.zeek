@@ -26,6 +26,7 @@
 @load base/protocols/conn/thresholds
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -111,6 +112,12 @@ function vol_report(c: connection)
     local prev = vol_reported[c$uid];
     if ( cur <= prev )
         return;
+    # 예외(예외 파일): 허용한 백업·동기화 목적지 등. 맞으면 이 연결은 더 세지 않는다
+    if ( NSM::exception_drop_agg(Exfil_Volume_Aggregate, c) )
+        {
+        delete vol_reported[c$uid];
+        return;
+        }
     SumStats::observe("nsm.exfil", [$host=c$id$orig_h], [$num=cur - prev]);
     vol_reported[c$uid] = cur;
     }

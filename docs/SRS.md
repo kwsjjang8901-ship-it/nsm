@@ -184,7 +184,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 주체: `src` = 스캐너, `dst` = 대상 host.
 - 집계·억제: (출발지, 목적지)별 고유 목적지 포트 수(SumStats UNIQUE). 임계를 넘는 순간 탐지하고, 같은 (스캐너, 대상)은 5분 억제합니다.
-- 제외·오탐 통제: 내부 출발지만(`port_scan_local_only`), 예외 출발지 `port_scan_allowlist`, 제외 포트 `port_scan_exclude_ports`. 성공한 연결을 세지 않아 서버 여러 포트를 정상으로 쓰는 클라이언트는 걸리지 않습니다.
+- 제외·오탐 통제: 내부 출발지만(`port_scan_local_only`), 예외 출발지 `port_scan_allowlist`, 제외 포트 `port_scan_exclude_ports`. 성공한 연결을 세지 않아 서버 여러 포트를 정상으로 쓰는 클라이언트는 걸리지 않습니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 트래픽이 많아 탐지 시점에 요약 1행만 남깁니다.
 
 ##### 호스트 스캔 (`Host_Scan`, T1018) · 02_host_scan
@@ -197,7 +197,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 주체: `src` = 스캐너.
 - 집계·억제: (출발지, 목적지 포트)별 고유 목적지 host 수. 임계 즉시 탐지, (스캐너, 포트) 단위 5분 억제.
-- 제외·오탐 통제: 80·443·53(TCP·UDP)은 기본 제외(`host_scan_exclude_ports`). 웹·DNS는 정상적으로 많은 목적지로 갑니다. 예외 출발지 `host_scan_allowlist`.
+- 제외·오탐 통제: 80·443·53(TCP·UDP)은 기본 제외(`host_scan_exclude_ports`). 웹·DNS는 정상적으로 많은 목적지로 갑니다. 예외 출발지 `host_scan_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 탐지 시점 요약 1행.
 
 #### 4.3.2 초기 침투
@@ -248,7 +248,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 - `ntlm.log`의 `success`는 SPNEGO 결과로만 채워집니다. SMB 서버는 실패 시 보안 버퍼 없이 상태 코드만 돌려주므로, SMB 실패는 상태 코드로 직접 판정합니다.
 - 주체: `src` = 스프레이 출발지. 대상 서버는 근거에 남깁니다.
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
-- 제외·오탐 통제: 내부 서버 대상만(`ntlm_spray_local_servers_only`), 익명(null session) 제외, 예외 출발지 `ntlm_spray_allowlist`(인증 프록시·VDI 게이트웨이). 대소문자만 바꾼 같은 계정은 1개로 셉니다.
+- 제외·오탐 통제: 내부 서버 대상만(`ntlm_spray_local_servers_only`), 익명(null session) 제외, 예외 출발지 `ntlm_spray_allowlist`(인증 프록시·VDI 게이트웨이). 대소문자만 바꾼 같은 계정은 1개로 셉니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, 대상 서버, 실패 결과(상태 코드 이름) 표본.
 
 ##### Kerberos 패스워드 스프레이 (`Kerberos_Spray`, T1110.003) · 17_kerberos_spray
@@ -264,7 +264,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 
 - 주체: `src` = 시도 출발지. KDC와 계정은 근거에 남깁니다.
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
-- 제외·오탐 통제: 코드 25(PREAUTH_REQUIRED)와 TGS 오류는 세지 않습니다. 내부 KDC만(`krb_spray_local_kdc_only`), 예외 출발지 `krb_spray_allowlist`.
+- 제외·오탐 통제: 코드 25(PREAUTH_REQUIRED)와 TGS 오류는 세지 않습니다. 내부 KDC만(`krb_spray_local_kdc_only`), 예외 출발지 `krb_spray_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, KDC, 결과 코드 이름 표본.
 
 ##### Kerberos 무차별 대입 (`Kerberos_Bruteforce`, T1110.001) · 17_kerberos_spray
@@ -277,7 +277,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 
 - 주체: `src` = 시도 출발지.
 - 집계·억제: (출발지, 계정)별 실패 횟수, 임계 즉시 탐지, (출발지, 계정) 단위 1시간 억제.
-- 제외·오탐 통제: 스프레이와 같은 예외. 없는 계정(6)과 만료(23)는 비밀번호 추측이 아니라서 세지 않습니다.
+- 제외·오탐 통제: 스프레이와 같은 예외. 없는 계정(6)과 만료(23)는 비밀번호 추측이 아니라서 세지 않습니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, KDC, 결과 코드 표본.
 
 ##### Kerberoasting (`Kerberoasting`, T1558.003) · 18_kerberoasting
@@ -292,7 +292,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 
 - 주체: `src` = 티켓 요청 출발지, `dst` = KDC.
 - 집계·억제: 출발지별 고유 SPN 수, 임계 즉시 탐지, 1시간 억제.
-- 제외·오탐 통제: `krbtgt/`·`kadmin/`은 제외(`krb_roast_excluded_services`). 내부 KDC만, 예외 출발지 `krb_roast_allowlist`(레거시 RC4 서비스를 많이 쓰는 서버). AES를 강제한 환경에서는 RC4 티켓 자체가 드뭅니다.
+- 제외·오탐 통제: `krbtgt/`·`kadmin/`은 제외(`krb_roast_excluded_services`). 내부 KDC만, 예외 출발지 `krb_roast_allowlist`(레거시 RC4 서비스를 많이 쓰는 서버). AES를 강제한 환경에서는 RC4 티켓 자체가 드뭅니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: SPN, KDC, 암호 이름, 요청 계정 표본.
 
 ##### AS-REP Roasting (`ASREP_Roasting`, T1558.004) · 18_kerberoasting
@@ -306,7 +306,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 
 - 주체: `src` = 요청 출발지, `dst` = KDC.
 - 집계·억제: 단건. (출발지, 계정) 단위 1시간 억제.
-- 제외·오탐 통제: PKINIT(스마트카드) 사전인증은 Zeek의 `pa_data`에 나타나지 않아 사전인증 없음으로 보입니다. 그래서 AES 응답은 제외합니다(`asrep_require_weak_cipher = T`). 예외 출발지는 Kerberoasting과 공유합니다.
+- 제외·오탐 통제: PKINIT(스마트카드) 사전인증은 Zeek의 `pa_data`에 나타나지 않아 사전인증 없음으로 보입니다. 그래서 AES 응답은 제외합니다(`asrep_require_weak_cipher = T`). 예외 출발지는 Kerberoasting과 공유합니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, KDC, 암호 이름, uid.
 
 ##### 외부 NTLM 인증 (`NTLM_Credential_Leak`, T1187) · 19_outbound_smb
@@ -336,7 +336,7 @@ Windows는 DNS로 못 찾은 이름을 LLMNR·NBT-NS로 묻고, Responder·Invei
 - 응답자 = 응답 패킷의 출발 주소(연결 방향과 무관, `get_current_packet_header`). LLMNR 유니캐스트 응답은 Zeek가 서버 포트 기준으로 방향을 뒤집으므로 `resp_p = 5355`로 들어옵니다.
 - 주체: `src` = 응답자(공격 host).
 - 집계·억제: 응답자별 고유 "프로토콜·이름" 수, 임계 즉시 탐지, 1시간 억제.
-- 제외·오탐 통제: mDNS 서비스 광고(PTR/SRV/TXT)는 한 장비가 여러 이름을 정상적으로 내므로 제외(A/AAAA만). NBNS는 A·NB·AAAA·ANY 질의만 셉니다. WINS 서버 등은 `poisoning_allowlist`.
+- 제외·오탐 통제: mDNS 서비스 광고(PTR/SRV/TXT)는 한 장비가 여러 이름을 정상적으로 내므로 제외(A/AAAA만). NBNS는 A·NB·AAAA·ANY 질의만 셉니다. WINS 서버 등은 `poisoning_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 응답한 이름과 피해 질의 host. `lm_targets` = 피해 host(상관 연동). 멀티캐스트·브로드캐스트로 보낸 응답은 질의 host를 알 수 없어 비워 둡니다.
 
 ##### DCSync (`DCSync`, T1003.006) · 23_dcsync
@@ -367,7 +367,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 
 - 주체: `src` = 확산 기점 host. `lm_targets` = 피해 host 집합.
 - 집계·억제: 출발지별 고유 목적지 host 수. 창이 끝날 때 1회 판정(창당 1건).
-- 제외·오탐 통제: `IPC$`(`exclude_ipc_share`)와 `PRINT$`(`smb_lm_exclude_shares`) 제외. SCCM·백업·AV 관리 서버는 `smb_lm_allowlist`에 등록하는 것이 핵심입니다(20번의 `lm_mgmt_allowlist`와 별개라 둘 다 등록).
+- 제외·오탐 통제: `IPC$`(`exclude_ipc_share`)와 `PRINT$`(`smb_lm_exclude_shares`) 제외. SCCM·백업·AV 관리 서버는 `smb_lm_allowlist`에 등록하는 것이 핵심입니다(20번의 `lm_mgmt_allowlist`와 별개라 둘 다 등록). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 표본 목적지마다 1행. 계정은 아직 채우지 않습니다.
 
 ##### RDP 확산 (`RDP_Lateral`, T1021.001) · 15_rdp_lateral
@@ -381,7 +381,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정(창당 1건).
-- 제외·오탐 통제: 내부 → 내부만(외부에서 들어오는 RDP는 성격이 달라 제외). 점프 서버·IT 관리자 PC·원격지원 서버는 `rdp_lm_allowlist`.
+- 제외·오탐 통제: 내부 → 내부만(외부에서 들어오는 RDP는 성격이 달라 제외). 점프 서버·IT 관리자 PC·원격지원 서버는 `rdp_lm_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 목적지와 계정 표본.
 
 ##### SSH 확산 (`SSH_Lateral`, T1021.004) · 16_ssh_lateral
@@ -408,7 +408,7 @@ PowerShell Remoting, evil-winrm, CrackMapExec winrm은 WinRM으로 원격 명령
 
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정(창당 1건).
-- 제외·오탐 통제: 내부 → 내부만. SCCM·모니터링·Ansible·점프 서버는 원격 관리를 대량으로 하므로 `lm_mgmt_allowlist` 등록이 필수입니다.
+- 제외·오탐 통제: 내부 → 내부만. SCCM·모니터링·Ansible·점프 서버는 원격 관리를 대량으로 하므로 `lm_mgmt_allowlist` 등록이 필수입니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 표본 목적지마다 1행.
 
 ##### DCOM 확산 (`DCOM_Lateral`, T1021.003) · 20_winrm_dcom_lateral
@@ -422,7 +422,7 @@ MMC20.Application·ShellWindows를 이용한 원격 실행(dcomexec)과 원격 W
 
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: WinRM과 같음.
-- 제외·오탐 통제: 같은 인터페이스의 다른 호출은 세지 않습니다. 관리 서버는 `lm_mgmt_allowlist`.
+- 제외·오탐 통제: 같은 인터페이스의 다른 호출은 세지 않습니다. 관리 서버는 `lm_mgmt_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 표본 목적지마다 1행.
 
 #### 4.3.5 C2
@@ -578,7 +578,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 - 집계는 페이로드 기준이라 다운로드 때 내부 PC가 보내는 ACK 헤더는 외부 전송량에 들어가지 않습니다.
 - 주체: `src` = 유출 host.
 - 집계·억제: host별 바이트 합계(SumStats SUM), 임계 즉시 탐지, 5분 억제.
-- 제외·오탐 통제: 내부 → 외부 TCP만.
+- 제외·오탐 통제: 내부 → 외부 TCP만. 허용한 백업·동기화 목적지는 예외 파일(5.4절)로 빼며, 예외에 맞은 연결은 더 세지 않습니다.
 - 근거: 자기완결적 1행(합계, 창).
 
 ##### 외부향 SMB (`Outbound_SMB`, T1048) · 19_outbound_smb
@@ -607,7 +607,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 
 - 주체: `src` = 파일을 바꾼 출발지(감염 host). `lm_targets` = 파일 서버 집합.
 - 집계·억제: 출발지별 확장자가 바뀐 고유 파일 수와 노트를 만든 고유 폴더 수. 둘 중 하나라도 임계에 닿으면 즉시 탐지, 1시간 억제.
-- 제외·오탐 통제: Office 저장 과정의 임시 파일(`~`로 시작, `.tmp`)과 확장자가 그대로인 이름 변경은 제외. 백업·동기화·DLP·아카이빙 서버는 `ransomware_allowlist`. SMB3 암호화 세션과 덮어쓰기·대량 삭제형 랜섬웨어는 보지 못합니다(10장).
+- 제외·오탐 통제: Office 저장 과정의 임시 파일(`~`로 시작, `.tmp`)과 확장자가 그대로인 이름 변경은 제외. 백업·동기화·DLP·아카이빙 서버는 `ransomware_allowlist`. SMB3 암호화 세션과 덮어쓰기·대량 삭제형 랜섬웨어는 보지 못합니다(10장). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 이름 변경 전후 파일명, 노트 경로 표본.
 
 ## 5. 공통 기능 요구사항
@@ -715,7 +715,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 클러스터 | 매니저만 파일을 읽고 워커·프록시로 배포한다. 늦게 붙은 노드에도 보낸다. 적재 결과는 매니저가, 적중 수는 판정한 노드가 기록한다 |
 | 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
 | 킬체인 상관 | `suppress`로 표시된 탐지는 상관에 넣지 않는다(이후 단계에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정) |
-| 이관 현황 | 건별 룰 03·04·09·10·12·19·23·24와 집계형 16을 이관했다. 나머지 집계형·도메인 기반 룰은 기존 allowlist로 동작하며 순차 이관한다 |
+| 이관 현황 | 건별 룰(03·04·09·10·12·19·23·24)과 집계형 룰(01·02·05·06·14·15·16·17·18·20·21·22)을 이관했다. 도메인 기반 룰(07·08·13)은 기존 allowlist로 동작하며 다음에 이관한다 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -857,12 +857,12 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `port_scan_threshold` | 25 | (출발지, 목적지)별 고유 포트 수 | 오탐이 많으면 올림 |
 | `port_scan_local_only` | T | 내부 출발지만 봄 | 외부 스캔도 보려면 F |
 | `port_scan_count_established` | F | F면 미응답·거부된 시도만 셈 | T면 민감해지지만 오탐 증가 |
-| `port_scan_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너) | custom에 기록 |
-| `port_scan_exclude_ports` | 비어 있음 | 세지 않을 포트 |  |
+| `port_scan_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `port_scan_exclude_ports` | 비어 있음 | 세지 않을 포트 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `host_scan_threshold` | 25 | (출발지, 포트)별 고유 호스트 수 |  |
 | `host_scan_local_only` | T | 내부 출발지만 |  |
 | `host_scan_count_established` | F | 01과 같음 |  |
-| `host_scan_allowlist` | 비어 있음 | 예외 출발지(자산 관리·모니터링 서버) | custom에 기록 |
+| `host_scan_allowlist` | 비어 있음 | 예외 출발지(자산 관리·모니터링 서버) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `host_scan_exclude_ports` | 80/tcp, 443/tcp, 53/tcp, 53/udp | 웹·DNS처럼 자연스럽게 여러 호스트로 가는 포트 제외 |  |
 
 #### 03 SQL Injection · 04 웹쉘 (web_common.zeek)
@@ -882,7 +882,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ntlm_interval` | 10min | 집계 창 |  |
 | `ntlm_user_threshold` | 10 | 출발지별 인증 실패 고유 계정 수 | 계정 잠금 정책보다 낮게 |
 | `ntlm_spray_local_servers_only` | T | 내부 서버 대상 인증만 |  |
-| `ntlm_spray_allowlist` | 비어 있음 | 예외 출발지(인증 프록시·VDI) | custom에 기록 |
+| `ntlm_spray_allowlist` | 비어 있음 | 예외 출발지(인증 프록시·VDI) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `ntlm_failure_statuses` | NTSTATUS 12종(LOGON_FAILURE, WRONG_PASSWORD, ACCOUNT_LOCKED_OUT 등) | 실패로 보는 SMB 상태 코드 |  |
 
 #### 06 SMB 관리 공유 · 15 RDP · 16 SSH 확산
@@ -892,7 +892,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `smb_lm_epoch` / `rdp_lm_epoch` / `ssh_lm_epoch` | 1min | 집계 창 |  |
 | `smb_lm_thresholds` | vector(2.0, 3.0) (룰 3.0) | 첫 값 = 고유 피해 호스트 임계 | psexec 1대도 잡으려면 1.0 |
 | `rdp_lm_thresholds` / `ssh_lm_thresholds` | vector(3.0, 5.0, 10.0) | 첫 값 = 고유 목적지 임계 |  |
-| `smb_lm_allowlist` / `rdp_lm_allowlist` / `ssh_lm_allowlist` | 비어 있음 | 예외 출발지(SCCM·백업·점프 서버) | custom에 기록. `ssh_lm_allowlist`는 예외 엔진의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `smb_lm_allowlist` / `rdp_lm_allowlist` / `ssh_lm_allowlist` | 비어 있음 | 예외 출발지(SCCM·백업·점프 서버) | custom에 기록. 세 설정 모두 예외 엔진의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `exclude_ipc_share` | T | `IPC$` 는 세지 않음 |  |
 | `smb_lm_exclude_shares` | `PRINT$` | 세지 않을 숨김 공유 |  |
 | `ssh_lm_min_orig_bytes` / `ssh_lm_min_duration` | 1000 / 0.05sec | SSH 판정 최소 바이트·지속 시간(즉시 끊긴 연결 제외) |  |
@@ -973,7 +973,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `krb_spray_user_threshold` | 10 | 출발지별 실패 고유 계정 수 |  |
 | `krb_bruteforce_threshold` | 20 | (출발지, 계정)별 비밀번호 실패 횟수 | 계정 잠금 정책(예: 5회)보다 높으면 잠금 후에야 탐지되므로 낮춤 검토 |
 | `krb_spray_local_kdc_only` | T | 내부 KDC 대상만 |  |
-| `krb_spray_allowlist` | 비어 있음 | 예외 출발지(계정 점검 도구·인증 게이트웨이) | custom에 기록 |
+| `krb_spray_allowlist` | 비어 있음 | 예외 출발지(계정 점검 도구·인증 게이트웨이) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `krb_failure_codes` | 6, 18, 23, 24 | 스프레이로 세는 KRB-ERROR 코드 | 25(사전인증 요구)는 넣지 말 것 |
 | `krb_bruteforce_codes` | 18, 24 | 무차별 대입으로 세는 코드 |  |
 
@@ -984,7 +984,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `krb_roast_interval` | 10min | 집계 창 |  |
 | `krb_roast_service_threshold` | 5 | 출발지별 약한 암호 서비스 티켓의 고유 SPN 수 | AES 강제 환경이면 2\~3으로 낮춰도 오탐이 적음 |
 | `krb_roast_local_kdc_only` | T | 내부 KDC 응답만 |  |
-| `krb_roast_allowlist` | 비어 있음 | 예외 출발지(레거시 RC4 서비스를 대량 쓰는 서버) |  |
+| `krb_roast_allowlist` | 비어 있음 | 예외 출발지(레거시 RC4 서비스를 대량 쓰는 서버) | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `krb_weak_ciphers` | 1, 3(DES), 23, 24(RC4) | 약한 암호로 보는 Kerberos 암호 번호 |  |
 | `krb_roast_excluded_services` | `/^(krbtgt\|kadmin)\//` | 집계에서 빼는 SPN |  |
 | `asrep_require_weak_cipher` | T | T면 RC4·DES AS-REP만 탐지 | F면 사전인증 없는 AS-REP 전부(스마트카드 로그온 오탐 가능) |
@@ -1004,7 +1004,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `lm_mgmt_epoch` | 5min | 집계 창 |  |
 | `winrm_lm_threshold` / `dcom_lm_threshold` | 3 / 3 | 고유 내부 목적지 수 | 1로 낮추면 단일 원격 실행도 탐지(오탐 증가) |
 | `winrm_ports` | 5985/tcp, 5986/tcp | WinRM 포트 |  |
-| `lm_mgmt_allowlist` | 비어 있음 | 관리 서버(SCCM·모니터링·Ansible·점프) | **custom에 필수 기록** |
+| `lm_mgmt_allowlist` | 비어 있음 | 관리 서버(SCCM·모니터링·Ansible·점프) | **custom에 필수 기록**. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 21 랜섬웨어성 SMB
 
@@ -1014,7 +1014,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ransomware_rename_threshold` | 30 | 확장자가 바뀐 이름 변경의 고유 파일 수 |  |
 | `ransomware_note_threshold` | 5 | 랜섬 노트를 만든 고유 폴더 수 |  |
 | `ransomware_note_names` | readme·decrypt·restore 등 조합 패턴 | 랜섬 노트 파일명(소문자, 확장자 txt·html·hta·rtf) | 새 랜섬웨어 노트 이름 추가 시 재정의 |
-| `ransomware_allowlist` | 비어 있음 | 예외 출발지(백업·동기화·DLP·아카이빙) | custom에 기록 |
+| `ransomware_allowlist` | 비어 있음 | 예외 출발지(백업·동기화·DLP·아카이빙) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 22 LLMNR/NBT-NS/mDNS 포이즈닝
 
@@ -1024,7 +1024,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `poisoning_name_threshold` | 5 | 응답자별 긍정 응답한 고유 이름 수 |  |
 | `poisoning_ports` | 137/udp=nbns, 5353/udp=mdns, 5355/udp=llmnr | 감시 포트 |  |
 | `poisoning_qtypes` | 1, 28, 32, 255 | NBNS에서 세는 질의 유형(A·AAAA·NB·ANY) |  |
-| `poisoning_allowlist` | 비어 있음 | 예외 응답자(WINS 서버) |  |
+| `poisoning_allowlist` | 비어 있음 | 예외 응답자(WINS 서버) | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 23 DCSync
 
@@ -1154,7 +1154,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 47개 — 룰·계약·선별 전송·예외 엔진 테스트 41개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| btest | 48개 — 룰·계약·선별 전송·예외 엔진 테스트 42개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1194,7 +1194,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
-| 예외 엔진 이관이 건별 룰과 16만 끝남 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
+| 예외 엔진 이관이 도메인 기반 룰(07·08·13)만 남음 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
 | 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |

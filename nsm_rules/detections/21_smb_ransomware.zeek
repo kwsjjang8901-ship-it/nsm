@@ -19,6 +19,7 @@
 @load base/protocols/smb
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -132,9 +133,18 @@ event zeek_init()
     ]);
     }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |ransomware_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:ransomware_allowlist",
+            [$scope=set("SMB_Ransomware"), $src=ransomware_allowlist]);
+    }
+
 function ransomware_target(c: connection): bool
     {
-    return c$id$orig_h !in ransomware_allowlist;
+    # 예외(예외 파일 + 기존 ransomware_allowlist): 백업·동기화·DLP 서버 등. 집계 전 판정
+    return ! NSM::exception_drop_agg(SMB_Ransomware, c);
     }
 
 event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, dst_filename: string)

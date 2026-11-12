@@ -25,6 +25,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -150,6 +151,14 @@ event zeek_init()
     }
 
 ## RDP 연결 시도를 "관측" + 증적 1행 적재 (NOTICE 는 SumStats 가 담당)
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |rdp_lm_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:rdp_lm_allowlist",
+            [$scope=set("RDP_Lateral"), $src=rdp_lm_allowlist]);
+    }
+
 function observe_rdp(c: connection, cookie: string)
     {
     if ( ! detect_rdp_lateral )
@@ -161,7 +170,8 @@ function observe_rdp(c: connection, cookie: string)
     # 내부간 이동만: 로컬 src -> 로컬 dst
     if ( src !in Site::local_nets || dst !in Site::local_nets )
         return;
-    if ( src in rdp_lm_allowlist )
+    # 예외(예외 파일 + 기존 rdp_lm_allowlist). 집계 전 판정이라 (출발지, 목적지) 쌍 예외도 된다
+    if ( NSM::exception_drop_agg(RDP_Lateral, c) )
         return;
 
     # 관측만 한다. 증적은 탐지 시점(threshold_crossed)에서 표본으로 적재한다.

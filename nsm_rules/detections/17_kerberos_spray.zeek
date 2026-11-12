@@ -22,6 +22,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -53,10 +54,16 @@ redef record connection += {
     nsm_krb_as_client: string &optional;
 };
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |krb_spray_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:krb_spray_allowlist",
+            [$scope=set("Kerberos_Spray", "Kerberos_Bruteforce"), $src=krb_spray_allowlist]);
+    }
+
 function krb_spray_target(c: connection): bool
     {
-    if ( c$id$orig_h in krb_spray_allowlist )
-        return F;
     if ( krb_spray_local_kdc_only && ! Site::is_local_addr(c$id$resp_h) )
         return F;
     return T;
@@ -203,11 +210,19 @@ event krb_error(c: connection, msg: KRB::Error_Msg)
     local result = krb_failure_codes[msg$error_code];
     local sample = cat(acct, "|", c$id$resp_h, "|", result);
 
-    # 표본을 먼저 넣는다(임계 판정이 다음 observe 에서 즉시 일어날 수 있다).
-    SumStats::observe("nsm.krb_spray.sample", [$host=src], [$str=sample]);
-    SumStats::observe("nsm.krb_spray", [$host=src], [$str=acct]);
+    # 예외(예외 파일 + 기존 krb_spray_allowlist). 스프레이·무차별 대입을 따로 판정한다(범위가 다를 수 있음)
+    local brute = msg$error_code in krb_bruteforce_codes;
+    local skip_spray = NSM::exception_drop_agg(Kerberos_Spray, c);
+    local skip_brute = brute && NSM::exception_drop_agg(Kerberos_Bruteforce, c);
 
-    if ( msg$error_code in krb_bruteforce_codes )
+    # 표본을 먼저 넣는다(임계 판정이 다음 observe 에서 즉시 일어날 수 있다).
+    if ( ! skip_spray )
+        {
+        SumStats::observe("nsm.krb_spray.sample", [$host=src], [$str=sample]);
+        SumStats::observe("nsm.krb_spray", [$host=src], [$str=acct]);
+        }
+
+    if ( brute && ! skip_brute )
         {
         SumStats::observe("nsm.krb_brute.sample", [$host=src, $str=acct], [$str=sample]);
         SumStats::observe("nsm.krb_brute", [$host=src, $str=acct], [$num=1]);

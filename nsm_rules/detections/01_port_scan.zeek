@@ -16,6 +16,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -92,15 +93,25 @@ event zeek_init()
     ]);
     }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |port_scan_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:port_scan_allowlist",
+            [$scope=set("Port_Scan"), $src=port_scan_allowlist]);
+    if ( |port_scan_exclude_ports| > 0 )
+        NSM::exception_add_legacy("legacy:port_scan_exclude_ports",
+            [$scope=set("Port_Scan"), $dst_port=port_scan_exclude_ports]);
+    }
+
 function observe_port_scan(c: connection, failed: bool)
     {
     if ( ! detect_port_scan )
         return;
     if ( port_scan_local_only && ! Site::is_local_addr(c$id$orig_h) )
         return;
-    if ( c$id$orig_h in port_scan_allowlist )
-        return;
-    if ( c$id$resp_p in port_scan_exclude_ports )
+    # 예외(예외 파일 + 기존 port_scan_allowlist·port_scan_exclude_ports). 집계 전 판정
+    if ( NSM::exception_drop_agg(Port_Scan, c) )
         return;
     # 성공 연결 제외 옵션: 미응답/거부(failed)만 카운트
     if ( ! failed && ! port_scan_count_established )
