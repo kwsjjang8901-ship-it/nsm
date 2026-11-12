@@ -18,6 +18,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -32,18 +33,29 @@ export {
     const outbound_smb_allowed_dsts: set[subnet] = {} &redef;
 }
 
-function outbound_smb_target(c: connection): bool
+function outbound_smb_target(c: connection, note: Notice::Type): bool
     {
     if ( ! Site::is_local_addr(c$id$orig_h) || Site::is_local_addr(c$id$resp_h) )
         return F;
-    if ( c$id$orig_h in outbound_smb_allowlist || c$id$resp_h in outbound_smb_allowed_dsts )
+    # 예외(예외 파일 + 기존 outbound_smb_allowlist·outbound_smb_allowed_dsts)
+    if ( NSM::exception_drop(note, c) )
         return F;
     return T;
     }
 
+event zeek_init()
+    {
+    if ( |outbound_smb_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:outbound_smb_allowlist",
+            [$scope=set("Outbound_SMB", "NTLM_Credential_Leak"), $src=outbound_smb_allowlist]);
+    if ( |outbound_smb_allowed_dsts| > 0 )
+        NSM::exception_add_legacy("legacy:outbound_smb_allowed_dsts",
+            [$scope=set("Outbound_SMB", "NTLM_Credential_Leak"), $dst=outbound_smb_allowed_dsts]);
+    }
+
 event connection_established(c: connection)
     {
-    if ( c$id$resp_p !in outbound_smb_ports || ! outbound_smb_target(c) )
+    if ( c$id$resp_p !in outbound_smb_ports || ! outbound_smb_target(c, Outbound_SMB) )
         return;
 
     local eid = cat(c$id$orig_h, "|outbound-smb|", c$id$resp_h, "|", c$uid);
@@ -71,7 +83,7 @@ event connection_established(c: connection)
 
 event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
     {
-    if ( ! outbound_smb_target(c) )
+    if ( ! outbound_smb_target(c, NTLM_Credential_Leak) )
         return;
 
     local user = request?$user_name ? request$user_name : "";

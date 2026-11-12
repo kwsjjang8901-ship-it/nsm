@@ -77,7 +77,7 @@ function sqli_report(c: connection, where: string, method: string, raw: string)
 event http_request(c: connection, method: string, original_URI: string,
                    unescaped_URI: string, version: string)
     {
-    if ( ! web_attack_target(c) )
+    if ( ! web_attack_target(c, SQL_Injection) )
         return;
     if ( sqli_patterns in web_normalize(original_URI) )
         sqli_report(c, "uri", method, original_URI);
@@ -92,7 +92,7 @@ event http_entity_data(c: connection, is_orig: bool, length: count, data: string
         return;
     if ( c$http$method != "POST" && c$http$method != "PUT" )
         return;
-    if ( ! web_attack_target(c) )
+    if ( ! web_attack_target(c, SQL_Injection) )
         return;
     if ( ! web_body_budget(c, length) )
         return;

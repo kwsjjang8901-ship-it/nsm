@@ -16,6 +16,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -32,6 +33,10 @@ event connection_state_remove(c: connection)
          is_external(c$id$resp_h) &&
          c$orig$size > exfil_bytes_threshold )
         {
+        # 예외(예외 파일). 백업·동기화처럼 허용한 대용량 전송은 목적지·도메인 축으로 뺀다.
+        if ( NSM::exception_drop(Exfil_Large_Transfer, c) )
+            return;
+
         local mb = c$orig$size / (1024.0 * 1024.0);
         # service 는 버전에 따라 set[string] 이므로 cat() 으로 안전하게 문자열화.
         local svc = (c?$conn && c$conn?$service) ? cat(c$conn$service) : "-";

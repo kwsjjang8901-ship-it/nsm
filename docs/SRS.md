@@ -214,7 +214,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 주체: `src` = 공격 출발지, `dst` = 대상 웹서버.
 - 집계·억제: 단건. (출발지, 서버) 단위 10분 억제.
-- 제외·오탐 통제: 내부 웹서버로 들어오는 요청만(`web_attack_local_servers_only`). 내부 사용자의 외부 사이트 요청은 보지 않습니다. 주석·구문 종료 문자 단독(`#`, `--`)과 `select ... from` 단독 패턴은 검색어 오탐 때문에 넣지 않았습니다. 취약점 스캐너·모의해킹 장비는 `web_attack_allowlist`.
+- 제외·오탐 통제: 내부 웹서버로 들어오는 요청만(`web_attack_local_servers_only`). 내부 사용자의 외부 사이트 요청은 보지 않습니다. 주석·구문 종료 문자 단독(`#`, `--`)과 `select ... from` 단독 패턴은 검색어 오탐 때문에 넣지 않았습니다. 취약점 스캐너·모의해킹 장비는 예외로 뺍니다(기존 `web_attack_allowlist`, 출발지). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 요청 줄 시점에는 Host 헤더가 없어 `domain` 축은 맞지 않습니다.
 - 근거: 매칭 위치(uri·body), 메서드, 원문 앞부분, uid.
 
 ##### 웹쉘 접근 (`Webshell_Access`, T1505.003) · 04_webshell
@@ -320,7 +320,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 
 - 주체: `src` = 내부 출발지, `dst` = 외부 서버.
 - 집계·억제: 단건. (출발지, 목적지, 계정) 단위 1시간 억제.
-- 제외·오탐 통제: 익명 인증은 해시가 없어 제외. 협력사 파일 서버 등 허용 목적지 `outbound_smb_allowed_dsts`, 예외 출발지 `outbound_smb_allowlist`.
+- 제외·오탐 통제: 익명 인증은 해시가 없어 제외. 협력사 파일 서버 등 허용 목적지(기존 `outbound_smb_allowed_dsts`), 예외 출발지(기존 `outbound_smb_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, 포트, 워크스테이션 이름, uid.
 
 ##### LLMNR/NBT-NS/mDNS 포이즈닝 (`Name_Poisoning`, T1557.001) · 22_name_poisoning
@@ -352,7 +352,7 @@ DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터�
 - DRSUAPI는 동적 RPC 포트를 쓰지만 Zeek의 DCE-RPC DPD 서명으로 포트와 무관하게 해석됩니다. 패킷 프라이버시로 스텁이 암호화돼도 바인드의 UUID와 요청의 opnum은 평문입니다.
 - 주체: `src` = 복제를 요청한 출발지, `dst` = 대상 DC.
 - 집계·억제: 단건. (출발지, DC) 단위 1시간 억제.
-- 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 `dcsync_allowlist`. 클러스터에서는 DC 학습이 워커별이라 DC 목록을 설정에 적는 것을 권장합니다.
+- 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 예외로 뺍니다(기존 `dcsync_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). DC 목록(`dcsync_domain_controllers`)은 예외가 아니라 탐지 조건이라 그대로 설정에 둡니다. 클러스터에서는 DC 학습이 워커별이라 DC 목록을 설정에 적는 것을 권장합니다.
 - 근거: 포트, 대상이 알려진 DC인지, 스텁 길이, uid.
 
 #### 4.3.4 확산
@@ -504,7 +504,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - SSH는 Zeek가 NEWKEYS(키 교환 완료) 시점에 확인합니다.
 - 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
 - 집계·억제: 단건. (출발지, 목적지, 포트, 프로토콜) 단위 1시간 억제.
-- 제외·오탐 통제: 표에 없는 프로토콜은 검사하지 않습니다. 허용 포트 `nonstd_port_allowed_ports`, 허용 목적지 `nonstd_port_allowed_dsts`, 예외 출발지 `nonstd_port_allowlist`.
+- 제외·오탐 통제: 표에 없는 프로토콜은 검사하지 않습니다. 허용 포트·목적지·출발지(기존 `nonstd_port_allowed_ports`·`nonstd_port_allowed_dsts`·`nonstd_port_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 프로토콜, 포트, uid.
 
 ##### 장기 외부 연결 (`Long_Connection`, T1572) · 24_nonstd_port
@@ -518,7 +518,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 
 - 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
 - 집계·억제: 연결 중 실시간 단건. (출발지, 목적지, 포트) 단위로 기준 시간(6시간)만큼 억제.
-- 제외·오탐 통제: 메신저·VPN·클라우드 동기화는 `long_conn_allowed_dsts`·`long_conn_allowed_ports`·`long_conn_allowlist`. 환경에 따라 정상 장기 연결이 많아 초기 튜닝이 필요합니다.
+- 제외·오탐 통제: 메신저·VPN·클라우드 동기화는 예외로 뺍니다(기존 `long_conn_allowed_dsts`·`long_conn_allowed_ports`·`long_conn_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 예외는 임계를 넘는 시점에 판정하므로 서비스·SNI 축도 쓸 수 있습니다. 환경에 따라 정상 장기 연결이 많아 초기 튜닝이 필요합니다.
 - 근거: 기준 시간, 포트, 서비스, 양방향 바이트.
 
 #### 4.3.6 유출
@@ -548,7 +548,7 @@ DNS 터널링과 같은 방식으로 데이터를 서브도메인에 실어 내�
 
 - 주체: `src` = 유출 host, `dst` = 외부 목적지.
 - 집계·억제: 연결 종료 시 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 → 외부만. 연결이 끝나야 판정하므로 장기 연결은 14번이 보완합니다.
+- 제외·오탐 통제: 내부 → 외부만. 연결이 끝나야 판정하므로 장기 연결은 14번이 보완합니다. 백업·동기화처럼 허용한 대용량 전송은 예외 파일(5.4절)로 뺍니다.
 - 근거: 전송량(MB), 서비스, uid(`conn.log`와 바로 조인).
 
 ##### 클라우드 업로드 유출 (`Exfil_Web_Upload`, T1567.002) · 12_web_upload_exfil
@@ -563,7 +563,7 @@ DNS 터널링과 같은 방식으로 데이터를 서브도메인에 실어 내�
 - 같은 전송에 10·14번도 함께 뜰 수 있습니다. 12번은 "어느 서비스로"가 식별된 더 구체적인 근거입니다.
 - 주체: `src` = 유출 host.
 - 집계·억제: 연결 종료 시 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 서비스를 식별하지 못하면 판정하지 않습니다. 예외 출발지 `web_upload_allowlist`. `cloud_hosts`의 `*.amazonaws.com` 등이 넓어 백업·CI 트래픽 오탐 가능성이 있습니다(10장).
+- 제외·오탐 통제: 서비스를 식별하지 못하면 판정하지 않습니다. 예외 목적지(기존 `web_upload_allowlist`, 코드상 목적지 판정). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). `cloud_hosts`의 `*.amazonaws.com` 등이 넓어 백업·CI 트래픽 오탐 가능성이 있습니다(10장).
 - 근거: 서비스 이름, 전송량.
 
 ##### 호스트 단위 볼륨 유출 (`Exfil_Volume_Aggregate`, T1041) · 14_large_transfer_exfil
@@ -591,7 +591,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 
 - 주체: `src` = 내부 출발지, `dst` = 외부 서버.
 - 집계·억제: 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: SYN만 나가고 막힌 시도는 세지 않습니다(연결 성립 기준). 허용 목적지 `outbound_smb_allowed_dsts`, 예외 출발지 `outbound_smb_allowlist`.
+- 제외·오탐 통제: SYN만 나가고 막힌 시도는 세지 않습니다(연결 성립 기준). 허용 목적지·예외 출발지는 NTLM 인증 유출과 같은 예외를 씁니다. 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 포트, uid.
 
 #### 4.3.7 영향
@@ -715,7 +715,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 클러스터 | 매니저만 파일을 읽고 워커·프록시로 배포한다. 늦게 붙은 노드에도 보낸다. 적재 결과는 매니저가, 적중 수는 판정한 노드가 기록한다 |
 | 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
 | 킬체인 상관 | `suppress`로 표시된 탐지는 상관에 넣지 않는다(이후 단계에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정) |
-| 이관 현황 | 09(건별)·16(집계형)을 이관했다. 나머지 룰은 기존 allowlist로 동작하며 순차 이관한다 |
+| 이관 현황 | 건별 룰 03·04·09·10·12·19·23·24와 집계형 16을 이관했다. 나머지 집계형·도메인 기반 룰은 기존 allowlist로 동작하며 순차 이관한다 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -870,7 +870,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `web_attack_local_servers_only` | T | 내부 웹서버로 들어오는 요청만 검사 | 외부 사이트 요청까지 보면 오탐 급증 |
-| `web_attack_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너·모의해킹) | custom에 기록 |
+| `web_attack_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너·모의해킹) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `web_attack_body_max` | 4096 | 연결당 본문 검사 바이트 | 업로드가 많은 환경에서는 줄여 부하 감소 |
 | `sqli_patterns` | SQL 구문 시그니처 12종 | 정규화(URL 2회 디코딩·소문자) 된 입력에 적용 | 추가 시 `= ... \| /새패턴/`으로 전체 재정의 |
 | `webshell_uri_patterns` / `webshell_body_patterns` | 웹쉘 파일명·명령·China Chopper 서명 | 위와 같음 | 위와 같음 |
@@ -940,7 +940,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `exfil_bytes_threshold` | 50*1024*1024 (룰 100MB) | \[10\] 단일 연결 업로드 바이트 | 백업 환경에서는 올림 |
 | `webupload_bytes` | 50*1024*1024 | \[12\] 클라우드 업로드 바이트 |  |
 | `cloud_hosts` | Google Drive·Dropbox·S3 등 패턴 | \[12\] 클라우드 저장소 호스트 |  |
-| `web_upload_allowlist` | 비어 있음 | \[12\] 예외 출발지 |  |
+| `web_upload_allowlist` | 비어 있음 | \[12\] 예외 목적지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `exfil_epoch` | 1min | \[14\] 집계 창 |  |
 | `exfil_thresholds` | vector(50.0*1024*1024) (룰 5MB) | \[14\] 호스트당 합계 임계 |  |
 | `exfil_volume_step` | 1024\*1024 | \[14\] 실시간 집계 단위(1MB) |  |
@@ -994,8 +994,8 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `outbound_smb_ports` | 445/tcp, 139/tcp | SMB 서비스 포트 |  |
-| `outbound_smb_allowlist` | 비어 있음 | 예외 출발지 |  |
-| `outbound_smb_allowed_dsts` | 비어 있음 | 허용한 외부 SMB 서버(협력사 파일 서버) | custom에 기록 |
+| `outbound_smb_allowlist` | 비어 있음 | 예외 출발지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `outbound_smb_allowed_dsts` | 비어 있음 | 허용한 외부 SMB 서버(협력사 파일 서버) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 20 WinRM · DCOM 확산
 
@@ -1032,17 +1032,17 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | --- | --- | --- | --- |
 | `dcsync_domain_controllers` | 비어 있음 | DC 주소 목록 | **custom에 필수 기록**(클러스터에서는 자동 학습이 워커별로 따로 이뤄짐) |
 | `dcsync_learn_dcs` | T | Kerberos 응답(AS-REP·TGS-REP)을 보낸 내부 호스트를 DC로 학습 | DC 목록을 정확히 적었으면 F도 가능 |
-| `dcsync_allowlist` | 비어 있음 | 복제 권한을 정상 사용하는 서버(Azure AD Connect) | custom에 기록 |
+| `dcsync_allowlist` | 비어 있음 | 복제 권한을 정상 사용하는 서버(Azure AD Connect) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 24 비표준 포트 · 장기 연결
 
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `nonstd_port_standard` | http: 80·8080·8000·8008·8888·3128 / ssl: 443·8443·993·995·465·587·636·853·989·990·5061·3389·25·143·110 / ssh: 22 | 프로토콜별 표준 포트 | 포트 추가는 아래 허용 포트 사용 권장 |
-| `nonstd_port_allowed_ports` | 비어 있음 | 사내에서 허용한 외부 포트 | `+= { 8081/tcp }` |
-| `nonstd_port_allowed_dsts` / `nonstd_port_allowlist` | 비어 있음 | 허용 외부 서비스 / 예외 출발지 |  |
+| `nonstd_port_allowed_ports` | 비어 있음 | 사내에서 허용한 외부 포트 | `+= { 8081/tcp }`. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `nonstd_port_allowed_dsts` / `nonstd_port_allowlist` | 비어 있음 | 허용 외부 서비스 / 예외 출발지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `long_conn_duration` | 6hr | 장기 연결 기준 시간 | 오탐이 많으면 12hr 등으로 늘림 |
-| `long_conn_allowed_dsts` / `_ports` / `long_conn_allowlist` | 비어 있음 | VPN·메신저·클라우드 동기화 예외 | 초기 운영 시 튜닝 필요 |
+| `long_conn_allowed_dsts` / `_ports` / `long_conn_allowlist` | 비어 있음 | VPN·메신저·클라우드 동기화 예외 | 초기 운영 시 튜닝 필요. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 
@@ -1154,7 +1154,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 46개 — 룰·계약·선별 전송·예외 엔진 테스트 40개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| btest | 47개 — 룰·계약·선별 전송·예외 엔진 테스트 41개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1194,7 +1194,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
-| 예외 엔진 이관이 09·16만 끝남 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
+| 예외 엔진 이관이 건별 룰과 16만 끝남 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
 | 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |
