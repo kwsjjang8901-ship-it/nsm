@@ -51,6 +51,11 @@ function sqli_report(c: connection, where: string, method: string, raw: string)
     local eid = sqli_evidence_id(c);
 
     # 근거를 NOTICE 보다 먼저 적재한다(detection 의 evidence_count 산출 시점).
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, "sqli");
+    if ( NSM::notice_suppressed(SQL_Injection, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, where) )
         NSM::write_evidence([
             $ts=network_time(),
@@ -68,7 +73,7 @@ function sqli_report(c: connection, where: string, method: string, raw: string)
             $msg=fmt("Possible SQL Injection in %s: %s %s", where, method,
                      c?$http && c$http?$uri ? c$http$uri : "<uri?>"),
             $sub=sub_bytes(raw, 1, 256),
-            $identifier=cat(c$id$orig_h, c$id$resp_h, "sqli"),
+            $identifier=nid,
             $suppress_for=10min,
             $evidence_id=eid]);
     }

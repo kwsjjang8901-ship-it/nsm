@@ -60,6 +60,11 @@ event connection_established(c: connection)
 
     local eid = cat(c$id$orig_h, "|outbound-smb|", c$id$resp_h, "|", c$uid);
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, "outbound-smb");
+    if ( NSM::notice_suppressed(Outbound_SMB, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, "conn") )
         NSM::write_evidence([
             $ts=network_time(),
@@ -76,7 +81,7 @@ event connection_established(c: connection)
             $conn=c,
             $msg=fmt("Outbound SMB connection to external host: %s -> %s:%s",
                      c$id$orig_h, c$id$resp_h, c$id$resp_p),
-            $identifier=cat(c$id$orig_h, c$id$resp_h, "outbound-smb"),
+            $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
     }
@@ -93,6 +98,11 @@ event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
         user = cat(request$domain_name, "\\", user);
 
     local eid = cat(c$id$orig_h, "|ntlm-leak|", c$id$resp_h, "|", c$uid);
+
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, to_lower(user), "ntlm-leak");
+    if ( NSM::notice_suppressed(NTLM_Credential_Leak, nid) )
+        return;
 
     if ( NSM::evidence_is_new(eid, user) )
         NSM::write_evidence([
@@ -113,7 +123,7 @@ event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
             $msg=fmt("NTLM credentials sent to external host: %s -> %s:%s (account %s)",
                      c$id$orig_h, c$id$resp_h, c$id$resp_p, user),
             $sub=user,
-            $identifier=cat(c$id$orig_h, c$id$resp_h, to_lower(user), "ntlm-leak"),
+            $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
     }

@@ -94,6 +94,11 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
 
     local eid = cat(c$id$orig_h, "|nonstd-port|", c$id$resp_h, "|", c$uid);
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, p, proto, "nonstd-port");
+    if ( NSM::notice_suppressed(Nonstandard_Port, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, proto) )
         NSM::write_evidence([
             $ts=network_time(),
@@ -111,7 +116,7 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
             $msg=fmt("%s on non-standard port to external host: %s -> %s:%s",
                      to_upper(proto), c$id$orig_h, c$id$resp_h, p),
             $sub=fmt("protocol=%s port=%s", proto, p),
-            $identifier=cat(c$id$orig_h, c$id$resp_h, p, proto, "nonstd-port"),
+            $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
     }
@@ -137,6 +142,11 @@ event ConnThreshold::duration_threshold_crossed(c: connection, threshold: interv
     local rb = c$resp$size;
     local svc = |c$service| > 0 ? join_string_set(c$service, ",") : "-";
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, c$id$resp_p, "long-conn");
+    if ( NSM::notice_suppressed(Long_Connection, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, "duration") )
         NSM::write_evidence([
             $ts=network_time(),
@@ -155,7 +165,7 @@ event ConnThreshold::duration_threshold_crossed(c: connection, threshold: interv
             $msg=fmt("Long-lived external connection: %s -> %s:%s open for %s or more",
                      c$id$orig_h, c$id$resp_h, c$id$resp_p, threshold),
             $sub=fmt("service=%s orig_bytes=%d resp_bytes=%d", svc, ob, rb),
-            $identifier=cat(c$id$orig_h, c$id$resp_h, c$id$resp_p, "long-conn"),
+            $identifier=nid,
             $suppress_for=threshold,
             $evidence_id=eid]);
     }

@@ -102,6 +102,11 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
 
     local eid = cat(src, "|dcsync|", c$id$resp_h, "|", c$uid);
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(src, c$id$resp_h, "dcsync");
+    if ( NSM::notice_suppressed(DCSync, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, "DRSGetNCChanges") )
         NSM::write_evidence([
             $ts=network_time(),
@@ -119,7 +124,7 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
             $conn=c,
             $msg=fmt("Possible DCSync: non-DC host %s requested directory replication (DRSGetNCChanges) from %s",
                      src, c$id$resp_h),
-            $identifier=cat(src, c$id$resp_h, "dcsync"),
+            $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
     }

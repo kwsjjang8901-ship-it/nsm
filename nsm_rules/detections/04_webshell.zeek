@@ -60,6 +60,11 @@ function webshell_report(c: connection, where: string, method: string, raw: stri
     {
     local eid = webshell_evidence_id(c);
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(c$id$orig_h, c$id$resp_h, "webshell");
+    if ( NSM::notice_suppressed(Webshell_Access, nid) )
+        return;
+
     if ( NSM::evidence_is_new(eid, where) )
         NSM::write_evidence([
             $ts=network_time(),
@@ -77,7 +82,7 @@ function webshell_report(c: connection, where: string, method: string, raw: stri
             $msg=fmt("Possible webshell access (%s): %s %s", where, method,
                      c?$http && c$http?$uri ? c$http$uri : "<uri?>"),
             $sub=sub_bytes(raw, 1, 256),
-            $identifier=cat(c$id$orig_h, c$id$resp_h, "webshell"),
+            $identifier=nid,
             $suppress_for=10min,
             $evidence_id=eid]);
     }

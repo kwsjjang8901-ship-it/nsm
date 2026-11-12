@@ -12,3 +12,5 @@
 # @TEST-EXEC: assert-rows ssl.log eq 1 id.orig_h=10.0.0.75 sni_matches_cert=T
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.C2.EncryptedChannel attacker=10.0.0.70
 # @TEST-EXEC: assert-evidence-join NSM::Encrypted_C2
+# 억제 창 안의 두 번째 세션(.70)은 notice 가 버려지므로 근거도 남지 않는다(탐지 1건 = 근거 1행)
+# @TEST-EXEC: assert-rows evidence.log eq 1 note=NSM::Encrypted_C2 src=10.0.0.70
