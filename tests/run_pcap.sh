@@ -11,8 +11,8 @@
 #               자산 리포트(report.html·report.txt·assets.csv)를 만든다(리졸버는 이 저장소에 없다).
 #     -z ARGS   zeek 에 넘길 추가 인자. 예) -z "AssetID::suppress_interval=30min"
 #
-#   요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
-#   로그 원문은 출력 디렉터리에 그대로 남는다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
+#   화면 요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
+#   출력 디렉터리의 report.html(통합 리포트: 탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
@@ -57,7 +57,7 @@ if command -v zeek > /dev/null 2>&1; then
     [ "${major:-0}" -ge 8 ] && use_docker=0
 fi
 
-echo "[1/2] Zeek 실행: $PCAP"
+echo "[1/3] Zeek 실행: $PCAP"
 start=$(date +%s)
 # shellcheck disable=SC2086
 if [ "$use_docker" -eq 0 ]; then
@@ -160,19 +160,27 @@ print(f"[전송량] Manager 로 가는 로그 {total:,} 바이트 = 선별 전�
 print(f"         센서 로컬 로그(notice·stats 등) {local_b:,} 바이트")
 if span >= 600:
     day = total * 86400 / span
-    print(f"         하루 환산(단순 비례) 약 {day/1e6:,.1f} MB/일  ※ 캡처 구간이 짧으면 요약 로그 때문에 과대평가됨")
+    unit = f"{day/1e9:,.2f} GB" if day >= 1e9 else f"{day/1e6:,.1f} MB" if day >= 1e6 else f"{day/1e3:,.1f} KB"
+    print(f"         하루 환산(단순 비례) 약 {unit}/일  ※ 캡처 구간이 짧으면 요약 로그 때문에 과대평가됨")
 PY
 
+REPORT_ARGS=()
 if [ -n "$RESOLVER_DIR" ]; then
     echo
-    echo "[2/2] 자산 판정(claudtest2 리졸버)"
+    echo "[2/3] 자산 판정(claudtest2 리졸버)"
+    [ -f "$ZDIR/asset_signal.log" ] || touch "$ZDIR/asset_signal.log"
     python3 "$RESOLVER_DIR/tools/asset_resolver.py" "$ZDIR/asset_signal.log" -o "$OUT/asset_report" -z "$ZDIR" -q
     echo "      자산 리포트: $OUT/asset_report/report.html (report.txt, assets.csv)"
+    REPORT_ARGS=(--assets "$OUT/asset_report/assets.json" --asset-report asset_report/report.html)
 else
     echo
-    echo "[2/2] 자산 판정: 건너뜀(-r <claudtest2 경로> 를 주면 자산 리포트를 만든다)"
+    echo "[2/3] 자산 판정: 건너뜀(-r <claudtest2 경로> 를 주면 자산 단위로 묶는다)"
 fi
 echo
+echo "[3/3] 통합 리포트"
+python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$OUT/report.html" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
+echo
 echo "결과: $OUT"
+echo "  - report.html    통합 리포트(탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
