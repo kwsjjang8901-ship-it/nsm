@@ -5,6 +5,7 @@
 @load base/protocols/http
 @load base/utils/site
 @load ./main
+@load ./exceptions
 
 module NSM;
 
@@ -13,14 +14,15 @@ export {
     ## 검색어·게시글에 SQL 문법이 섞여 오탐이 크고 보호 대상도 아니다.
     const web_attack_local_servers_only = T &redef;
 
-    ## 예외 출발지(사내 취약점 스캐너·모의해킹 장비 등).
+    ## 예외 출발지(사내 취약점 스캐너·모의해킹 장비 등). 예외 엔진에 drop 예외로 등록된다(호환).
+    ##   새 예외는 예외 파일(docs/SRS.md 7.8절)에 SQL_Injection·Webshell_Access 범위로 쓴다.
     const web_attack_allowlist: set[subnet] = {} &redef;
 
     ## 본문 검사 최대 바이트(요청당). 대용량 업로드 본문 전체를 정규식에 넣지 않는다.
     const web_attack_body_max = 4096 &redef;
 
-    ## 이 연결의 요청을 검사할지.
-    global web_attack_target: function(c: connection): bool;
+    ## 이 연결의 요청을 note 탐지로 검사할지(내부 웹서버 대상, 예외 엔진 판정).
+    global web_attack_target: function(c: connection, note: Notice::Type): bool;
 
     ## URI·본문 정규화: URL 디코딩 2회(이중 인코딩 우회 대응), 폼 인코딩의 '+' -> 공백, 소문자.
     global web_normalize: function(s: string): string;
@@ -32,13 +34,21 @@ export {
 ## 연결(uid)별 이미 검사한 본문 바이트. (c$http$request_body_len 은 메시지가 끝나야 채워진다)
 global web_body_seen: table[string] of count &create_expire=10min &default=0;
 
-function web_attack_target(c: connection): bool
+function web_attack_target(c: connection, note: Notice::Type): bool
     {
-    if ( c$id$orig_h in web_attack_allowlist )
-        return F;
     if ( web_attack_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
         return F;
+    # 예외(예외 파일 + 기존 web_attack_allowlist). 요청 줄 시점에는 Host 헤더가 아직 없어 domain 축은 맞지 않는다.
+    if ( NSM::exception_drop(note, c) )
+        return F;
     return T;
+    }
+
+event zeek_init()
+    {
+    if ( |web_attack_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:web_attack_allowlist",
+            [$scope=set("SQL_Injection", "Webshell_Access"), $src=web_attack_allowlist]);
     }
 
 function web_normalize(s: string): string

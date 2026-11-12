@@ -85,7 +85,7 @@ function webshell_report(c: connection, where: string, method: string, raw: stri
 event http_request(c: connection, method: string, original_URI: string,
                    unescaped_URI: string, version: string)
     {
-    if ( ! web_attack_target(c) )
+    if ( ! web_attack_target(c, Webshell_Access) )
         return;
     if ( webshell_uri_patterns in web_normalize(original_URI) )
         webshell_report(c, "uri", method, original_URI);
@@ -97,7 +97,7 @@ event http_entity_data(c: connection, is_orig: bool, length: count, data: string
         return;
     if ( ! c?$http || ! c$http?$method || c$http$method != "POST" )
         return;
-    if ( ! web_attack_target(c) )
+    if ( ! web_attack_target(c, Webshell_Access) )
         return;
     if ( ! web_body_budget(c, length) )
         return;

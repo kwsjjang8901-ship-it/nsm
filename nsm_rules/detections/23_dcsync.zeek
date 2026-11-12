@@ -25,6 +25,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -61,6 +62,13 @@ function dcsync_learn(c: connection)
         add dcsync_learned_dcs[c$id$resp_h];
     }
 
+event zeek_init()
+    {
+    if ( |dcsync_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:dcsync_allowlist",
+            [$scope=set("DCSync"), $src=dcsync_allowlist]);
+    }
+
 event krb_as_response(c: connection, msg: KRB::KDC_Response)
     {
     dcsync_learn(c);
@@ -86,7 +94,10 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
         return;
 
     local src = c$id$orig_h;
-    if ( dcsync_is_dc(src) || src in dcsync_allowlist )
+    if ( dcsync_is_dc(src) )
+        return;
+    # 예외(예외 파일 + 기존 dcsync_allowlist): Azure AD Connect 등 복제 권한을 정상적으로 쓰는 서버
+    if ( NSM::exception_drop(DCSync, c) )
         return;
 
     local eid = cat(src, "|dcsync|", c$id$resp_h, "|", c$uid);

@@ -20,6 +20,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -30,6 +31,13 @@ export {
     const web_upload_allowlist: set[subnet] = {} &redef;
 }
 
+event zeek_init()
+    {
+    if ( |web_upload_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:web_upload_allowlist",
+            [$scope=set("Exfil_Web_Upload"), $dst=web_upload_allowlist]);
+    }
+
 event connection_state_remove(c: connection)
     {
     if ( ! detect_web_upload )
@@ -39,9 +47,10 @@ event connection_state_remove(c: connection)
     local resp = c$id$resp_h;
     if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
         return;
-    if ( resp in web_upload_allowlist )
-        return;
     if ( c$orig$size <= webupload_bytes )   # 업로드 바이트 임계 미달
+        return;
+    # 예외(예외 파일 + 기존 web_upload_allowlist). 축: 목적지, 도메인(SNI·Host) 등
+    if ( NSM::exception_drop(Exfil_Web_Upload, c) )
         return;
 
     # 목적지 서비스 식별: SNI(TLS) 우선, 없으면 HTTP Host

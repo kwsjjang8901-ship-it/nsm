@@ -20,6 +20,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -46,6 +47,29 @@ export {
     const long_conn_allowlist: set[subnet] = {} &redef;
 }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |nonstd_port_allowed_ports| > 0 )
+        NSM::exception_add_legacy("legacy:nonstd_port_allowed_ports",
+            [$scope=set("Nonstandard_Port"), $dst_port=nonstd_port_allowed_ports]);
+    if ( |nonstd_port_allowed_dsts| > 0 )
+        NSM::exception_add_legacy("legacy:nonstd_port_allowed_dsts",
+            [$scope=set("Nonstandard_Port"), $dst=nonstd_port_allowed_dsts]);
+    if ( |nonstd_port_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:nonstd_port_allowlist",
+            [$scope=set("Nonstandard_Port"), $src=nonstd_port_allowlist]);
+    if ( |long_conn_allowed_ports| > 0 )
+        NSM::exception_add_legacy("legacy:long_conn_allowed_ports",
+            [$scope=set("Long_Connection"), $dst_port=long_conn_allowed_ports]);
+    if ( |long_conn_allowed_dsts| > 0 )
+        NSM::exception_add_legacy("legacy:long_conn_allowed_dsts",
+            [$scope=set("Long_Connection"), $dst=long_conn_allowed_dsts]);
+    if ( |long_conn_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:long_conn_allowlist",
+            [$scope=set("Long_Connection"), $src=long_conn_allowlist]);
+    }
+
 function nsm_outbound(c: connection): bool
     {
     return Site::is_local_addr(c$id$orig_h) && ! Site::is_local_addr(c$id$resp_h);
@@ -62,9 +86,10 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
     if ( ! nsm_outbound(c) )
         return;
     local p = c$id$resp_p;
-    if ( p in nonstd_port_standard[proto] || p in nonstd_port_allowed_ports )
+    if ( p in nonstd_port_standard[proto] )
         return;
-    if ( c$id$resp_h in nonstd_port_allowed_dsts || c$id$orig_h in nonstd_port_allowlist )
+    # 예외(예외 파일 + 기존 nonstd_port_allowed_ports·_allowed_dsts·_allowlist)
+    if ( NSM::exception_drop(Nonstandard_Port, c) )
         return;
 
     local eid = cat(c$id$orig_h, "|nonstd-port|", c$id$resp_h, "|", c$uid);
@@ -95,15 +120,16 @@ event connection_established(c: connection)
     {
     if ( ! nsm_outbound(c) )
         return;
-    if ( c$id$resp_p in long_conn_allowed_ports || c$id$resp_h in long_conn_allowed_dsts
-         || c$id$orig_h in long_conn_allowlist )
-        return;
+    # 예외는 임계를 넘는 시점에 판정한다(그때는 서비스·SNI 등 축을 알 수 있다).
     ConnThreshold::set_duration_threshold(c, long_conn_duration);
     }
 
 event ConnThreshold::duration_threshold_crossed(c: connection, threshold: interval, is_orig: bool)
     {
     if ( threshold != long_conn_duration || ! nsm_outbound(c) )
+        return;
+    # 예외(예외 파일 + 기존 long_conn_allowed_ports·_allowed_dsts·_allowlist). VPN·메신저·클라우드 동기화 등
+    if ( NSM::exception_drop(Long_Connection, c) )
         return;
 
     local eid = cat(c$id$orig_h, "|long-conn|", c$id$resp_h, "|", c$uid);
