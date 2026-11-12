@@ -32,7 +32,8 @@ export {
     ## 수평 스캔 집계에서 기본 제외할 포트(정상 클라이언트 fan-out 이 잦은 포트).
     ## 80/443/53 은 웹/DNS 정상 다중접속이 많아 스윕 오탐의 주원인 -> 기본 제외.
     ## 445/22/3389 등 관리 포트 스윕은 그대로 탐지된다.
-    const host_scan_exclude_ports: set[port] = { 80/tcp, 443/tcp, 53/tcp, 53/udp } &redef;
+    # 7680/tcp: Windows 배달 최적화(업데이트를 내부 PC 끼리 나눠 받음)가 같은 대역 여러 대에 연결한다
+    const host_scan_exclude_ports: set[port] = { 80/tcp, 443/tcp, 53/tcp, 53/udp, 7680/tcp } &redef;
 }
 
 event zeek_init()
