@@ -30,6 +30,7 @@
 @load base/protocols/dns
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -215,6 +216,14 @@ event zeek_init()
     }
 
 ## DNS 응답에서 rcode 확인 (is_orig=F 가 응답 방향)
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |dga_allowlist_domains| > 0 )
+        NSM::exception_add_legacy("legacy:dga_allowlist_domains",
+            [$scope=set("DGA_Domain"), $domain=dga_allowlist_domains]);
+    }
+
 event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
     {
     if ( !detect_dga )
@@ -234,9 +243,11 @@ event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
             return;
         }
 
-    # 내부/신뢰 도메인 예외: 집계 전에 걸러 total/nx 비율에서 제외한다.
-    if ( c?$dns && c$dns?$query &&
-         NSM::domain_matches(c$dns$query, dga_allowlist_domains) )
+    # 예외(예외 파일 + 기존 dga_allowlist_domains): 집계 전에 걸러 total/nx 비율에서 제외한다.
+    local x = NSM::ExceptionCtx($src=c$id$orig_h, $dst=c$id$resp_h, $dst_port=c$id$resp_p);
+    if ( c?$dns && c$dns?$query && c$dns$query != "" )
+        x$domain = c$dns$query;
+    if ( NSM::exception_drop_ctx(DGA_Domain, x, T) )
         return;
 
     SumStats::observe("nsm.dga.total", [$host=c$id$orig_h], [$num=1]);

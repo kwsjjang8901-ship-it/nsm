@@ -93,6 +93,11 @@ export {
     ## 연결 없이 판정할 때(DNS 집계 등). agg 의미는 위와 같다.
     global exception_drop_ctx: function(note: Notice::Type, ctx: ExceptionCtx, agg: bool): bool;
 
+    ## 적중을 세지 않고 맞는 drop 예외 id 만 돌려준다(없으면 ""). 여러 탐지가 한 집계를 공유하는 룰용.
+    global exception_peek: function(note: Notice::Type, ctx: ExceptionCtx, agg: bool): string;
+    ## exception_peek 으로 찾은 예외의 적중을 1 센다.
+    global exception_count: function(id: string);
+
     ## 기존 redef 예외 목록 등록(룰 파일의 zeek_init 에서). 항상 drop, 검증 생략.
     global exception_add_legacy: function(id: string, r: ExceptionRec);
 
@@ -334,21 +339,34 @@ function count_hit(id: string)
     exc_last_hit[id] = network_time();
     }
 
-function exception_drop_ctx(note: Notice::Type, ctx: ExceptionCtx, agg: bool): bool
+function exception_peek(note: Notice::Type, ctx: ExceptionCtx, agg: bool): string
     {
     if ( note !in exc_index )
-        return F;
+        return "";
     for ( _i, e in exc_index[note] )
         {
         if ( e$suppress && ! ( agg && e$dst_side ) )
             next;
         if ( entry_matches(e, ctx) )
-            {
-            count_hit(e$id);
-            return T;
-            }
+            return e$id;
         }
-    return F;
+    return "";
+    }
+
+function exception_count(id: string)
+    {
+    count_hit(id);
+    }
+
+function exception_drop_ctx(note: Notice::Type, ctx: ExceptionCtx, agg: bool): bool
+    {
+    if ( note !in exc_index )
+        return F;
+    local id = exception_peek(note, ctx, agg);
+    if ( id == "" )
+        return F;
+    count_hit(id);
+    return T;
     }
 
 function exception_drop(note: Notice::Type, c: connection): bool
