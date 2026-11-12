@@ -26,6 +26,7 @@
 @load base/frameworks/cluster
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -84,6 +85,17 @@ function beacon_submit(obs: BeaconObs)
 @endif
     }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |beacon_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:beacon_allowlist",
+            [$scope=set("HTTP_Beaconing"), $dst=beacon_allowlist]);
+    if ( |beacon_allowlist_domains| > 0 )
+        NSM::exception_add_legacy("legacy:beacon_allowlist_domains",
+            [$scope=set("HTTP_Beaconing"), $domain=beacon_allowlist_domains]);
+    }
+
 # 워커(또는 standalone): HTTP 연결이 끝나면 관측값을 만들어 보낸다.
 event connection_state_remove(c: connection)
     {
@@ -97,7 +109,9 @@ event connection_state_remove(c: connection)
 
     if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
         return;                            # 내부 -> 외부 C2 방향만
-    if ( resp in beacon_allowlist )
+    # 예외(예외 파일 + 기존 beacon_allowlist·beacon_allowlist_domains). 워커에서 연결마다 판정해
+    #   예외 연결은 상태 보유 노드로 보내지 않는다. 연결이 끝난 시점이라 HTTP Host(domain 축)를 쓸 수 있다.
+    if ( NSM::exception_drop_agg(HTTP_Beaconing, c) )
         return;
 
     local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid);
@@ -178,15 +192,6 @@ event beacon_obs(obs: BeaconObs)
     if ( st$consecutive >= beacon_min_hits && ! st$fired )
         {
         local hoststr = obs$host;
-
-        # 도메인 예외(부분매칭): 신뢰 도메인으로의 비커닝은 발화하지 않음.
-        #   상태(st$fired)를 세워 이후 재평가도 스킵 -> 반복 오탐 억제.
-        if ( NSM::domain_matches(hoststr, beacon_allowlist_domains) )
-            {
-            st$fired = T;
-            beacons[orig, resp] = st;
-            return;
-            }
 
         st$fired = T;
         local eid_base = cat(orig, "|beacon|", resp);

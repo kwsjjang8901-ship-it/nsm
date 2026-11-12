@@ -167,7 +167,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 주체: notice의 `src`·`dst`를 무엇으로 정했는지. 킬체인 상관(5.1절)이 이 값으로 단계를 잇습니다.
 - 집계·억제: 무엇을 어떤 창에서 세는지, 같은 탐지를 얼마 동안 다시 내지 않는지.
-- 제외·오탐 통제: 무엇을 왜 빼는지, 예외로 등록하는 설정 이름.
+- 제외·오탐 통제: 무엇을 왜 빼는지. 룰에 남긴 탐지 정의(예: 80·443·53 제외)와, 예외 엔진(5.4절)에서 쓸 수 있는 축·기존 호환 설정 이름.
 - 근거: `evidence.log`에 남기는 내용과 상관용 피해 host(`lm_targets`).
 
 #### 4.3.1 정찰
@@ -440,7 +440,7 @@ MMC20.Application·ShellWindows를 이용한 원격 실행(dcomexec)과 원격 W
 - 클러스터에서는 같은 (출발지, 목적지)의 관측을 HRW 해시로 프록시 한 대(없으면 매니저)에 모아 판정합니다. 도착 순서가 뒤바뀐 과거 시각은 무시합니다.
 - 주체: `src` = 감염 host, `dst` = C2 서버.
 - 집계·억제: 상태 추적. 주기가 끊겼다가 다시 생기면 재탐지할 수 있고, 같은 (출발지, 목적지)는 30분 억제.
-- 제외·오탐 통제: 내부 → 외부 HTTP만(암호화 C2는 09). 3초보다 짧은 간격(한 페이지의 여러 객체)은 연속 횟수에 넣지 않습니다. 예외 목적지 `beacon_allowlist`, 도메인 예외 `beacon_allowlist_domains`(업데이트·텔레메트리).
+- 제외·오탐 통제: 내부 → 외부 HTTP만(암호화 C2는 09). 3초보다 짧은 간격(한 페이지의 여러 객체)은 연속 횟수에 넣지 않습니다. 예외 목적지 `beacon_allowlist`, 도메인 예외 `beacon_allowlist_domains`(업데이트·텔레메트리). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 워커에서 연결이 끝날 때 판정하므로 HTTP Host(`domain` 축)를 씁니다.
 - 근거: 기준 주기, 연속 횟수, Host, uid.
 
 ##### DNS 터널링 (`DNS_Tunneling`, T1071.004) · 08_dns_tunneling
@@ -455,7 +455,7 @@ DNS 터널(iodine, dnscat2 등)은 공격자 도메인의 서브도메인에 데
 
 - 주체: `src` = 감염 host.
 - 집계·억제: (출발지, 등록 도메인)별 전체 질의·수상한 질의·고유 서브도메인 수. 창 종료 시 판정, (출발지, 도메인) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 출발지만, 내부 재귀 리졸버 제외(`dns_tunnel_resolvers`), 역방향 조회 제외, 도메인 예외 `dns_tunnel_allowlist_domains`(기본: AV·스팸 평판 조회 도메인).
+- 제외·오탐 통제: 내부 출발지만, 내부 재귀 리졸버 제외(`dns_tunnel_resolvers`), 역방향 조회 제외, 도메인 예외 `dns_tunnel_allowlist_domains`(기본: AV·스팸 평판 조회 도메인). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 터널링과 DNS 유출은 같은 집계를 쓰므로, 두 탐지 모두에 걸리는 예외는 질의 단위로 집계 전에, 한 탐지에만 걸리는 예외는 창 판정 때 (출발지, 등록 도메인) 기준으로 거릅니다. 내부 리졸버 목록(`dns_tunnel_resolvers`)은 환경 사실이라 설정에 둡니다.
 - 근거: 수상한 질의 표본.
 
 ##### 암호화 C2 (`Encrypted_C2`, T1573.002) · 09_encrypted_c2
@@ -489,7 +489,7 @@ DGA 악성코드는 알고리즘으로 만든 도메인을 대량 조회하고, 
 
 - 주체: `src` = 감염 host.
 - 집계·억제: 출발지별 전체 응답·NXDOMAIN·무작위형 NXDOMAIN 수. 창 종료 시 판정, 1시간 억제.
-- 제외·오탐 통제: 6자 미만 라벨(wpad, dc01 등)은 무작위형으로 보지 않음, 역방향 조회 제외, 도메인 예외 `dga_allowlist_domains`(예외 도메인은 비율 계산에서도 뺌). 7자 이하 무작위 라벨은 판정력이 낮습니다(시뮬레이션 약 72%).
+- 제외·오탐 통제: 6자 미만 라벨(wpad, dc01 등)은 무작위형으로 보지 않음, 역방향 조회 제외, 도메인 예외 `dga_allowlist_domains`(예외 도메인은 비율 계산에서도 뺌). 7자 이하 무작위 라벨은 판정력이 낮습니다(시뮬레이션 약 72%). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 무작위형 NXDOMAIN 질의만 표본으로 남깁니다(질의, 점수, uid).
 
 ##### 비표준 포트 프로토콜 (`Nonstandard_Port`, T1571) · 24_nonstd_port
@@ -706,6 +706,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 판정 지점 | 룰 입구 한 곳. 룰은 예전에 allowlist를 검사하던 자리에서 `NSM::exception_drop(note, c)`(건별 룰) 또는 `NSM::exception_drop_agg(note, c)`(집계형 룰, 관측 직전)를 부른다 |
 | `drop`(기본) | 룰 입구에서 거른다. notice·근거·탐지 요약을 남기지 않는다(기존 allowlist와 같음) |
 | `suppress`(선택) | 탐지는 그대로 남기고 notice·탐지 요약에 `disposition=suppressed`, `exception_id`를 붙인다. Manager는 이 탐지로 알림을 올리지 않는다. 판정은 notice 필드(src·dst·포트, 연결이 있으면 SNI 등)로 한다 |
+| 집계를 공유하는 탐지(08 터널링·DNS 유출) | 두 탐지 모두에 걸리는 예외는 질의 단위로 집계 전에, 한 탐지에만 걸리는 예외는 창 판정 때 (출발지, 등록 도메인) 기준으로 거른다 |
 | 집계형 룰의 쌍 예외 | 목적지 쪽 축(dst·포트·서비스·도메인·JA4)이 있는 예외는 `suppress`여도 `drop`으로 동작한다. 집계된 notice 하나에 예외 경로와 아닌 경로가 섞이기 때문 |
 | 범위 | notice 이름(`SSH_Lateral`) 또는 상관 단계 묶음(`group:recon`, `c2`, `cred`, `domain`, `lateral`, `exfil`, `impact`, 5.1.1절과 같은 묶음) |
 | 축 | `src`, `dst`(대역), `dst_port`, `service`, `domain`(SNI·HTTP Host·DNS 질의, 하위 도메인 포함), `ja4`. 여러 축은 모두 맞아야 한다(AND) |
@@ -715,7 +716,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 클러스터 | 매니저만 파일을 읽고 워커·프록시로 배포한다. 늦게 붙은 노드에도 보낸다. 적재 결과는 매니저가, 적중 수는 판정한 노드가 기록한다 |
 | 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
 | 킬체인 상관 | `suppress`로 표시된 탐지는 상관에 넣지 않는다(이후 단계에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정) |
-| 이관 현황 | 건별 룰(03·04·09·10·12·19·23·24)과 집계형 룰(01·02·05·06·14·15·16·17·18·20·21·22)을 이관했다. 도메인 기반 룰(07·08·13)은 기존 allowlist로 동작하며 다음에 이관한다 |
+| 이관 현황 | 23개 룰 모두 이관했다(예외 설정이 없던 10·14 포함). 기존 `*_allowlist`는 호환용으로 남아 drop 예외로 등록되며 폐기 예정이다 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -782,7 +783,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 ## 7. 설정 요구사항
 
-룰 코드는 고치지 않고, 모든 임계값·토글·예외 목록을 설정 파일의 `redef` 한 줄로 바꿉니다. 배포 전에 **내부망(`Site::local_nets`)과 DC 목록은 반드시** 적어야 합니다.
+룰 코드는 고치지 않고, 임계값·토글은 설정 파일의 `redef` 한 줄로, **예외는 예외 파일(7.8절)로** 바꿉니다. 예외 파일은 재시작 없이 반영되고 사유·작성자·만료를 함께 남깁니다. 기존 `*_allowlist` `redef`는 호환을 위해 계속 동작하지만(drop 예외로 자동 등록) 폐기 예정이므로 새 예외에는 쓰지 않습니다. 배포 전에 **내부망(`Site::local_nets`)과 DC 목록은 반드시** 적어야 합니다.
 
 ### 7.1 설정 파일과 로드 순서
 
@@ -821,6 +822,8 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 주의: 문법이 하나라도 틀리면 Zeek가 기동하지 않습니다. 배포 전 `zeek -a /경로/nsm_rules`로 문법을 검사하세요(7.7절).
 
 ### 7.3 배포 전 필수·권장 설정
+
+표의 예외 항목(`*_allowlist` 등)은 같은 대상을 예외 파일(7.8절)에 등록하는 것을 권장합니다. 범위는 표의 설정이 쓰이는 탐지 이름(4.3절)이나 묶음(`group:lateral` 등)으로 씁니다.
 
 | 중요도 | 설정 | 안 하면 생기는 일 |
 | --- | --- | --- |
@@ -907,7 +910,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `beacon_min_hits` | 12 | 같은 주기 연속 콜백 횟수 | 패킷 손실 환경에서는 낮춤 검토 |
 | `beacon_max_missed` | 2 | 허용하는 누락 콜백 수 |  |
 | `beacon_expire` | 30min | 상태 만료 |  |
-| `beacon_allowlist` / `beacon_allowlist_domains` | 비어 있음 | 예외 출발지 / 도메인(업데이트·텔레메트리) | custom에 기록 |
+| `beacon_allowlist` / `beacon_allowlist_domains` | 비어 있음 | 예외 목적지 / 도메인(업데이트·텔레메트리) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 08 DNS 터널링·유출
 
@@ -920,7 +923,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `dnstun_label_len` / `dnstun_min_label_len` | 40 / 20 | 이 길이 이상 라벨 = 수상 / 무작위성 점수로 판정하는 최소 길이 |  |
 | `dnstun_local_only` | T | 내부 출발지만 |  |
 | `dns_tunnel_resolvers` | 비어 있음 | 내부 재귀 리졸버(출발지에서 제외) | **custom에 기록 권장** |
-| `dns_tunnel_allowlist_domains` | sophosxl.net, e5.sk, spamhaus.org 등 8개 | AV 평판·DNSBL 조회 도메인 | `+=`로 추가 |
+| `dns_tunnel_allowlist_domains` | sophosxl.net, e5.sk, spamhaus.org 등 8개 | AV 평판·DNSBL 조회 도메인 | `+=`로 추가. 터널링·유출 두 범위의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 09 암호화 C2
 
@@ -957,7 +960,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `dga_min_label_len` / `dga_label_min_score` | 6 / 2 | 무작위형 판정 최소 길이 / 최소 점수 |  |
 | `dga_vowel_ratio_max` / `dga_consonant_run_min` / `dga_entropy_norm_min` | 0.25 / 4 / 0.90 | 무작위형 점수 기준(모음 비율·연속 자음·엔트로피) |  |
 | `dga_exclude_reverse_dns` | T | 역방향 조회 제외 |  |
-| `dga_allowlist_domains` | 비어 있음 | 예외 도메인 |  |
+| `dga_allowlist_domains` | 비어 있음 | 예외 도메인 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
@@ -1154,7 +1157,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 48개 — 룰·계약·선별 전송·예외 엔진 테스트 42개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| btest | 49개 — 룰·계약·선별 전송·예외 엔진 테스트 43개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1194,14 +1197,18 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
-| 예외 엔진 이관이 도메인 기반 룰(07·08·13)만 남음 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
+| 기존 `*_allowlist` 설정이 호환용으로 남아 있음 | `redef`라 바꾸면 재시작이 필요하고 사유·만료를 남기지 못함 | 새 예외는 예외 파일로. 고객 설정을 예외 파일로 옮긴 뒤 다음 메이저 버전에서 제거 검토. 자산 그룹(E4), suppress의 상관 처리(E5) |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
 | 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |
 
-## 부록 A. 배포 설정 파일 예시 (nsm_config_custom.zeek)
+## 부록 A. 배포 설정 예시 (nsm_config_custom.zeek + 예외 파일)
 
-아래는 고객 한 곳에 배포할 때 쓰는 예시입니다. 주소·대역은 모두 가상 값이므로 고객 환경에 맞게 바꾸고, 쓰지 않는 항목은 지우거나 주석으로 둡니다. 저장소의 이 파일은 빈 채로 두고 배포본에만 작성합니다.
+아래는 고객 한 곳에 배포할 때 쓰는 예시입니다. 주소·대역은 모두 가상 값이므로 고객 환경에 맞게 바꾸고, 쓰지 않는 항목은 지우거나 주석으로 둡니다. 저장소의 `nsm_config_custom.zeek`는 빈 채로 두고 배포본에만 작성합니다.
+
+### A.1 nsm_config_custom.zeek
+
+탐지 조건에 들어가는 환경 사실(내부망, DC, 내부 리졸버)과 예외 파일 경로만 둡니다. 예외 자체는 A.2 예외 파일에 씁니다.
 
 ```zeek
 ##! nsm_config_custom.zeek — 고객: <고객명>, 작성일: <YYYY-MM-DD>
@@ -1214,37 +1221,14 @@ redef Site::local_nets += {
     192.168.0.0/16,
 };
 
-# ---------------------------------------------------------------- [필수] 도메인 컨트롤러 (23 DCSync)
+# ---------------------------------------------------------------- [필수] 도메인 컨트롤러 (23 DCSync 탐지 조건)
 redef NSM::dcsync_domain_controllers += { 10.0.0.10, 10.0.0.11 };
-redef NSM::dcsync_allowlist          += { 10.0.0.30/32 };   # Azure AD Connect
 
-# ---------------------------------------------------------------- [필수] 관리 서버 (06/15/16/20 확산)
-redef NSM::lm_mgmt_allowlist  += { 10.20.30.0/24 };   # SCCM·모니터링·Ansible·점프
-redef NSM::smb_lm_allowlist   += { 10.20.30.0/24 };
-redef NSM::rdp_lm_allowlist   += { 10.20.30.10/32 };  # 점프 서버
-redef NSM::ssh_lm_allowlist   += { 10.20.30.11/32 };
+# ---------------------------------------------------------------- 내부 DNS 서버 (08 터널링 탐지 조건)
+redef NSM::dns_tunnel_resolvers += { 10.0.0.53, 10.0.0.54 };
 
-# ---------------------------------------------------------------- DNS (08 터널링·유출, 13 DGA)
-redef NSM::dns_tunnel_resolvers += { 10.0.0.53, 10.0.0.54 };   # 내부 DNS 서버
-redef NSM::dns_tunnel_allowlist_domains += { "corp-telemetry.example" };
-
-# ---------------------------------------------------------------- 웹 공격 (03/04)
-redef NSM::web_attack_allowlist += { 10.20.99.10/32 };   # 취약점 스캐너·모의해킹
-
-# ---------------------------------------------------------------- 자격증명 (05/17/18/22)
-redef NSM::ntlm_spray_allowlist += { 10.20.40.0/28 };   # 인증 프록시·VDI 게이트웨이
-redef NSM::krb_spray_allowlist  += { 10.20.40.0/28 };
-redef NSM::krb_roast_allowlist  += { 10.20.50.10/32 };  # 레거시 RC4 서비스를 대량 쓰는 서버
-redef NSM::poisoning_allowlist  += { 10.0.0.60/32 };    # WINS 서버
-
-# ---------------------------------------------------------------- 랜섬웨어 (21)
-redef NSM::ransomware_allowlist += { 10.20.70.0/28 };   # 백업·동기화·DLP 서버
-
-# ---------------------------------------------------------------- 외부 통신 허용 (07/19/24)
-redef NSM::beacon_allowlist_domains  += { "update.vendor.example" };
-redef NSM::outbound_smb_allowed_dsts += { 203.0.113.20/32 };   # 협력사 파일 서버
-redef NSM::nonstd_port_allowed_ports += { 8081/tcp };
-redef NSM::long_conn_allowed_dsts    += { 203.0.113.10/32 };   # VPN 게이트웨이
+# ---------------------------------------------------------------- [필수] 예외 파일 (A.2)
+redef NSM::exception_file = "/opt/nsm/conf/exceptions.tsv";   # 예시 경로. 클러스터는 매니저 경로
 
 # ---------------------------------------------------------------- 로그 (필요할 때만)
 # redef NSM::create_log_dirs = F;                        # 배포 스크립트가 디렉터리를 만들 때
@@ -1256,4 +1240,33 @@ redef NSM::long_conn_allowed_dsts    += { 203.0.113.10/32 };   # VPN 게이트�
 # redef NSM::long_conn_duration       = 12hr;
 ```
 
-배포 전에 `zeek -a /경로/nsm_rules`로 문법을 확인하고(7.7절), 배포 후 `loadedscripts.log`에 이 파일이 보이는지 확인합니다.
+### A.2 예외 파일 (exceptions.tsv)
+
+Manager가 원본(YAML 등)을 검증해 이 형식으로 만들고, 임시 파일에 쓴 뒤 이름을 바꿔 교체합니다(7.8절). 열은 탭으로 구분합니다.
+
+```
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#fields	id	scope	src	dst	dst_port	service	domain	ja4	disposition	reason	owner	expires	ref
+X-001	DCSync	10.0.0.30/32	-	-	-	-	-	drop	Azure AD Connect 동기화	kim	-	-
+X-002	group:lateral	10.20.30.0/24	-	-	-	-	-	drop	SCCM·모니터링·Ansible 관리 서버	lee	-	-
+X-003	RDP_Lateral,SSH_Lateral	10.20.30.10/32,10.20.30.11/32	-	-	-	-	-	drop	점프 서버	lee	-	-
+X-004	DNS_Tunneling,Exfil_DNS	-	-	-	-	corp-telemetry.example	-	drop	사내 텔레메트리	kim	-	-
+X-005	SQL_Injection,Webshell_Access	10.20.99.10/32	-	-	-	-	-	drop	취약점 스캐너·모의해킹	kim	1830297600	-
+X-006	group:cred	10.20.40.0/28	-	-	-	-	-	drop	인증 프록시·VDI 게이트웨이	kim	-	-
+X-007	Kerberoasting	10.20.50.10/32	-	-	-	-	-	drop	레거시 RC4 서비스를 대량 쓰는 서버	kim	-	-
+X-008	Name_Poisoning	10.0.0.60/32	-	-	-	-	-	drop	WINS 서버	kim	-	-
+X-009	SMB_Ransomware	10.20.70.0/28	-	-	-	-	-	drop	백업·동기화·DLP 서버	lee	-	-
+X-010	HTTP_Beaconing	-	-	-	-	update.vendor.example	-	drop	업데이트 서버	lee	-	-
+X-011	Outbound_SMB,NTLM_Credential_Leak	-	203.0.113.20/32	445/tcp	-	-	-	drop	협력사 파일 서버	lee	-	-
+X-012	Nonstandard_Port	-	-	8081/tcp	-	-	-	drop	사내 허용 외부 포트	lee	-	-
+X-013	Long_Connection	-	203.0.113.10/32	-	-	-	-	drop	VPN 게이트웨이	lee	-	-
+```
+
+- `group:cred`는 05·17·18·22 자격증명 탐지 전부입니다. 일부만 빼려면 탐지 이름을 나열합니다(X-007처럼).
+- X-005처럼 정기 점검처럼 기간이 정해진 예외는 `expires`를 넣습니다. 만료되면 `nsm_exception.log`에 `expired`로 남고 적용되지 않습니다.
+- 기존 `redef NSM::*_allowlist` 방식도 계속 동작하지만(drop 예외로 자동 등록) 바꾸면 재시작이 필요하고 사유·만료를 남기지 못하므로 새 배포에는 쓰지 않습니다.
+
+배포 전에 `zeek -a /경로/nsm_rules`로 문법을 확인하고(7.7절), 배포 후 `loadedscripts.log`에 설정 파일이 보이는지, `nsm_exception.log`에 예외가 `loaded`로 남았는지(`rejected`가 없는지) 확인합니다.

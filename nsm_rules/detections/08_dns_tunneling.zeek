@@ -36,6 +36,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 @load ./13_dga        # dga_label_score (라벨 무작위성 점수 공용)
 
 module NSM;
@@ -144,8 +145,11 @@ event zeek_init()
             local detail = fmt("total=%.0f suspicious=%.0f ratio=%.2f unique_sub=%d encoded_bytes=%.0f window=%s",
                                total, susp, ratio, uniq, bytes, dnstun_interval);
 
+            # 한 탐지에만 걸리는 예외: (출발지, 등록 도메인) 기준으로 창 판정 때 거른다(근거 기록 전).
+            local wx = NSM::ExceptionCtx($src=key$host, $domain=parent);
+
             # [터널링] 고유 서브도메인이 많다
-            if ( uniq >= dnstun_unique_sub )
+            if ( uniq >= dnstun_unique_sub && ! NSM::exception_drop_ctx(DNS_Tunneling, wx, T) )
                 {
                 local eid_t = dns_tunnel_eid(key$host, "dns-tunnel", parent);
                 dns_tunnel_write_evidence(eid_t, DNS_Tunneling, "T1071.004", key$host, parent, rs, detail);
@@ -160,7 +164,7 @@ event zeek_init()
                 }
 
             # [유출] 서브도메인에 실린 데이터량이 많다
-            if ( bytes >= dnsexfil_bytes )
+            if ( bytes >= dnsexfil_bytes && ! NSM::exception_drop_ctx(Exfil_DNS, wx, T) )
                 {
                 local eid_x = dns_tunnel_eid(key$host, "dns-exfil", parent);
                 dns_tunnel_write_evidence(eid_x, Exfil_DNS, "T1048.003", key$host, parent, rs, detail);
@@ -175,6 +179,14 @@ event zeek_init()
                 }
             }
     ]);
+    }
+
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |dns_tunnel_allowlist_domains| > 0 )
+        NSM::exception_add_legacy("legacy:dns_tunnel_allowlist_domains",
+            [$scope=set("DNS_Tunneling", "Exfil_DNS"), $domain=dns_tunnel_allowlist_domains]);
     }
 
 event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qclass: count)
@@ -196,8 +208,18 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
         return;
     if ( ql >= 9 && q[ql - 9 :] == ".ip6.arpa" )
         return;
-    if ( NSM::domain_matches(q, dns_tunnel_allowlist_domains) )
+    # 예외(예외 파일 + 기존 dns_tunnel_allowlist_domains). 터널링·유출이 같은 집계를 쓰므로
+    #   두 탐지 모두에 걸리는 예외만 질의 단위로 집계 전에 거른다. 한 탐지에만 걸리는 예외는 창 판정 때 거른다.
+    local x = NSM::ExceptionCtx($src=src, $dst=c$id$resp_h, $dst_port=c$id$resp_p, $domain=q);
+    local ex_t = NSM::exception_peek(DNS_Tunneling, x, T);
+    local ex_x = NSM::exception_peek(Exfil_DNS, x, T);
+    if ( ex_t != "" && ex_x != "" )
+        {
+        NSM::exception_count(ex_t);
+        if ( ex_x != ex_t )
+            NSM::exception_count(ex_x);
         return;
+        }
 
     local parent = parent_domain(q);
     local subdom = ( |q| > |parent| ) ? sub_bytes(q, 1, |q| - |parent| - 1) : "";
