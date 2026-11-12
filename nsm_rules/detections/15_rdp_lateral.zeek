@@ -183,7 +183,7 @@ function observe_rdp(c: connection, cookie: string)
        [$str=cat(dst, "|", rdp_user_from_cookie(cookie))]);
     }
 
-## RDP 접속 요청 시 cookie(사용자 힌트 mstshash) 동반. 확산 관측의 진입점.
+# RDP 접속 요청 시 cookie(사용자 힌트 mstshash) 동반. 확산 관측의 진입점.
 event rdp_connect_request(c: connection, cookie: string)
     {
     observe_rdp(c, cookie);

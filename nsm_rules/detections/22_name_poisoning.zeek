@@ -159,7 +159,7 @@ event dns_AAAA_reply(c: connection, msg: dns_msg, ans: dns_answer, a: addr)
     poisoning_answer(c, msg, ans);
     }
 
-## NBNS 질의 기억
+# NBNS 질의 기억
 event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qclass: count)
     {
     if ( c$id$resp_p != 137/udp || 137/udp !in poisoning_ports || qtype !in poisoning_qtypes )
@@ -171,7 +171,7 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
     nbns_pending[hdr$ip$src, msg$id] = |decoded| > 0 ? decoded : query;
     }
 
-## NBNS 긍정 응답
+# NBNS 긍정 응답
 event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
     {
     if ( c$id$resp_p != 137/udp || ! msg$QR || msg$rcode != 0 || msg$num_answers == 0 )
