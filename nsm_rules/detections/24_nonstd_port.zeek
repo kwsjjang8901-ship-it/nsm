@@ -28,11 +28,13 @@ export {
     ## 프로토콜(분석기 이름, 소문자)별 표준 포트. 여기 없는 프로토콜은 검사하지 않는다.
     ##   QUIC(HTTP/3, DNS over QUIC)은 Zeek 가 핸드셰이크를 SSL 분석기로 넘겨 UDP 연결에서도 "ssl" 로 확인되므로
     ##   443/udp·853/udp 를 ssl 표준 포트에 둔다(없으면 정상 HTTP/3 가 모두 비표준 포트로 잡힌다).
+    ##   푸시·시간 동기화처럼 TLS 전용 포트가 정해진 서비스도 표준으로 둔다:
+    ##   5223/tcp Apple 푸시(APNs), 5228/tcp Google 푸시(FCM), 4460/tcp NTS(Network Time Security, RFC 8915).
     const nonstd_port_standard: table[string] of set[port] = {
         ["http"] = set(80/tcp, 8080/tcp, 8000/tcp, 8008/tcp, 8888/tcp, 3128/tcp),
         ["ssl"]  = set(443/tcp, 8443/tcp, 993/tcp, 995/tcp, 465/tcp, 587/tcp, 636/tcp,
                                         853/tcp, 989/tcp, 990/tcp, 5061/tcp, 3389/tcp, 25/tcp, 143/tcp, 110/tcp,
-                                        443/udp, 853/udp),
+                                        443/udp, 853/udp, 5223/tcp, 5228/tcp, 4460/tcp),
         ["ssh"]  = set(22/tcp),
     } &redef;
 
@@ -90,6 +92,9 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
         return;
     local p = c$id$resp_p;
     if ( p in nonstd_port_standard[proto] )
+        return;
+    # HTTP 프록시 터널(CONNECT) 안의 TLS 는 프록시 포트(80·8080·3128 …)에서 보이지만 비표준 포트 사용이 아니다
+    if ( proto == "ssl" && c?$http && c$http?$method && c$http$method == "CONNECT" )
         return;
     # 예외(예외 파일 + 기존 nonstd_port_allowed_ports·_allowed_dsts·_allowlist)
     if ( NSM::exception_drop(Nonstandard_Port, c) )

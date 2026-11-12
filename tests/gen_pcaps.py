@@ -1500,6 +1500,33 @@ def gen_quic(out):
     cap.write(os.path.join(out, "nonstd_quic.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 02/24 정상 서비스 포트(오탐 회귀)
+
+def gen_service_ports(out):
+    """TLS 전용 서비스 포트(.97 APNs 5223, .98 FCM 5228, .99 NTS 4460)와 HTTP 프록시 CONNECT 터널 안의 TLS(.100, 80)는
+    비표준 포트 미탐, 대조군 TLS 4444(.101)는 탐지. Windows 배달 최적화 7680 으로 30대 연결(.102)은 호스트 스캔 미탐."""
+    cap = Capture()
+    t = T0 + 1
+    for src, dst, port, sni in (("10.0.0.97", "93.184.215.180", 5223, "courier.push.example-apple.com"),
+                                ("10.0.0.98", "93.184.215.181", 5228, "mtalk.example-google.com"),
+                                ("10.0.0.99", "93.184.215.182", 4460, "nts.example-time.net"),
+                                ("10.0.0.101", "93.184.215.184", 4444, "c2.example-odd.net")):
+        t = tls_session(cap, src, dst, t + 1, sni=sni, dport=port)
+    s = Tcp(cap, "10.0.0.100", "93.184.215.183", 80)        # 프록시 CONNECT -> 200 -> 같은 연결에서 TLS
+    t = s.handshake(t + 1)
+    t = s.client_send(b"CONNECT www.example-site.com:443 HTTP/1.1\r\nHost: www.example-site.com:443\r\n\r\n", t)
+    t = s.server_send(b"HTTP/1.1 200 Connection established\r\n\r\n", t + 0.01)
+    t = s.client_send(client_hello("www.example-site.com"), t + 0.01)
+    t = s.server_send(server_hello(), t + 0.02)
+    t = s.client_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.close(t + 0.01)
+    host_scan(cap, "10.0.0.102", ["10.0.1.%d" % i for i in range(1, 31)], 7680, t + 1)
+    cap.tick(t + 90)
+    cap.write(os.path.join(out, "service_ports.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1507,7 +1534,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic]
+              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports]
 
 
 def main():
