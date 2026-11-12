@@ -519,7 +519,8 @@ event Notice::log_notice(rec: Notice::Info)
         return;
     if ( rec?$dup_count )
         return;
-    # suppress 예외로 표시된 탐지는 상관에서 뺀다(E5 에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정).
+    # suppress 예외로 표시된 탐지는 상관에서 뺀다(drop 과 같음). 상관에 넣는 방안(E5)은 보류:
+    #   대량 접속 서버에 suppress 를 걸면 피해 host 가 다음 단계 출발지로 등록돼 가짜 체인이 생길 수 있다.
     if ( rec?$disposition )
         return;
     if ( ! rec?$src )
