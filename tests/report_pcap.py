@@ -123,6 +123,13 @@ def collect(z, assets_path, args):
         a = idx.find(ip, ts) if assets else None
         if a:
             out.update({"asset": a.get("asset_id"), "name": a.get("display_name") or a.get("hostname") or ""})
+            # 역할·OS: 탐지 행에서 바로 보이고 필터로도 찾게 한다(리졸버 판정 결과일 때만)
+            if a.get("roles"):
+                out["roles"] = [str(r) for r in a["roles"]]
+            if a.get("os"):
+                out["os"] = str(a["os"])
+            if a.get("id_type"):
+                out["key"] = f"{a.get('id_type')}({a.get('confidence', '')})"
         elif ip in sig_names:
             out["name"] = sig_names[ip][1]
             out["guess"] = True
@@ -232,6 +239,7 @@ main{padding:12px 24px 40px;max-width:1400px}section{margin:18px 0}h2{font-size:
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{cursor:pointer;color:var(--mut);font-weight:600;white-space:nowrap;user-select:none}th:hover{color:var(--fg)}
 tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{background:var(--bg)}
+.chip.role{background:transparent;border:1px solid var(--acc);color:var(--acc)}.os{color:var(--mut);font-size:12px}
 .chip.ext{background:transparent;border:1px solid var(--line);color:var(--mut)}.chip.guess{font-style:italic}
 .chip{display:inline-block;white-space:nowrap;padding:1px 7px;border-radius:10px;background:var(--chip);font-size:12px;margin:1px 2px 1px 0}
 .sus{color:var(--bad);font-weight:600}.sup{color:var(--warn)}.mut{color:var(--mut)}.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -243,8 +251,8 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 <main>
 <section id="sum"><h2>요약</h2><div class="cards" id="cards"></div></section>
 <section id="det"><h2>탐지</h2><div class="box"><div id="detbars"></div></div>
- <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·기법"><div id="dett"></div>
- <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산, 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다.</div></div></section>
+ <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·역할·OS·기법"><div id="dett"></div>
+ <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산(<span class="chip role">역할</span>·<span class="os">OS</span> 함께, 이름에 마우스를 올리면 자산 ID·식별 근거), 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다. 검색 칸에 역할·OS(예: DC, Windows)를 넣으면 그 자산이 공격자·대상인 탐지만 남습니다.</div></div></section>
 <section id="chain"><h2>킬체인 상관</h2><div class="box"><label class="note"><input type="checkbox" id="chainall"> 중간 단계 포함(체인이 길어질 때마다 나온 상관 탐지를 모두 보기)</label><div id="chaint"></div></div></section>
 <section id="asset"><h2>자산</h2><div class="box"><input class="filter" id="asf" placeholder="필터: 이름·IP·OS·역할"><div id="ast"></div><div class="note" id="asnote"></div></div></section>
 <section id="xfer"><h2>전송량</h2><div class="box" id="xft"></div></section>
@@ -257,7 +265,8 @@ const D=JSON.parse(document.getElementById('data').textContent);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtB=b=>b>=1e6?(b/1e6).toFixed(2)+' MB':b>=1e3?(b/1e3).toFixed(1)+' KB':b+' B';
 const fmtT=t=>{if(!t)return'-';const d=new Date((t+D.tz*3600)*1000);return d.toISOString().replace('T',' ').slice(0,19)};
-const who=w=>w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip${w.guess?' guess':''}" title="${w.guess?'자산 신호의 이름(판정 전)':'자산 판정 결과'}">${esc(w.name||w.asset)}</span>`:''}${w.ext?' <span class="chip ext">외부</span>':''}`:'-';
+const whoTip=w=>w.guess?'자산 신호의 이름(판정 전)':['자산 판정 결과',w.asset&&`자산 ${w.asset}`,w.key&&`식별 ${w.key}`,w.os&&`OS ${w.os}`,w.roles&&`역할 ${w.roles.join(', ')}`].filter(Boolean).join('\\n');
+const who=w=>w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip${w.guess?' guess':''}" title="${esc(whoTip(w))}">${esc(w.name||w.asset)}</span>`:''}${(w.roles||[]).map(r=>` <span class="chip role" title="${esc(whoTip(w))}">${esc(r)}</span>`).join('')}${w.os?` <span class="os">${esc(w.os)}</span>`:''}${w.ext?' <span class="chip ext">외부</span>':''}`:'-';
 const arrow=s=>esc(String(s??'').replace(/->/g,'→'));
 document.getElementById('sub').textContent=`${D.pcap} · 캡처 ${fmtT(D.start)} ~ ${fmtT(D.end)} (UTC${D.tz>=0?'+':''}${D.tz}, 약 ${(D.span/60).toFixed(1)}분) · 처리 ${D.elapsed}초 · 생성 ${D.generated}`;
 // 표: 열 정의 [제목, 값 함수, 정렬 키 함수, 클래스]
