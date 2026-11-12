@@ -15,7 +15,7 @@ ZEEK_IMAGE="${ZEEK_IMAGE:-zeek/zeek:9.0.1}"
 # CRLF 검사: Windows 에서 받은 사본(core.autocrlf=true, VMware 공유 폴더 등)은 줄바꿈이 CRLF 가 되어
 #   테스트 도구 셔뱅이 "/usr/bin/env: 'bash\r'" 로 실패한다(모든 assert-rows 가 exit 127).
 crlf=$(grep -rlI $'\r' "$ROOT/tests/btest/tools" "$ROOT/tests/btest/btest.cfg" "$ROOT/tests/btest/setup.zeek" \
-	"$ROOT/tests/btest/rules" "$ROOT/tests/btest/cluster" "$ROOT/tests/btest/files" 2>/dev/null || true)
+	"$ROOT/tests/btest/rules" "$ROOT/tests/btest/cluster" "$ROOT/tests/btest/asset-id" "$ROOT/tests/btest/files" 2>/dev/null || true)
 if [ -n "$crlf" ]; then
 	echo "오류: 다음 파일의 줄바꿈이 CRLF 입니다(Windows 줄바꿈). LF 로 바꾼 뒤 다시 실행하세요." >&2
 	echo "$crlf" | sed 's/^/  /' >&2

@@ -40,6 +40,9 @@
 # 반드시 맨 마지막(notice_aggregation 이후)에 로드.
 @load ./detections/correlation_killchain
 
+# 자산 식별(탐지 아님): 자산 신호를 asset_signal.log 로 남긴다(docs/asset-id/, Manager 리졸버 입력).
+@load ./asset-id
+
 # 메타데이터 선별 전송(T1): 설정(nsm_config_*)에서 meta_* 를 redef 할 수 있도록 설정보다 먼저 로드.
 @load ./metadata
 
