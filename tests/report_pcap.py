@@ -519,7 +519,7 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 .st0{--c:var(--s0)}.st1{--c:var(--s1)}.st2{--c:var(--s2)}.st3{--c:var(--s3)}.st4{--c:var(--s4)}.st5{--c:var(--s5)}.st6{--c:var(--s6)}.stn{--c:var(--mut)}
 svg .mk{fill:var(--c);stroke:var(--surf);stroke-width:2}svg .mk.cand{fill:var(--surf);stroke:var(--c);stroke-width:2.5}
 svg .ar{stroke:var(--c);stroke-width:2;fill:none}svg .ar.cand{stroke-dasharray:4 3}svg .end{fill:var(--surf);stroke:var(--c);stroke-width:2}
-svg .lane{stroke:var(--line);stroke-width:1}svg text{fill:var(--fg);font-size:12px}svg .mt{fill:var(--mut);font-size:11px}svg .gap{fill:var(--mut);font-size:11px;font-style:italic}
+svg .lane{stroke:var(--line);stroke-width:1}svg text{fill:var(--fg);font-size:13px}svg .mt{fill:var(--mut);font-size:12px}svg .gap{fill:var(--mut);font-size:12px;font-style:italic}
 svg .hit{fill:transparent;cursor:pointer}svg .col.on rect.bg{fill:var(--chip)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);margin-right:4px;vertical-align:-1px}.sw.cand{background:transparent;border:2px solid var(--c);width:8px;height:8px}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0}
@@ -534,7 +534,7 @@ svg .hit{fill:transparent;cursor:pointer}svg .col.on rect.bg{fill:var(--chip)}
 <section id="sum"><h2>요약</h2><div class="cards" id="cards"></div></section>
 <section id="story"><h2>공격 스토리</h2><div class="box">
  <select id="storysel"></select> <label class="note"><input type="checkbox" id="storycand" checked> 체인 밖 탐지도 보기(같은 공격자·확산 대상에서 나온 후보)</label>
- <div class="lead" id="storylead"></div><div class="legend" id="storyleg"></div><div style="display:flex"><div id="storylab" style="flex:0 0 230px;overflow:hidden"></div><div id="storysvg" style="overflow-x:auto;flex:1 1 auto;min-width:0"></div></div><ol class="story" id="storylist"></ol>
+ <div class="lead" id="storylead"></div><div class="legend" id="storyleg"></div><div style="display:flex"><div id="storylab" style="flex:0 0 clamp(120px,32vw,230px);overflow:hidden"></div><div id="storysvg" style="overflow-x:auto;flex:1 1 auto;min-width:0"></div></div><ol class="story" id="storylist"></ol>
  <details style="margin-top:8px"><summary class="note">근거 연결률(탐지 종류별, 빈틈 검토용)</summary><div id="storycov"></div></details>
  <div class="note">세로는 host(시작 공격자 → 확산으로 닿은 순서 → 그 밖의 대상, 외부는 아래), 가로는 탐지 순서입니다(간격은 시간 비례가 아님, 사이가 10분 이상이면 경과 시간 표시). 채운 점은 상관 규칙이 이은 확정 체인, 빈 점·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. 단계 아래 <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값이라 정확한 연결이 아닙니다.</div></div></section>
 <section id="det"><h2>탐지</h2><div class="box"><div id="detbars"></div></div>
@@ -619,20 +619,25 @@ function drawStory(){
  const steps=s.steps.filter(j=>showC||!conf.size||conf.has(j)).map(j=>({j,d:D.detections[j],c:conf.has(j)}));
  const used=new Set();steps.forEach(x=>{if(x.d.attacker)used.add(x.d.attacker.ip);x.d.victims.forEach(v=>used.add(v.ip))});
  const lanes=s.lanes.filter(l=>used.has(l.ip)),li={};lanes.forEach((l,i)=>li[l.ip]=i);
- const LW=0,CW=124,LH=46,TOP=74,n=steps.length,W=Math.max(1,n)*CW+20,H=TOP+lanes.length*LH+10;
- let g=`<svg width="${W}" height="${H}" role="img" aria-label="공격 스토리 타임라인">`,lab=`<svg width="230" height="${H}">`;
+ // 열 폭은 화면 폭에 맞춘다(열당 124~280px, 열이 1~2개면 420px까지, 넘치면 가로 스크롤)
+ const n=steps.length,avail=Math.max(300,(box.clientWidth||900)-24),CW=Math.max(124,Math.min(n<=2?420:280,Math.floor(avail/Math.max(1,n))));
+ const LW=0,LH=48,TOP=78,W=Math.max(1,n)*CW+20,H=TOP+lanes.length*LH+10,wch=Math.max(10,Math.floor((CW-16)/13));
+ let g=`<svg width="${W}" height="${H}" role="img" aria-label="공격 스토리 타임라인">`,lab=`<svg width="230" height="${H}" style="max-width:none">`;
  lanes.forEach((l,i)=>{const y=TOP+i*LH+LH/2;g+=`<line class="lane" x1="0" x2="${W-10}" y1="${y}" y2="${y}"/>`;
   lab+=`<text x="4" y="${y-3}">${esc(l.ip)}${l.ext?' <tspan class="mt">외부</tspan>':''}</text><text class="mt" x="4" y="${y+12}">${esc([l.name||l.asset,(l.roles||[]).join(', ')].filter(Boolean).join(' · ').slice(0,34))}</text>`});
  steps.forEach((x,k)=>{const d=x.d,cx=LW+k*CW+CW/2,cls='st'+stIdx(d.stages),cand=x.c?'':' cand';
   const prev=k?steps[k-1].d:null,gap=prev?(d.first||d.ts)-(prev.last||prev.ts):0;
   g+=`<g class="col" data-k="${k}"><rect class="bg" x="${cx-CW/2+2}" y="0" width="${CW-4}" height="${H}" rx="6" fill="transparent"/>`;
   if(gap>=600)g+=`<text class="gap" x="${cx-CW/2}" y="${TOP-54}" text-anchor="middle">+${dur(gap)}</text>`;
-  const [l1,l2]=wrap2((d.ko||'').replace(/\\(.*\\)/,''),10);
+  const [l1,l2]=wrap2((d.ko||'').replace(/\\(.*\\)/,''),wch);
   g+=`<text class="mt" x="${cx}" y="${TOP-38}" text-anchor="middle">${fmtT(d.first||d.ts).slice(11)}</text><text x="${cx}" y="${TOP-23}" text-anchor="middle">${esc(l1)}</text><text x="${cx}" y="${TOP-9}" text-anchor="middle">${esc(l2)}</text>`;
   const ay=d.attacker&&li[d.attacker.ip]!==undefined?TOP+li[d.attacker.ip]*LH+LH/2:null;
-  d.victims.forEach((v,m)=>{if(li[v.ip]===undefined||v.ip===(d.attacker&&d.attacker.ip)||ay===null)return;const vy=TOP+li[v.ip]*LH+LH/2,dir=vy>ay?1:-1,ox=(m%5-2)*3;
-   g+=`<line class="ar ${cls}${cand}" x1="${cx+ox}" y1="${ay+dir*9}" x2="${cx+ox}" y2="${vy-dir*7}"/><circle class="end ${cls}" cx="${cx+ox}" cy="${vy}" r="4.5"/>`});
-  if(ay!==null)g+=`<circle class="mk ${cls}${cand}" cx="${cx}" cy="${ay}" r="8"/>`;
+  // 대상이 여럿이면 공격자 점에서 부채꼴로 퍼지게 그린다(가까운 줄이 왼쪽)
+  const vs=ay===null?[]:d.victims.filter(v=>li[v.ip]!==undefined&&v.ip!==(d.attacker&&d.attacker.ip)).sort((a,b)=>Math.abs(li[a.ip]*LH+TOP-ay)-Math.abs(li[b.ip]*LH+TOP-ay));
+  const fan=vs.length>1?Math.min(40,(CW-40)/(vs.length-1)):0;
+  vs.forEach((v,m)=>{const vy=TOP+li[v.ip]*LH+LH/2,ex=cx+(m-(vs.length-1)/2)*fan,dx=ex-cx,dy=vy-ay,len=Math.hypot(dx,dy)||1;
+   g+=`<line class="ar ${cls}${cand}" x1="${(cx+dx/len*9).toFixed(1)}" y1="${(ay+dy/len*9).toFixed(1)}" x2="${(ex-dx/len*6).toFixed(1)}" y2="${(vy-dy/len*6).toFixed(1)}"/><circle class="end ${cls}" cx="${ex.toFixed(1)}" cy="${vy}" r="5"/>`});
+  if(ay!==null)g+=`<circle class="mk ${cls}${cand}" cx="${cx}" cy="${ay}" r="9"/>`;
   g+=`<rect class="hit" x="${cx-CW/2+2}" y="0" width="${CW-4}" height="${H}"/></g>`});
  box.innerHTML=g+'</svg>';document.getElementById('storylab').innerHTML=lab+'</svg>';
  box.querySelectorAll('g.col').forEach(el=>{const x=steps[+el.dataset.k],d=x.d;
@@ -653,6 +658,7 @@ table('storycov',[['단계',r=>esc(STK[r.stage]||r.stage),r=>stIdx(r.stage)],['�
  ['외부 대상 이름(SNI·Host)',r=>r.ext?`${r.ext_named}/${r.ext}`:'-',r=>r.ext?r.ext_named/r.ext:-1,'num'],
  ['근거 행 uid',r=>r.ev?`${r.ev_uid}/${r.ev}`:'-',r=>r.ev?r.ev_uid/r.ev:-1,'num']],D.coverage);
 sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;drawStory();
+let rsz;addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(drawStory,150)});
 // 자산
 const roleChips=a=>a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join('');
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
