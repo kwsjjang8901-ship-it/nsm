@@ -12,7 +12,7 @@
 #     -z ARGS   zeek 에 넘길 추가 인자. 예) -z "AssetID::suppress_interval=30min"
 #
 #   화면 요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
-#   출력 디렉터리의 report.html(통합 리포트: 탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
+#   출력 디렉터리의 report.html(통합 리포트: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
@@ -181,6 +181,6 @@ echo "[3/3] 통합 리포트"
 python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$OUT/report.html" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
 echo
 echo "결과: $OUT"
-echo "  - report.html    통합 리포트(탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
+echo "  - report.html    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
