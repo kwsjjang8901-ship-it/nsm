@@ -76,7 +76,7 @@ global dedup_tbl: table[string] of DedupState
     &create_expire = dedup_window
     &expire_func   = dedup_expire;
 
-## 기본 정책(우선순위 0)들이 actions 를 채운 뒤 실행되도록 낮은 우선순위 사용.
+# 기본 정책(우선순위 0)들이 actions 를 채운 뒤 실행되도록 낮은 우선순위 사용.
 hook Notice::policy(n: Notice::Info) &priority=-5
     {
     # 요약 notice 자신(dup_count 설정됨)은 재집계 대상에서 제외

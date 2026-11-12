@@ -73,7 +73,7 @@ function sqli_report(c: connection, where: string, method: string, raw: string)
             $evidence_id=eid]);
     }
 
-## URI 검사
+# URI 검사
 event http_request(c: connection, method: string, original_URI: string,
                    unescaped_URI: string, version: string)
     {
@@ -83,7 +83,7 @@ event http_request(c: connection, method: string, original_URI: string,
         sqli_report(c, "uri", method, original_URI);
     }
 
-## POST/PUT 본문 검사(요청 본문 앞 web_attack_body_max 바이트)
+# POST/PUT 본문 검사(요청 본문 앞 web_attack_body_max 바이트)
 event http_entity_data(c: connection, is_orig: bool, length: count, data: string)
     {
     if ( ! is_orig )

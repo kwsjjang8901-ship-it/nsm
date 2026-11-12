@@ -22,8 +22,16 @@ jobs:
         run: zeek --version
 
       # 1) 패키지 전체 문법 검사 (parse only)
+      #    경고도 실패로 본다(CLAUDE.md: 시작 시 경고가 하나라도 나오면 실패).
+      #    예: 이벤트 핸들러 위의 "##" 주석은 Zeek 8.x 가 "Discarded extraneous Zeekygen comment" 경고를 낸다.
       - name: Parse nsm_rules
-        run: zeek -a ./nsm_rules
+        run: |
+          zeek -a ./nsm_rules 2> stderr.txt || { cat stderr.txt; exit 1; }
+          if [ -s stderr.txt ]; then
+            cat stderr.txt
+            echo "::error::Zeek printed warnings/errors while parsing nsm_rules"
+            exit 1
+          fi
 
       # 2) 비활성 룰까지 포함해 문법 검사 (재활성화 시 로드 실패 방지)
       #    __load__.zeek 에서 주석 처리된 "#@load ./detections/..." 를 모두 함께 로드한다(없으면 패키지만).
@@ -31,7 +39,12 @@ jobs:
         run: |
           disabled=$(sed -n 's|^#@load \./\(detections/[^ ]*\).*|./nsm_rules/\1|p' nsm_rules/__load__.zeek)
           echo "disabled rules: ${disabled:-none}"
-          zeek -a ./nsm_rules $disabled
+          zeek -a ./nsm_rules $disabled 2> stderr.txt || { cat stderr.txt; exit 1; }
+          if [ -s stderr.txt ]; then
+            cat stderr.txt
+            echo "::error::Zeek printed warnings/errors while parsing nsm_rules + disabled rules"
+            exit 1
+          fi
 
       # 3) 런타임 스모크: 입력 없이 실행해 zeek_init(SumStats 생성, 로그 필터 등)까지 확인
       #    로그 디렉터리가 없는 상태에서 반복 실행해 디렉터리 생성 경쟁 조건을 잡는다.
@@ -41,9 +54,9 @@ jobs:
           for i in 1 2 3 4 5 6 7 8 9 10; do
             rm -rf /log/zeek /hdd_tmp/log/zeek ./*.log
             zeek "$GITHUB_WORKSPACE/nsm_rules" 2> stderr.txt || { cat stderr.txt; exit 1; }
-            if grep -qiE "error|fatal" stderr.txt; then
+            if grep -qiE "warning|error|fatal" stderr.txt; then
               cat stderr.txt
-              echo "::error::Zeek reported errors at startup (run $i)"
+              echo "::error::Zeek reported warnings/errors at startup (run $i)"
               exit 1
             fi
           done
