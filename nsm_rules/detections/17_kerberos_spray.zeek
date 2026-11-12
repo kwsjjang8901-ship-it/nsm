@@ -83,7 +83,7 @@ function krb_spray_write_samples(eid: string, note: Notice::Type, technique: str
         if ( ! samples[i]?$str )
             next;
         local parts = split_string(samples[i]$str, /\|/);
-        if ( |parts| != 3 || ! NSM::evidence_is_new(eid, parts[0]) )
+        if ( |parts| < 3 || ! NSM::evidence_is_new(eid, parts[0]) )
             next;
         NSM::write_evidence([
             $ts=network_time(),
@@ -93,6 +93,7 @@ function krb_spray_write_samples(eid: string, note: Notice::Type, technique: str
             $account=parts[0],
             $src=src,
             $dst=to_addr(parts[1]),
+            $uid=( |parts| > 3 ) ? parts[3] : "",
             $operation="kerberos_as_failure",
             $detail=fmt("result=%s %s", parts[2], detail)]);
         }
@@ -208,7 +209,7 @@ event krb_error(c: connection, msg: KRB::Error_Msg)
 
     local src = c$id$orig_h;
     local result = krb_failure_codes[msg$error_code];
-    local sample = cat(acct, "|", c$id$resp_h, "|", result);
+    local sample = cat(acct, "|", c$id$resp_h, "|", result, "|", c$uid);
 
     # 예외(예외 파일 + 기존 krb_spray_allowlist). 스프레이·무차별 대입을 따로 판정한다(범위가 다를 수 있음)
     local brute = msg$error_code in krb_bruteforce_codes;

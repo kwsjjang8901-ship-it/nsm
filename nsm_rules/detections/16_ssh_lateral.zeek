@@ -81,10 +81,13 @@ event zeek_init()
     local r = SumStats::Reducer($stream="nsm.ssh_lm",
                                 $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
                                 $num_samples=lm_num_samples);
+    # 근거용 대표 연결(목적지|uid). 고유 수와 섞이지 않게 따로 둔다
+    local r_ev = SumStats::Reducer($stream="nsm.ssh_lm.ev", $apply=set(SumStats::SAMPLE),
+                                   $num_samples=lm_num_samples);
     SumStats::create([
         $name             = "nsm-detect-ssh-lateral",
         $epoch            = ssh_lm_epoch,
-        $reducers         = set(r),
+        $reducers         = set(r, r_ev),
         # 창(epoch) 종료 시 1회만 평가한다.
         #   threshold_series 는 임계치 단계마다 재발화해 같은 창에서 detection 이
         #   여러 건 생기고, 각 건의 evidence_count 가 그 시점 스냅샷이 되어
@@ -127,6 +130,7 @@ event zeek_init()
                             $technique="T1021.004",
                             $src=key$host,
                             $dst=to_addr(sdst),
+                            $uid=NSM::ev_uid(NSM::ev_uids(result, "nsm.ssh_lm.ev"), sdst),
                             $operation="ssh_session",
                             $detail=fmt("unique_dst=%d observed=%d window=%s",
                                         dst_n, res$num, ssh_lm_epoch)]);
@@ -166,6 +170,7 @@ function observe_ssh(c: connection)
     SumStats::observe("nsm.ssh_lm",
        [$host=src],
        [$str=cat(dst)]);
+    NSM::ev_observe("nsm.ssh_lm.ev", src, dst, c$uid, ssh_lm_epoch);
     }
 
 # (1) SSH 인증 성공 -> 확산 관측

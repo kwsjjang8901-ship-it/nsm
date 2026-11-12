@@ -18,5 +18,7 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 3 diagnosis=NSM.CredentialAccess.AsrepRoasting attacker=10.0.0.154
 # @TEST-EXEC: assert-evidence-join NSM::Kerberoasting
 # @TEST-EXEC: assert-evidence-join NSM::ASREP_Roasting
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::Kerberoasting uid=-
 
 redef NSM::keep_log_streams += { KRB::LOG };

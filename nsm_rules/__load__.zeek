@@ -5,6 +5,7 @@
 @load ./detections/evidence_log
 # 예외 엔진: 룰이 입구에서 NSM::exception_drop* 을 부르므로 룰보다 먼저 로드
 @load ./detections/exceptions
+@load ./detections/auth_context      # 확산 근거의 계정(NTLM·Kerberos TGS 최근 인증)
 
 # 탐지 룰 (킬체인 순서, 1탐지 = 1파일)
 @load ./detections/01_port_scan

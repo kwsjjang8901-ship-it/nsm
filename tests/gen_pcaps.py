@@ -1399,6 +1399,30 @@ def gen_meta_dns_qtypes(out):
     cap.tick(T0 + 60)
     cap.write(os.path.join(out, "meta_dns_qtypes.pcap"))
 
+
+# --------------------------------------------------------------------------- 확산 근거의 계정·uid (auth_context)
+
+def gen_lateral_auth(out):
+    """확산 근거에 계정이 붙는지: NTLM 로그인 후 관리 공유(.60), HTTP 티켓 후 WinRM(.61),
+    cifs 티켓 후 관리 공유(.62), 인증 없이 관리 공유(.63, 계정 없음)."""
+    cap = Capture()
+    t = T0 + 1
+    targets = ["10.0.30.%d" % i for i in range(11, 14)]
+    for dst in targets:                                      # .60: 대상마다 NTLM 로그인 -> ADMIN$
+        t = ntlm_smb_login(cap, "10.0.0.60", dst, "CORP", "admin01", True, t + 1)
+        t = smb_tree_connect(cap, "10.0.0.60", dst, "ADMIN$", t + 0.5)
+    for i, dst in enumerate(targets):                        # .61: HTTP/ 서비스 티켓(opsadmin) -> WinRM
+        t = krb_service_ticket(cap, "10.0.0.61", "opsadmin", "HTTP/srv%02d.corp.example" % (i + 11), KRB_AES256, t + 1)
+        t = winrm_session(cap, "10.0.0.61", dst, t + 0.5)
+    for i, dst in enumerate(targets):                        # .62: cifs/ 서비스 티켓(backupop) -> C$
+        t = krb_service_ticket(cap, "10.0.0.62", "backupop", "cifs/srv%02d.corp.example" % (i + 11), KRB_AES256, t + 1)
+        t = smb_tree_connect(cap, "10.0.0.62", dst, "C$", t + 0.5)
+    for dst in targets:                                      # .63: 인증 없이 ADMIN$ -> 계정 없음
+        t = smb_tree_connect(cap, "10.0.0.63", dst, "ADMIN$", t + 1)
+    cap.tick(T0 + 900)
+    cap.write(os.path.join(out, "lateral_auth.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1406,7 +1430,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes]
+              gen_meta_dns_qtypes, gen_lateral_auth]
 
 
 def main():

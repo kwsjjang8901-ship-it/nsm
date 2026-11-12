@@ -249,7 +249,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 - 주체: `src` = 스프레이 출발지. 대상 서버는 근거에 남깁니다.
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
 - 제외·오탐 통제: 내부 서버 대상만(`ntlm_spray_local_servers_only`), 익명(null session) 제외, 예외 출발지 `ntlm_spray_allowlist`(인증 프록시·VDI 게이트웨이). 대소문자만 바꾼 같은 계정은 1개로 셉니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 계정, 대상 서버, 실패 결과(상태 코드 이름) 표본.
+- 근거: 계정, 대상 서버, 실패 결과(상태 코드 이름), 연결 uid 표본.
 
 ##### Kerberos 패스워드 스프레이 (`Kerberos_Spray`, T1110.003) · 17_kerberos_spray
 
@@ -265,7 +265,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 - 주체: `src` = 시도 출발지. KDC와 계정은 근거에 남깁니다.
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
 - 제외·오탐 통제: 코드 25(PREAUTH_REQUIRED)와 TGS 오류는 세지 않습니다. 내부 KDC만(`krb_spray_local_kdc_only`), 예외 출발지 `krb_spray_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 계정, KDC, 결과 코드 이름 표본.
+- 근거: 계정, KDC, 결과 코드 이름, 연결 uid 표본.
 
 ##### Kerberos 무차별 대입 (`Kerberos_Bruteforce`, T1110.001) · 17_kerberos_spray
 
@@ -278,7 +278,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 - 주체: `src` = 시도 출발지.
 - 집계·억제: (출발지, 계정)별 실패 횟수, 임계 즉시 탐지, (출발지, 계정) 단위 1시간 억제.
 - 제외·오탐 통제: 스프레이와 같은 예외. 없는 계정(6)과 만료(23)는 비밀번호 추측이 아니라서 세지 않습니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 계정, KDC, 결과 코드 표본.
+- 근거: 계정, KDC, 결과 코드, 연결 uid 표본.
 
 ##### Kerberoasting (`Kerberoasting`, T1558.003) · 18_kerberoasting
 
@@ -293,7 +293,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 - 주체: `src` = 티켓 요청 출발지, `dst` = KDC.
 - 집계·억제: 출발지별 고유 SPN 수, 임계 즉시 탐지, 1시간 억제.
 - 제외·오탐 통제: `krbtgt/`·`kadmin/`은 제외(`krb_roast_excluded_services`). 내부 KDC만, 예외 출발지 `krb_roast_allowlist`(레거시 RC4 서비스를 많이 쓰는 서버). AES를 강제한 환경에서는 RC4 티켓 자체가 드뭅니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: SPN, KDC, 암호 이름, 요청 계정 표본.
+- 근거: SPN, KDC, 암호 이름, 요청 계정, 연결 uid 표본.
 
 ##### AS-REP Roasting (`ASREP_Roasting`, T1558.004) · 18_kerberoasting
 
@@ -353,7 +353,7 @@ DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터�
 - 주체: `src` = 복제를 요청한 출발지, `dst` = 대상 DC.
 - 집계·억제: 단건. (출발지, DC) 단위 1시간 억제.
 - 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 예외로 뺍니다(기존 `dcsync_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). DC 목록(`dcsync_domain_controllers`)은 예외가 아니라 탐지 조건이라 그대로 설정에 둡니다. 클러스터에서는 DC 학습이 워커별이라 DC 목록을 설정에 적는 것을 권장합니다.
-- 근거: 포트, 대상이 알려진 DC인지, 스텁 길이, uid.
+- 근거: 포트, 대상이 알려진 DC인지, 스텁 길이, uid, 계정(같은 연결의 NTLM 인증, 없으면 인증 맥락의 drsuapi·ldap 티켓 계정. 5.6절).
 
 #### 4.3.4 확산
 
@@ -368,7 +368,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 - 주체: `src` = 확산 기점 host. `lm_targets` = 피해 host 집합.
 - 집계·억제: 출발지별 고유 목적지 host 수. 창이 끝날 때 1회 판정(창당 1건).
 - 제외·오탐 통제: `IPC$`(`exclude_ipc_share`)와 `PRINT$`(`smb_lm_exclude_shares`) 제외. SCCM·백업·AV 관리 서버는 `smb_lm_allowlist`에 등록하는 것이 핵심입니다(20번의 `lm_mgmt_allowlist`와 별개라 둘 다 등록). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 표본 목적지마다 1행. 계정은 아직 채우지 않습니다.
+- 근거: 표본 목적지마다 1행. 대표 연결 uid(관리 공유에 접근한 연결)와 계정(같은 대상 NTLM 인증, 없으면 출발지의 `cifs`·`host` 서비스 티켓 계정. 5.6절).
 
 ##### RDP 확산 (`RDP_Lateral`, T1021.001) · 15_rdp_lateral
 
@@ -382,7 +382,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정(창당 1건).
 - 제외·오탐 통제: 내부 → 내부만(외부에서 들어오는 RDP는 성격이 달라 제외). 점프 서버·IT 관리자 PC·원격지원 서버는 `rdp_lm_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 목적지와 계정 표본.
+- 근거: 목적지·계정·연결 uid 표본. cookie가 없으면(NLA 전용 클라이언트 등) 같은 대상 NTLM이나 `termsrv` 티켓 계정(5.6절).
 
 ##### SSH 확산 (`SSH_Lateral`, T1021.004) · 16_ssh_lateral
 
@@ -396,7 +396,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정. 같은 연결은 uid로 한 번만 셉니다.
 - 제외·오탐 통제: 내부 → 내부만. CI/CD·Ansible·모니터링·백업·점프 서버는 예외 엔진(5.4절)으로 거릅니다. 집계 전에 판정하므로 (출발지, 목적지) 쌍 예외도 됩니다. 기존 `ssh_lm_allowlist`는 그대로 동작합니다(drop 예외로 자동 등록). 경로별로 `ssh_lm_use_auth_event`·`ssh_lm_conn_fallback`으로 끌 수 있습니다.
-- 근거: 표본 목적지마다 1행.
+- 근거: 표본 목적지마다 1행, 대표 연결 uid. SSH는 암호화돼 계정을 알 수 없습니다.
 
 ##### WinRM 확산 (`WinRM_Lateral`, T1021.006) · 20_winrm_dcom_lateral
 
@@ -409,7 +409,7 @@ PowerShell Remoting, evil-winrm, CrackMapExec winrm은 WinRM으로 원격 명령
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정(창당 1건).
 - 제외·오탐 통제: 내부 → 내부만. SCCM·모니터링·Ansible·점프 서버는 원격 관리를 대량으로 하므로 `lm_mgmt_allowlist` 등록이 필수입니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 표본 목적지마다 1행.
+- 근거: 표본 목적지마다 1행. 대표 연결 uid와 계정(같은 대상 NTLM, 없으면 `http`·`wsman` 서비스 티켓 계정. 5.6절).
 
 ##### DCOM 확산 (`DCOM_Lateral`, T1021.003) · 20_winrm_dcom_lateral
 
@@ -423,7 +423,7 @@ MMC20.Application·ShellWindows를 이용한 원격 실행(dcomexec)과 원격 W
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: WinRM과 같음.
 - 제외·오탐 통제: 같은 인터페이스의 다른 호출은 세지 않습니다. 관리 서버는 `lm_mgmt_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 표본 목적지마다 1행.
+- 근거: 표본 목적지마다 1행. 대표 연결 uid와 계정(같은 대상 NTLM, 없으면 `rpcss`·`host` 서비스 티켓 계정. 5.6절).
 
 #### 4.3.5 C2
 
@@ -608,7 +608,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 - 주체: `src` = 파일을 바꾼 출발지(감염 host). `lm_targets` = 파일 서버 집합.
 - 집계·억제: 출발지별 확장자가 바뀐 고유 파일 수와 노트를 만든 고유 폴더 수. 둘 중 하나라도 임계에 닿으면 즉시 탐지, 1시간 억제.
 - 제외·오탐 통제: Office 저장 과정의 임시 파일(`~`로 시작, `.tmp`)과 확장자가 그대로인 이름 변경은 제외. 백업·동기화·DLP·아카이빙 서버는 `ransomware_allowlist`. SMB3 암호화 세션과 덮어쓰기·대량 삭제형 랜섬웨어는 보지 못합니다(10장). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 이름 변경 전후 파일명, 노트 경로 표본.
+- 근거: 이름 변경 전후 파일명, 노트 경로, 연결 uid 표본. 계정은 같은 서버 NTLM, 없으면 `cifs`·`host` 서비스 티켓 계정(5.6절).
 
 ## 5. 공통 기능 요구사항
 
@@ -629,6 +629,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C11 | 예외는 예외 파일에서 읽고, 파일이 바뀌면 재시작 없이 다시 읽는다. 룰은 입구에서 공통 함수로 판정하며, `drop` 예외에 맞으면 notice·근거·탐지 요약을 남기지 않는다(5.4절) | `exceptions.zeek`, 각 룰 |
 | FR-C12 | 예외마다 적재 결과(적용·거부·만료)와 주기별 적중 수를 `nsm_exception.log`에 남긴다 | `exceptions.zeek` |
 | FR-C13 | 자산 신호(머신 계정·DHCP·MAC·호스트명·OS·서비스 등)를 `asset_signal.log`에 남긴다. 탐지 결과에는 영향이 없다(5.5절) | `asset-id/` |
+| FR-C14 | 집계형 확산·자격증명 탐지(05·06·15·16·17·18·20·21)의 근거 행에 대표 연결 uid를 남기고, 확산 탐지(06·15·20·21)와 DCSync(23)는 최근 인증(NTLM·Kerberos 서비스 티켓)으로 찾은 계정을 남긴다(5.6절) | `evidence_log.zeek`, `auth_context.zeek`, 각 룰 |
 
 ### 5.1 킬체인 상관 규칙
 
@@ -734,6 +735,19 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 머지 때 고친 점 | SMB2 클라이언트 GUID용 시그니처가 Zeek 시그니처 프레임워크 기본 동작으로 SMB2 연결마다 `Signatures::Sensitive_Signature` notice(패킷 바이트 포함)를 남기던 것을 막음(`SIG_IGNORE`). 운영 필터가 `asset_signal.log`를 끄던 것(검토 C3)을 유지 목록에 추가해 해결 |
 | 남은 것 | Manager 리졸버(PoC `tools/asset_resolver.py`)는 이 저장소 밖. 선별 전송(메타데이터) 포함 여부는 [메타데이터 SRS](SRS_METADATA_EXPORT.md) P4에서 결정 |
 
+### 5.6 인증 맥락 (확산 근거의 계정)
+
+확산은 "어떤 계정으로 넘어갔는가"가 조사의 핵심인데, 확산 룰이 보는 연결(관리 공유 접근, WinRM 연결, 원격 COM 생성)에는 계정이 없거나 암호화돼 있습니다. `auth_context.zeek`는 최근 인증을 모아 두고, 확산 룰이 근거를 쓸 때 계정을 찾습니다.
+
+| 출처 | 기록 키 | 정확도 |
+| --- | --- | --- |
+| NTLM 인증(`ntlm_authenticate`, 내부 → 내부) | (출발지, 목적지) → `domain\user` | 같은 대상에 쓴 계정이라 정확 |
+| Kerberos 서비스 티켓 응답(`krb_tgs_response`, 내부 출발지) | (출발지, 서비스 종류) → `user@realm`. 종류는 SPN의 `/` 앞(`cifs`, `http`, `wsman`, `termsrv`, `rpcss`, `host`, `ldap`, drsuapi GUID) | 티켓은 DC에서 받으므로 대상은 모름. "그 시간에 출발지가 그 종류 티켓을 받은 계정" |
+
+- 조회: 같은 대상 NTLM 계정이 있으면 그것을, 없으면 룰별 서비스 종류의 티켓 계정을 씁니다. 여러 개면 쉼표로 잇습니다(키당 최대 `auth_ctx_max_accounts`). 실패한 인증도 기록되므로 "시도한 계정"일 수 있습니다.
+- 클러스터: 확산 판정(SumStats)은 매니저에서 하고, DC로 가는 티켓 요청과 확산 연결은 다른 워커가 볼 수 있습니다. 그래서 각 노드는 새 (출발지, 키, 계정) 조합을 `auth_ctx_resend`마다 한 번만 매니저로 보내고, 매니저가 `auth_ctx_expire` 동안 보관합니다. 워커에서 판정하는 DCSync는 같은 연결의 NTLM만 씁니다.
+- 대표 uid: 집계형 근거는 고유 수를 세는 스트림과 별도로 "목적지|uid" 표본(`ev_observe`, 창마다 (출발지, 목적지)당 첫 연결 하나)을 두거나, 이미 있는 표본 문자열에 uid를 덧붙여 근거 행에 남깁니다. 표본 수 한도(`lm_num_samples`)를 넘으면 일부 행은 uid가 없을 수 있습니다.
+
 ## 6. 출력(로그) 요구사항
 
 탐지 결과는 로그 세 개로 나가며, `evidence_id`로 서로 조인합니다: `notice.log`(탐지 원문) → `nsm_detection.log`(관제용 요약) → `evidence.log`(근거 행들).
@@ -775,10 +789,10 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ts` | 언제 |
 | `evidence_id` | 어느 탐지의 근거인지(notice와 공유) |
 | `note` / `killchain_stage` / `technique` | 무엇을(탐지 유형·단계·기법) |
-| `account` | 누가(계정, 알 때만. 예: `user01@corp.example`) |
+| `account` | 누가(계정, 알 때만. 예: `user01@corp.example`, `corp\admin01`). 확산 근거는 인증 맥락에서 찾은 값(5.6절) |
 | `src` / `dst` | 어디서 → 어디로 |
 | `operation` | 어떻게(예: `kerberos_as_failure`, `drsuapi_DRSGetNCChanges`) |
-| `uid` / `fuid` | conn.log·files.log 조인 키 |
+| `uid` / `fuid` | conn.log·files.log·선별 전송 로그 조인 키. 집계형 근거는 표본 대상마다 대표 연결 하나 |
 | `parent_id` | 상관 탐지가 묶는 하위 근거 |
 | `detail` | 부가 정보(실패 코드, 파일명, 바이트 등) |
 
@@ -1068,6 +1082,10 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
+| `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
+| `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
+| `auth_ctx_max_accounts` | 3 | 키마다 남기는 계정 수 |  |
+| `auth_krb_classes` | cifs, http, wsman, termsrv, rpcss, host, ldap, drsuapi GUID | 기록할 Kerberos 서비스 종류 | `+=`로 추가 |
 | `chain_max_expire` | 2hr | 킬체인 상관 상태 최대 보관 시간 |  |
 | `chain_rules` | 개별 전이 23개(5.1절) | 어느 탐지에서 어느 탐지로 이어지는지 | `+=`로 규칙 추가 가능 |
 | `chain_group_rules / corr_*_notes` | 묶음 전이 15개, 묶음 7개(5.1.1) | 어느 단계 묶음에서 어느 단계 묶음으로 이어지는지, 각 묶음에 속한 탐지 | 묶음을 바꾸면 chain_group_rules도 다시 정의 |

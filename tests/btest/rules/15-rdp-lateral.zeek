@@ -7,3 +7,5 @@
 # 근거에 RDP cookie(mstshash) 계정이 남는다
 # @TEST-EXEC: assert-rows evidence.log eq 4 note=NSM::RDP_Lateral src=10.0.0.40 account=administrator
 # @TEST-EXEC: assert-evidence-join NSM::RDP_Lateral
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::RDP_Lateral uid=-

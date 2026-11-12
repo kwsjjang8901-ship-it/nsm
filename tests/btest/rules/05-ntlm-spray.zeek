@@ -16,6 +16,8 @@
 # @TEST-EXEC: assert-rows evidence.log eq 10 note=NSM::NTLM_Spray src=10.0.0.140 dst=10.0.0.5 operation=ntlm_auth_failure
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.CredentialAccess.NtlmSpray attacker=10.0.0.140
 # @TEST-EXEC: assert-evidence-join NSM::NTLM_Spray
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::NTLM_Spray uid=-
 
 redef NSM::ntlm_spray_allowlist += { 10.0.0.145/32 };
 redef NSM::keep_log_streams += { NTLM::LOG };
