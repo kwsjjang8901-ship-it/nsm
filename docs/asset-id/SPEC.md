@@ -185,7 +185,7 @@
 
 ### 3.8 DNS (`dns`, `dns_update`)
 
-- **일반 DNS 응답 (53):** A/AAAA 응답 → 답 주소 IP에 `dns_name`(40), PTR 응답 → 해당 IP에 `dns_name`(50)
+- **일반 DNS 응답 (53):** A/AAAA 응답 → 답 주소 IP에 `dns_name`(40), PTR 응답 → 해당 IP에 `dns_name`(50) PTR은 정규 역방향 이름(IPv4 네 옥텟 `d.c.b.a.in-addr.arpa`, IPv6 니블 32개 `….ip6.arpa`)만 쓰고, RFC 2317 클래스 없는 위임 이름(`71.64/27.37.40.113.in-addr.arpa`)처럼 주소로 바꿀 수 없는 이름은 무시(Zeek `ptr_name_to_addr` 오류 방지).
   - 별칭·로드밸런서일 수 있어 **식별 키가 아님**. 이름 없는 서버의 표시 이름으로만 사용
 - **DNS 동적 업데이트 (RFC 2136, opcode 5) — Zeek 9.x**
   - 트리거: UPDATE 요청(QR=0)의 등록 레코드(FQDN → IP)

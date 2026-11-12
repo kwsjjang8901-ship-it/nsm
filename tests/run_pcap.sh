@@ -100,8 +100,9 @@ meta_dir = os.path.join(z, "meta")
 meta = {f[:-4]: os.path.join(meta_dir, f) for f in os.listdir(meta_dir) if f.endswith(".log")} if os.path.isdir(meta_dir) else {}
 
 # 캡처 구간: 로그에 남은 ts 의 처음·끝
-# (예외 적재 행처럼 패킷 처리 전에 쓴 행은 ts 가 0 이라 뺀다)
-ts = [r["ts"] for p in list(logs.values()) + list(meta.values()) for r in rows(p) if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
+# (예외 적재 행처럼 패킷 처리 전에 쓴 행은 ts 가 0 이라 빼고, reporter 는 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 뺀다)
+ts = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" for r in rows(p)
+      if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
 span = (max(ts) - min(ts)) if len(ts) >= 2 else 0
 print(f"캡처 구간 약 {span/60:.1f}분, 처리 {elapsed}초")
 print()

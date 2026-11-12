@@ -137,7 +137,10 @@ event dns_AAAA_reply(c: connection, msg: dns_msg, ans: dns_answer, a: addr)
 
 event dns_PTR_reply(c: connection, msg: dns_msg, ans: dns_answer, name: string)
 	{
-	if ( /\.(in-addr|ip6)\.arpa$/ !in ans$query )
+	# ptr_name_to_addr 는 정규 형식(IPv4 네 옥텟 또는 IPv6 니블 32개)만 받는다. RFC 2317 클래스 없는
+	# 위임 이름(71.64/27.37.40.113.in-addr.arpa) 같은 것은 오류(reporter error)를 내므로 먼저 거른다.
+	if ( /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.in-addr\.arpa$/ !in to_lower(ans$query) &&
+	     /^([0-9a-f]\.){32}ip6\.arpa$/ !in to_lower(ans$query) )
 		return;
 
 	local ip = ptr_name_to_addr(ans$query);
