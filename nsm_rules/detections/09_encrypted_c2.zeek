@@ -48,7 +48,9 @@ export {
     const enc_c2_w_selfsigned = 2 &redef;   # 자체서명
     const enc_c2_w_nosni      = 1 &redef;   # SNI 부재
     const enc_c2_w_mismatch   = 1 &redef;   # SNI-인증서 불일치
-    const enc_c2_w_ja3        = 3 &redef;   # JA3 차단목록 매칭(레거시)
+    # JA3 는 흔한 브라우저·라이브러리와 지문이 겹친다(CIC-IDS2017 Monday: 'Adware' 해시 3개가 정상 브라우저와 같아
+    # 정상 트래픽 1,176건 오탐). 그래서 임계보다 낮게 두어 다른 신호(자체서명·SNI 없음·불일치)가 하나 더 있어야 탐지한다.
+    const enc_c2_w_ja3        = 2 &redef;   # JA3 차단목록 매칭(레거시, 단독으로는 임계 미달)
     const enc_c2_w_ja4        = 3 &redef;   # JA4 차단목록 정확 일치(주력)
     const enc_c2_w_ja4_a      = 1 &redef;   # JA4 "a" 워치리스트(부분 매칭, 보조)
 }
