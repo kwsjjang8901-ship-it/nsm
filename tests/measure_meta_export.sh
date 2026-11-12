@@ -3,14 +3,17 @@
 #
 #   사용: tests/measure_meta_export.sh <pcap> [반복 횟수=3]
 #
-#   같은 pcap 을 세 가지로 실행해 비교한다.
+#   같은 pcap 을 네 가지로 실행해 비교한다.
 #     full : nsm_rules 없이 Zeek 기본 스크립트 + JSON 로그 전체(= "Zeek 전체 로그")
-#     off  : nsm_rules, 선별 전송 끔(현재 운영 형상)
-#     on   : nsm_rules, 선별 전송 켬
-#   처리 시간: 회차마다 세 구성을 번갈아(홀수 회차 off→on→full, 짝수 회차 on→off→full) 실행해
-#         VM 부하 변화가 한 구성에만 몰리지 않게 한다. 같은 회차의 off·on 쌍으로 증가율을 구해
-#         중앙값과 범위를 보고한다(반복이 많을수록 믿을 만하다. 5회 이상 권장).
-#   출력: 선별 전송 로그(meta/*.log)의 스트림별 바이트·행 수, 전체 로그 대비 비율, 압축 후 크기,
+#     base : nsm_rules, 선별 전송 끔, 자산 식별 끔(AssetID::enable_* 모두 F, 탐지만)
+#     off  : nsm_rules, 선별 전송 끔, 자산 식별 켬(운영 기본값에서 선별 전송만 끈 형상)
+#     on   : nsm_rules, 선별 전송 켬, 자산 식별 켬
+#   처리 시간: 회차마다 구성을 번갈아(홀수 base→off→on→full, 짝수 on→off→base→full) 실행해
+#         VM 부하 변화가 한 구성에만 몰리지 않게 한다. 같은 회차의 쌍으로 증가율을 구해
+#         중앙값과 범위를 보고한다: 자산 식별(base→off), 선별 전송(off→on), 합계(base→on).
+#         반복이 많을수록 믿을 만하다(5회 이상 권장).
+#   출력: 선별 전송 로그(meta/*.log)의 스트림별 바이트·행 수, 전체 로그 대비 비율, 자산 신호(asset_signal.log)
+#         크기, Manager 로 가는 로그 합계(선별 전송 + 자산 신호 + 탐지 로그), 압축 후 크기,
 #         python3 가 있으면 조정 근거(로그별 필드 비중, 요약 로그의 키 분포)와
 #         조정 후보 추정(③ HTTP 묶기 두 안, ⑩ DNS 표본 1개). 주소·도메인 원문은 출력하지 않는다.
 #   KEEP_DIR=<디렉터리> 를 주면 on 실행의 선별 로그를 그 디렉터리에 복사해 남긴다.
@@ -19,7 +22,7 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    sed -n '2,20p' "$0"
+    sed -n '2,23p' "$0"
     exit 2
 fi
 
@@ -30,6 +33,8 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 LOCAL='redef NSM::log_paths = {}; redef NSM::create_log_dirs = F; redef Log::default_rotation_interval = 0secs;'
+# 자산 식별 끄기: config.zeek 의 신호 소스별 option(enable_*)을 모두 F 로(새 소스가 생겨도 따라간다)
+NOASSET=$(sed -n 's/^[[:space:]]*option \(enable_[a-z0-9_]*\)[[:space:]]*=.*/redef AssetID::\1 = F;/p' "$PKG/asset-id/config.zeek" | tr '\n' ' ')
 
 # run_once <구성> : 한 번 실행해 경과 시간(초)을 $WORK/times.<구성> 에 덧붙인다. 로그는 마지막 실행 것이 남는다.
 run_once() {
@@ -37,6 +42,7 @@ run_once() {
     rm -rf "$dir"; mkdir -p "$dir/meta"
     case $name in
         full) set -- policy/tuning/json-logs ;;
+        base) set -- "$PKG" -e "$LOCAL redef NSM::meta_export_enable = F; $NOASSET" ;;
         off)  set -- "$PKG" -e "$LOCAL redef NSM::meta_export_enable = F;" ;;
         on)   set -- "$PKG" -e "$LOCAL redef NSM::meta_export_enable = T; redef NSM::meta_path_prefix = \"meta/\";" ;;
     esac
@@ -47,7 +53,7 @@ run_once() {
 }
 
 for i in $(seq "$RUNS"); do
-    if [ $((i % 2)) -eq 1 ]; then order="off on full"; else order="on off full"; fi
+    if [ $((i % 2)) -eq 1 ]; then order="base off on full"; else order="on off base full"; fi
     for cfg in $order; do run_once "$cfg"; done
 done
 
@@ -56,6 +62,9 @@ stat_of() { sort -n "$WORK/times.$1" | awk '{v[NR]=$1} END {m=(NR%2)?v[(NR+1)/2]
 
 full=$(bytes "$WORK/full")
 meta=$(bytes "$WORK/on/meta")
+fsize() { [ -e "$1" ] && stat -c %s "$1" || echo 0; }
+asset=$(fsize "$WORK/on/asset_signal.log")
+detect=$(( $(fsize "$WORK/on/nsm_detection.log") + $(fsize "$WORK/on/evidence.log") + $(fsize "$WORK/on/nsm_exception.log") ))
 
 echo "pcap: $PCAP (반복 $RUNS회, 구성을 번갈아 실행)"
 echo
@@ -69,19 +78,34 @@ awk -v f="$full" -v m="$meta" 'BEGIN {
     printf "Zeek 전체 로그(full)   %12d 바이트\n", f
     printf "선별 전송 합계(on)     %12d 바이트  (전체 대비 %.2f%%)\n", m, (f > 0 ? 100.0 * m / f : 0)
 }'
+awk -v f="$full" -v m="$meta" -v a="$asset" -v d="$detect" -v n="$(grep -c . "$WORK/on/asset_signal.log" 2>/dev/null || echo 0)" 'BEGIN {
+    printf "자산 신호(asset_signal) %11d 바이트  (전체 대비 %.2f%%, %d행)\n", a, (f > 0 ? 100.0 * a / f : 0), n
+    printf "탐지 로그(탐지·근거·예외) %9d 바이트\n", d
+    printf "Manager 전송 합계      %12d 바이트  (전체 대비 %.2f%%, 선별 전송 + 자산 신호 + 탐지 로그)\n", m + a + d, (f > 0 ? 100.0 * (m + a + d) / f : 0)
+}'
 
-# 처리 시간: 구성별 최솟값·중앙값, 같은 회차 off·on 쌍의 증가율 중앙값과 범위
+# 처리 시간: 구성별 최솟값·중앙값, 같은 회차 쌍의 증가율 중앙값과 범위
 read -r full_min full_med <<< "$(stat_of full)"
+read -r base_min base_med <<< "$(stat_of base)"
 read -r off_min off_med <<< "$(stat_of off)"
 read -r on_min on_med <<< "$(stat_of on)"
-pairs=$(paste "$WORK/times.off" "$WORK/times.on" | awk '{printf "%.1f\n", ($1 > 0 ? 100.0 * ($2 - $1) / $1 : 0)}' | sort -n)
-pair_med=$(echo "$pairs" | awk '{v[NR]=$1} END {m=(NR%2)?v[(NR+1)/2]:(v[NR/2]+v[NR/2+1])/2; printf "%.1f", m}')
-pair_lo=$(echo "$pairs" | head -1); pair_hi=$(echo "$pairs" | tail -1)
-printf '처리 시간(최솟값/중앙값)  full %.3f/%.3fs  off %.3f/%.3fs  on %.3f/%.3fs\n' \
-    "$full_min" "$full_med" "$off_min" "$off_med" "$on_min" "$on_med"
-echo "on/off 증가(같은 회차 쌍)  중앙값 ${pair_med}%  범위 ${pair_lo}% ~ ${pair_hi}%  (쌍 $RUNS개)"
-if awk -v lo="$pair_lo" -v hi="$pair_hi" 'BEGIN {exit !(hi - lo > 10)}'; then
-    echo "  주의: 쌍별 증가율 범위가 10%p 를 넘습니다. 측정 환경이 흔들립니다(공유 폴더·다른 작업). 반복을 늘리거나 로컬 디스크에서 다시 재세요."
+printf '처리 시간(최솟값/중앙값)  full %.3f/%.3fs  base %.3f/%.3fs  off %.3f/%.3fs  on %.3f/%.3fs\n' \
+    "$full_min" "$full_med" "$base_min" "$base_med" "$off_min" "$off_med" "$on_min" "$on_med"
+# pair_stat <이름> <앞 구성> <뒤 구성> : 같은 회차 쌍의 증가율 중앙값·범위
+shaky=0
+pair_stat() {
+    local pairs med lo hi
+    pairs=$(paste "$WORK/times.$2" "$WORK/times.$3" | awk '{printf "%.1f\n", ($1 > 0 ? 100.0 * ($2 - $1) / $1 : 0)}' | sort -n)
+    med=$(echo "$pairs" | awk '{v[NR]=$1} END {m=(NR%2)?v[(NR+1)/2]:(v[NR/2]+v[NR/2+1])/2; printf "%.1f", m}')
+    lo=$(echo "$pairs" | head -1); hi=$(echo "$pairs" | tail -1)
+    printf '%-26s 중앙값 %6s%%  범위 %s%% ~ %s%%  (쌍 %d개)\n' "$1" "$med" "$lo" "$hi" "$RUNS"
+    if awk -v lo="$lo" -v hi="$hi" 'BEGIN {exit !(hi - lo > 10)}'; then shaky=1; fi
+}
+pair_stat "자산 식별 증가(base→off)" base off
+pair_stat "선별 전송 증가(off→on)" off on
+pair_stat "합계 증가(base→on)" base on
+if [ "$shaky" -eq 1 ]; then
+    echo "  주의: 쌍별 증가율 범위가 10%p 를 넘는 항목이 있습니다. 측정 환경이 흔들립니다(공유 폴더·다른 작업). 반복을 늘리거나 로컬 디스크에서 다시 재세요."
 fi
 if grep -qiE "error|fatal" "$WORK"/*/stderr.txt; then
     echo
@@ -100,9 +124,9 @@ fi
 
 if command -v python3 > /dev/null 2>&1; then
     echo
-    python3 - "$WORK/on/meta" "$WORK/full" <<'PY'
+    python3 - "$WORK/on/meta" "$WORK/full" "$WORK/on" <<'PY'
 import collections, gzip, ipaddress, json, os, sys
-d, fulldir = sys.argv[1], sys.argv[2]
+d, fulldir, ondir = sys.argv[1], sys.argv[2], sys.argv[3]
 J = lambda v: len(json.dumps(v, separators=(",", ":"), ensure_ascii=False).encode())
 ROW = lambda r: J(r) + 1   # 한 행 바이트(줄바꿈 포함)
 def rows(n):
@@ -130,6 +154,11 @@ full_gz, meta_gz = gz(logs(fulldir)), gz(logs(d))
 if meta_gz and full_gz:
   print(f"압축(gzip -6)          선별 {meta_gz:,} 바이트: 전체 원본 대비 {pct(meta_gz):.2f}%, "
         f"전체 압축본 대비 {100.0*meta_gz/full_gz:.2f}% (압축률 {total/meta_gz:.1f}배)")
+mgr = [p for p in (os.path.join(ondir, n) for n in ("asset_signal.log", "nsm_detection.log", "evidence.log", "nsm_exception.log")) if os.path.exists(p)]
+if full_gz:
+    mgr_gz = meta_gz + gz(mgr)
+    print(f"압축(gzip -6)          Manager 전송 합계 {mgr_gz:,} 바이트: 전체 원본 대비 {pct(mgr_gz):.2f}%, "
+          f"전체 압축본 대비 {100.0*mgr_gz/full_gz:.2f}%")
 print()
 
 print("조정 근거(로그별 필드 비중 상위 4)")

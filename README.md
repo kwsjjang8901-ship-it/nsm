@@ -39,7 +39,8 @@ tests/
   btest/                    # btest 회귀 테스트 (rules/: 단일 프로세스, cluster/: 매니저+워커 2, asset-id/: 자산 식별 단독 + Baseline/, tools/, setup.zeek)
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
-  measure_meta_export.sh    # 선별 전송 전송량·처리 시간 측정 (pcap 입력)
+  measure_meta_export.sh    # 선별 전송·자산 식별 전송량·처리 시간 측정 (pcap 입력, 반복 실행)
+  run_pcap.sh               # pcap 1회 실행 결과 요약: 탐지·자산 신호·선별 전송·Manager 전송량 (+ claudtest2 리졸버로 자산 리포트)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
