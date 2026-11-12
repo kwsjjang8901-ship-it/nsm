@@ -1,0 +1,16 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#fields	id	scope	src	dst	dst_port	service	domain	ja4	disposition	reason	owner	expires	ref
+EX-epp-server	Encrypted_C2,Nonstandard_Port	-	203.0.113.98/32	-	-	-	-	-	보안 제품 관리 서버(EPP): 자체서명 인증서·SNI 없음·비표준 포트로 C2 오탐	<작성자>	-	-
+EX-edr-server	Encrypted_C2,Nonstandard_Port	-	203.0.113.97/32	-	-	-	-	-	보안 제품 EDR 서버: 자체서명 인증서·비표준 포트	<작성자>	-	-
+EX-agent-beacon	HTTP_Beaconing	-	-	-	-	agent-mgmt.vendor.example	-	-	보안 에이전트 주기 통신(Host 헤더가 있을 때)	<작성자>	-	-
+EX-agent-beacon-ip	HTTP_Beaconing	-	203.0.113.7/32	80/tcp	-	-	-	-	Host 헤더 없는 에이전트 주기 통신은 목적지로	<작성자>	-	-
+EX-jump-servers	group:lateral	10.20.30.10/32,10.20.30.11/32	-	-	-	-	-	-	점프 서버(RDP·SSH·WinRM 관리 접속)	<작성자>	-	-
+EX-ansible-pair	SSH_Lateral	10.20.30.12/32	10.20.40.0/24	22/tcp	-	-	-	-	Ansible -> 서버팜 SSH 경로만(쌍 예외)	<작성자>	-	-
+EX-scanner	SQL_Injection,Webshell_Access,group:recon	10.20.99.10/32	-	-	-	-	-	-	정기 취약점 점검 스캐너	<작성자>	1830297600	<근거 탐지 detection_id>
+EX-adconnect	DCSync	10.0.0.30/32	-	-	-	-	-	-	Azure AD Connect 디렉터리 동기화	<작성자>	-	-
+EX-backup	Exfil_Large_Transfer,Exfil_Volume_Aggregate	10.20.70.0/28	198.51.100.20/32	-	-	-	-	-	외부 백업 서비스로의 정기 백업	<작성자>	-	-
+EX-telemetry	DNS_Tunneling,Exfil_DNS,DGA_Domain	-	-	-	-	telemetry.vendor.example	-	-	제품 텔레메트리 DNS 조회	<작성자>	-	-
+EX-observe	SMB_Ransomware	10.20.70.5/32	-	-	-	-	-	suppress	DLP 서버 관찰 중(기록은 남기고 알림만 끔)	<작성자>	1814400000	-

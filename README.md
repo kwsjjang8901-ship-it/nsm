@@ -51,6 +51,7 @@ docs/
   asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (claudtest2 에서 가져옴)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
+  examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만)
 ```
 
 ## 탐지 룰

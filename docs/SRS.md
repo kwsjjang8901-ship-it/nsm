@@ -1134,6 +1134,8 @@ redef NSM::log_paths += {
 | `expires` | epoch 초 | | 만료 시각. 비우면 만료 없음(재검토 알림은 Manager가 담당) |
 | `ref` | 문자열 | | 근거 알림(`detection_id`) |
 
+열별 쓰임새를 보여 주는 예시 파일: [`docs/examples/exceptions.example.tsv`](examples/exceptions.example.tsv)(설명 [`docs/examples/README.md`](examples/README.md)). pcap으로 확인할 때는 `tests/run_pcap.sh -x <파일>`로 넘깁니다.
+
 축은 하나 이상 있어야 하고, 값이 없으면 `-`, 빈 목록은 `(empty)`로 씁니다(둘 다 "조건 없음").
 
 ```
@@ -1284,6 +1286,7 @@ X-013	Long_Connection	-	203.0.113.10/32	-	-	-	-	drop	VPN 게이트웨이	lee	-	-
 
 - `group:cred`는 05·17·18·22 자격증명 탐지 전부입니다. 일부만 빼려면 탐지 이름을 나열합니다(X-007처럼).
 - X-005처럼 정기 점검처럼 기간이 정해진 예외는 `expires`를 넣습니다. 만료되면 `nsm_exception.log`에 `expired`로 남고 적용되지 않습니다.
+- 보안 제품 관리 서버·Host 헤더 없는 주기 통신·쌍 예외·`suppress` 예시는 [`docs/examples/exceptions.example.tsv`](examples/exceptions.example.tsv)에 있습니다.
 - 기존 `redef NSM::*_allowlist` 방식도 계속 동작하지만(drop 예외로 자동 등록) 바꾸면 재시작이 필요하고 사유·만료를 남기지 못하므로 새 배포에는 쓰지 않습니다.
 
 배포 전에 `zeek -a /경로/nsm_rules`로 문법을 확인하고(7.7절), 배포 후 `loadedscripts.log`에 설정 파일이 보이는지, `nsm_exception.log`에 예외가 `loaded`로 남았는지(`rejected`가 없는지) 확인합니다.
