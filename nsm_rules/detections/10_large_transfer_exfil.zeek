@@ -45,6 +45,11 @@ event connection_state_remove(c: connection)
         #   uid 를 끝에 유지해 연결 단위 유일성은 그대로 확보(집계형의 time_bucket 대체).
         local eid = cat(c$id$orig_h, "|large-transfer|", c$id$resp_h, "|", c$uid);
 
+        # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+        local nid = cat(c$id$orig_h, c$id$resp_h, "large-exfil");
+        if ( NSM::notice_suppressed(Exfil_Large_Transfer, nid) )
+            return;
+
         NSM::write_evidence([
             $ts=network_time(),
             $evidence_id=eid,
@@ -62,7 +67,7 @@ event connection_state_remove(c: connection)
                 $msg=fmt("Large outbound transfer (exfil?): %s -> %s %.1f MB service=%s",
                          c$id$orig_h, c$id$resp_h, mb, svc),
                 $sub=fmt("orig_size=%d service=%s", c$orig$size, svc),
-                $identifier=cat(c$id$orig_h, c$id$resp_h, "large-exfil"),
+                $identifier=nid,
                 $suppress_for=suppress_large_exfil,
                 $evidence_id=eid]);
         }

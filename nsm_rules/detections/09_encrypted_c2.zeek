@@ -125,6 +125,12 @@ event ssl_established(c: connection)
     local iss = c$ssl?$issuer ? c$ssl$issuer : "-";
     local eid = cat(orig, "|enc-c2|", resp, "|", time_bucket(suppress_enc_c2));
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    #   (이전: 억제 창 동안 TLS 세션마다 근거가 쌓여 어떤 탐지에도 연결되지 않는 행이 생겼다)
+    local nid = cat(orig, resp, "enc-c2");
+    if ( NSM::notice_suppressed(Encrypted_C2, nid) )
+        return;
+
     NSM::write_evidence([
         $ts=network_time(),
         $evidence_id=eid,
@@ -142,7 +148,7 @@ event ssl_established(c: connection)
             $msg=fmt("Encrypted C2 suspected: %s -> %s (score=%d: %s)",
                      orig, resp, score, strip(reasons)),
             $sub=fmt("score=%d sni=%s", score, sni),
-            $identifier=cat(orig, resp, "enc-c2"),
+            $identifier=nid,
             $suppress_for=suppress_enc_c2,
             $evidence_id=eid]);
     }

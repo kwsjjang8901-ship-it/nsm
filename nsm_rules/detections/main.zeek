@@ -260,6 +260,10 @@ export {
     ##  대소문자 무시. name 이 비었으면 F.
     global domain_matches: function(name: string, allow: set[string]): bool;
 
+    ## 같은 identifier 의 notice 가 억제 창 안에 있는지. 건별 룰은 근거(evidence)를 쓰기 전에 확인한다.
+    ##   억제 중이면 NOTICE 는 어차피 버려지므로 근거도 쓰지 않는다(쓰면 어떤 탐지에도 연결되지 않는 행이 쌓인다).
+    global notice_suppressed: function(note: Notice::Type, identifier: string): bool;
+
     ## note(탐지 유형) -> 킬체인 단계명 매핑. evidence_log/detection_log 공용.
     ##   evidence_log 가 detection_log 보다 먼저 로드되므로 공용 위치(main)에 둔다.
     const stage_name_map: table[Notice::Type] of string = {
@@ -336,6 +340,11 @@ function is_external(a: addr): bool
     {
     # local_nets 에 포함되지 않으면 외부로 간주
     return ! Site::is_local_addr(a);
+    }
+
+function notice_suppressed(note: Notice::Type, identifier: string): bool
+    {
+    return Notice::is_being_suppressed(Notice::Info($note=note, $identifier=identifier));
     }
 
 function domain_matches(name: string, allow: set[string]): bool

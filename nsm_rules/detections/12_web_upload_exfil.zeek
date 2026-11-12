@@ -66,6 +66,11 @@ event connection_state_remove(c: connection)
     local mb = c$orig$size / (1024.0 * 1024.0);
     local eid = cat(orig, "|web-upload|", resp, "|", time_bucket(1hr));
 
+    # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
+    local nid = cat(orig, resp, "web-upload");
+    if ( NSM::notice_suppressed(Exfil_Web_Upload, nid) )
+        return;
+
     NSM::write_evidence([
         $ts=network_time(),
         $evidence_id=eid,
@@ -82,7 +87,7 @@ event connection_state_remove(c: connection)
             $src=orig,
             $msg=fmt("Web/cloud upload exfil suspected: %s -> %s (%.1f MB)", orig, svc, mb),
             $sub=fmt("service=%s upload_mb=%.1f", svc, mb),
-            $identifier=cat(orig, resp, "web-upload"),
+            $identifier=nid,
             $suppress_for=suppress_web_upload,
             $evidence_id=eid]);
     }
