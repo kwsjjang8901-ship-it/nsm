@@ -3,3 +3,4 @@ tests/btest/.tmp/
 tests/btest/.btest.failed.dat
 __pycache__/
 *.pyc
+out/
