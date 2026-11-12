@@ -1,6 +1,6 @@
 # NSM 탐지룰 SRS (소프트웨어 요구사항 명세)
 
-최종 수정: 2026-11-09 · 원본: 이 파일(`docs/SRS.md`). 룰·설정을 바꾸는 PR에서 함께 고칩니다. PoC 결과는 [탐지 PoC 결과 보고](DETECTION_POC_RESULT.md)에 있습니다.
+최종 수정: 2026-11-11 · 원본: 이 파일(`docs/SRS.md`). 룰·설정을 바꾸는 PR에서 함께 고칩니다. PoC 결과는 [탐지 PoC 결과 보고](DETECTION_POC_RESULT.md)에 있습니다.
 
 nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 초기 침투 → 자격증명 접근 → 확산 → C2 → 유출 → 영향)의 위협 29종을 탐지 룰 23개로 탐지하고, 탐지마다 근거와 요약 로그를 남기는 Zeek 패키지입니다. 이 문서는 2026-11-09 main(6c1484c, PR #1\~#22 반영) 기준으로 시스템이 무엇을 해야 하는지와 어떻게 설정하는지를 정리합니다.
 
@@ -34,7 +34,9 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 요약(detection) | notice 1건을 관제용으로 정리한 행. `nsm_detection.log` |
 | 킬체인 상관 | 같은 공격자의 여러 탐지를 단계 순서로 이어 붙인 탐지(`Correlated_KillChain`) |
 | 내부망 | `Site::local_nets`에 등록한 대역. 모든 방향 판정(내부→외부 등)의 기준 |
-| 예외 목록(allowlist) | 탐지에서 빼는 출발지·목적지·도메인 목록 |
+| 예외 목록(allowlist) | 탐지에서 빼는 출발지·목적지·도메인 목록. 예외 엔진으로 옮기는 중(5.4절) |
+| 예외 엔진 | 예외를 룰 코드가 아니라 데이터(예외 파일)로 관리하는 공통 모듈. 재시작 없이 다시 읽음(5.4절) |
+| 처리(disposition) | 예외에 맞았을 때의 동작. `drop`(기록하지 않음, 기본) 또는 `suppress`(기록하되 알림 표시만 끔) |
 | 집계 창(epoch/interval) | 개수를 세는 시간 단위. 창이 끝나거나 임계를 넘으면 판정 |
 | SumStats | Zeek의 분산 집계 프레임워크. 클러스터에서 워커 값을 매니저가 합침 |
 | fan-out | 한 출발지가 여러 목적지로 퍼지는 형태(확산 탐지의 기본 모양) |
@@ -393,7 +395,7 @@ PsExec 같은 원격 실행 도구는 관리 공유(`ADMIN$`, `C$`)에 서비스
 
 - 주체: `src` = 확산 기점, `lm_targets` = 피해 host.
 - 집계·억제: 출발지별 고유 목적지 수, 창 종료 시 판정. 같은 연결은 uid로 한 번만 셉니다.
-- 제외·오탐 통제: 내부 → 내부만. CI/CD·Ansible·모니터링·백업·점프 서버는 `ssh_lm_allowlist`. 경로별로 `ssh_lm_use_auth_event`·`ssh_lm_conn_fallback`으로 끌 수 있습니다.
+- 제외·오탐 통제: 내부 → 내부만. CI/CD·Ansible·모니터링·백업·점프 서버는 예외 엔진(5.4절)으로 거릅니다. 집계 전에 판정하므로 (출발지, 목적지) 쌍 예외도 됩니다. 기존 `ssh_lm_allowlist`는 그대로 동작합니다(drop 예외로 자동 등록). 경로별로 `ssh_lm_use_auth_event`·`ssh_lm_conn_fallback`으로 끌 수 있습니다.
 - 근거: 표본 목적지마다 1행.
 
 ##### WinRM 확산 (`WinRM_Lateral`, T1021.006) · 20_winrm_dcom_lateral
@@ -472,7 +474,7 @@ TLS로 감싼 C2는 본문을 볼 수 없어 핸드셰이크 메타데이터로 
 - TLS 1.3은 인증서가 암호화돼 자체서명·불일치 신호가 없습니다. 이때는 SNI 없음과 지문만 점수에 들어갑니다.
 - 주체: `src` = 감염 host, `dst` = C2 서버.
 - 집계·억제: 연결 단위 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 → 외부만. 예외 목적지 `enc_c2_allowlist`, SNI 예외 `enc_c2_allowlist_sni`.
+- 제외·오탐 통제: 내부 → 외부만. 예외는 예외 엔진(5.4절)으로 거릅니다(축: 목적지, SNI, JA4 등). 기존 `enc_c2_allowlist`(목적지)·`enc_c2_allowlist_sni`(SNI)는 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 점수, 신호 목록, SNI, 발급자, 지문.
 
 ##### DGA 도메인 (`DGA_Domain`, T1568.002) · 13_dga
@@ -624,6 +626,8 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C8 | (선택) 짧은 시간 안 같은 notice를 하나로 묶어 중복 건수를 표시한다. 기본은 꺼짐 | `notice_aggregation.zeek` |
 | FR-C9 | 내부·외부 판정, 등록 도메인 추출(`co.kr` 등 2단계 접미사 포함), 시간 버킷 같은 공용 함수를 한 곳에서 제공한다 | `main.zeek` |
 | FR-C10 | 조사용 프로토콜 메타데이터를 행·필드를 줄여 별도 경로에 기록하고, 노드당 분당 상한을 넘는 행은 버리되 건수를 남긴다. 탐지 로그는 영향받지 않는다(5.3절) | `metadata/main.zeek` |
+| FR-C11 | 예외는 예외 파일에서 읽고, 파일이 바뀌면 재시작 없이 다시 읽는다. 룰은 입구에서 공통 함수로 판정하며, `drop` 예외에 맞으면 notice·근거·탐지 요약을 남기지 않는다(5.4절) | `exceptions.zeek`, 각 룰 |
+| FR-C12 | 예외마다 적재 결과(적용·거부·만료)와 주기별 적중 수를 `nsm_exception.log`에 남긴다 | `exceptions.zeek` |
 
 ### 5.1 킬체인 상관 규칙
 
@@ -678,6 +682,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | loadedscripts | `/hdd_tmp/log/zeek/loadedscripts` |
 | stats | `/hdd_tmp/log/zeek/stats` |
 | reporter | `/hdd_tmp/log/zeek/reporter` |
+| nsm_exception | `/log/zeek/nsm_exception` |
 
 conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. 켜는 방법은 7.6절에 있습니다. 메타데이터 선별 전송 대상 스트림은 꺼지지 않고, 원본 대신 선별본만 5.3절 경로에 남습니다.
 
@@ -691,6 +696,26 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 요약 | conn → `flow_summary`(30분), dns → `dns_summary`(1시간), http User-Agent → `http_ua_summary`(24시간) |
 | 판정 | 범위 → 스트림별 조건 → 중복 억제 → 노드당 분당 상한, 워커에서 판정 |
 | 탐지와의 관계 | 탐지 로그는 이 기능의 켬·끔·상한과 무관하게 기록됨 |
+
+### 5.4 예외 엔진
+
+예외를 룰마다 다른 `redef` 목록 대신 공통 형식의 데이터(예외 파일)로 관리합니다. 설계 검토와 결정은 [예외 엔진 개발 검토](EXCEPTION_ENGINE_REVIEW.md)에 있습니다.
+
+| 항목 | 동작 |
+| --- | --- |
+| 판정 지점 | 룰 입구 한 곳. 룰은 예전에 allowlist를 검사하던 자리에서 `NSM::exception_drop(note, c)`(건별 룰) 또는 `NSM::exception_drop_agg(note, c)`(집계형 룰, 관측 직전)를 부른다 |
+| `drop`(기본) | 룰 입구에서 거른다. notice·근거·탐지 요약을 남기지 않는다(기존 allowlist와 같음) |
+| `suppress`(선택) | 탐지는 그대로 남기고 notice·탐지 요약에 `disposition=suppressed`, `exception_id`를 붙인다. Manager는 이 탐지로 알림을 올리지 않는다. 판정은 notice 필드(src·dst·포트, 연결이 있으면 SNI 등)로 한다 |
+| 집계형 룰의 쌍 예외 | 목적지 쪽 축(dst·포트·서비스·도메인·JA4)이 있는 예외는 `suppress`여도 `drop`으로 동작한다. 집계된 notice 하나에 예외 경로와 아닌 경로가 섞이기 때문 |
+| 범위 | notice 이름(`SSH_Lateral`) 또는 상관 단계 묶음(`group:recon`, `c2`, `cred`, `domain`, `lateral`, `exfil`, `impact`, 5.1.1절과 같은 묶음) |
+| 축 | `src`, `dst`(대역), `dst_port`, `service`, `domain`(SNI·HTTP Host·DNS 질의, 하위 도메인 포함), `ja4`. 여러 축은 모두 맞아야 한다(AND) |
+| 검증(거부) | 범위가 없거나 모르는 이름, 축이 하나도 없음, `reason`·`owner` 없음, 프로토콜 없는 포트, 대역 축만 있는데 /16보다 넓음(`exception_min_prefix`) |
+| 만료 | `expires`가 지나면 적용하지 않고 `nsm_exception.log`에 `expired`로 남긴다 |
+| 다시 읽기 | 파일이 바뀌면 다시 읽는다(재시작 불필요). 교체는 임시 파일 + 이름 바꾸기로 한다(7.8절). pcap을 읽을 때는 처음 적재가 끝날 때까지 패킷 처리를 멈춘다. 파일이 없으면 기다리지 않고 진행한다 |
+| 클러스터 | 매니저만 파일을 읽고 워커·프록시로 배포한다. 늦게 붙은 노드에도 보낸다. 적재 결과는 매니저가, 적중 수는 판정한 노드가 기록한다 |
+| 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
+| 킬체인 상관 | `suppress`로 표시된 탐지는 상관에 넣지 않는다(이후 단계에서 "넣되 단독 체인 알림 없음"으로 바꿀 예정) |
+| 이관 현황 | 09(건별)·16(집계형)을 이관했다. 나머지 룰은 기존 allowlist로 동작하며 순차 이관한다 |
 
 ## 6. 출력(로그) 요구사항
 
@@ -707,6 +732,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `attack` | ATT&CK 기법 ID | `T1558.003` |
 | `lm_targets` | 확산·포이즈닝·랜섬웨어의 피해 호스트 집합 | `10.0.20.11,10.0.20.12` |
 | `dup_count` | (중복 묶기 사용 시) 묶인 건수 | `3` |
+| `exception_id` / `disposition` | (`suppress` 예외에 맞은 경우) 예외 id / `suppressed` | `E-c2-sni` / `suppressed` |
 
 ### 6.2 nsm_detection.log — 탐지 요약
 
@@ -723,6 +749,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `attacker` / `attacker_subnet` | 공격 호스트와 그 대역 |
 | `victims` | 피해 호스트(최대 8개, 쉼표 구분) |
 | `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 |
+| `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
 
 ### 6.3 evidence.log — 근거
 
@@ -739,6 +766,19 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detail` | 부가 정보(실패 코드, 파일명, 바이트 등) |
 
 근거 건수 카운터는 2시간(`evidence_count_expire`) 뒤 만료됩니다. 운영에서는 세 로그 모두 JSON으로 나갑니다.
+
+### 6.4 nsm_exception.log — 예외 적재·적중
+
+| 필드 | 뜻 |
+| --- | --- |
+| `ts` / `node` | 기록 시각 / 기록한 노드 |
+| `kind` | `loaded`(적용), `rejected`(검증 거부), `expired`(만료), `hits`(주기별 적중 수), `error`(예외 파일 읽기 오류) |
+| `exception_id` | 예외 id(기존 설정에서 온 예외는 `legacy:<설정 이름>`) |
+| `disposition` / `scope` | 처리 방식 / 범위 |
+| `hits` / `last_hit` | 주기(`exception_stats_interval`, 기본 1시간) 안 적중 수 / 마지막 적중 시각. 적중이 없으면 행을 쓰지 않는다 |
+| `msg` | 거부·오류 이유, 출처(`file`, `legacy`) |
+
+적중 수의 단위는 `drop`이면 "예외에 걸린 관측(연결·이벤트) 수", `suppress`면 "표시한 notice 수"입니다. 막은 탐지 건수가 아니므로 대시보드에 단위를 함께 표시합니다.
 
 ## 7. 설정 요구사항
 
@@ -852,7 +892,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `smb_lm_epoch` / `rdp_lm_epoch` / `ssh_lm_epoch` | 1min | 집계 창 |  |
 | `smb_lm_thresholds` | vector(2.0, 3.0) (룰 3.0) | 첫 값 = 고유 피해 호스트 임계 | psexec 1대도 잡으려면 1.0 |
 | `rdp_lm_thresholds` / `ssh_lm_thresholds` | vector(3.0, 5.0, 10.0) | 첫 값 = 고유 목적지 임계 |  |
-| `smb_lm_allowlist` / `rdp_lm_allowlist` / `ssh_lm_allowlist` | 비어 있음 | 예외 출발지(SCCM·백업·점프 서버) | custom에 기록 |
+| `smb_lm_allowlist` / `rdp_lm_allowlist` / `ssh_lm_allowlist` | 비어 있음 | 예외 출발지(SCCM·백업·점프 서버) | custom에 기록. `ssh_lm_allowlist`는 예외 엔진의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `exclude_ipc_share` | T | `IPC$` 는 세지 않음 |  |
 | `smb_lm_exclude_shares` | `PRINT$` | 세지 않을 숨김 공유 |  |
 | `ssh_lm_min_orig_bytes` / `ssh_lm_min_duration` | 1000 / 0.05sec | SSH 판정 최소 바이트·지속 시간(즉시 끊긴 연결 제외) |  |
@@ -890,7 +930,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `enc_c2_w_selfsigned` / `_nosni` / `_mismatch` | 2 / 1 / 1 | 자체서명 / SNI 없음 / SNI·인증서 불일치 가중치 | TLS 1.3은 인증서가 암호화돼 자체서명 신호가 없음 |
 | `enc_c2_w_ja3` / `_ja4` / `_ja4_a` | 3 / 3 / 1 | JA3·JA4 차단목록 일치 / JA4 a부분 워치리스트 |  |
 | `ja3_blocklist` / `ja4_blocklist` / `ja4_a_watchlist` | intel_ja3 데이터 / 비어 있음 | 지문 목록 | 위협 인텔로 갱신 |
-| `enc_c2_allowlist` / `enc_c2_allowlist_sni` | 비어 있음 | 예외 출발지 / SNI |  |
+| `enc_c2_allowlist` / `enc_c2_allowlist_sni` | 비어 있음 | 예외 목적지 / SNI | 예외 엔진의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `suppress_enc_c2` | 1hr | 억제 시간 |  |
 
 #### 10 단일 연결 유출 · 12 클라우드 업로드 · 14 볼륨 집계
@@ -1051,6 +1091,42 @@ redef NSM::log_paths += {
 5. **배포**: 클러스터는 `zeekctl deploy`로 모든 노드에 같은 설정을 반영.
 6. **확인**: `loadedscripts.log`에 custom 파일이 로드됐는지, `reporter.log`에 경고가 없는지 본다.
 
+### 7.8 예외 파일 (예외 엔진)
+
+예외 파일은 재시작 없이 바꿀 수 있습니다. Manager가 원본(YAML 등)을 검증한 뒤 아래 형식(Zeek Input ASCII, 탭 구분)으로 바꿔 센서에 배포하는 것을 전제로 합니다. 파일은 **반드시 임시 파일에 쓴 뒤 이름을 바꿔(rename) 교체**합니다. Zeek는 파일 변경을 수정 시각(초 단위)과 inode로 감지하므로, 같은 초 안에 제자리에서 덮어쓰면 변경을 놓칩니다(Zeek 9.0.1에서 확인). 이름 바꾸기는 반쯤 쓰인 파일을 읽는 일도 막습니다.
+
+| 파라미터 | 기본값 | 의미 |
+| --- | --- | --- |
+| `NSM::exception_file` | `""`(읽지 않음) | 예외 파일 경로. 클러스터에서는 매니저 경로 |
+| `NSM::exception_stats_interval` | 1hr | 적중 수를 `nsm_exception.log`에 쓰는 주기 |
+| `NSM::exception_min_prefix` | 16 | 대역 축만 있는 예외에서 허용하는 가장 넓은 IPv4 접두사 |
+
+| 열 | 형식 | 필수 | 뜻 |
+| --- | --- | --- | --- |
+| `id` | 문자열 | 예 | 예외 id(파일 안에서 유일) |
+| `scope` | 쉼표 목록 | 예 | notice 이름(`Encrypted_C2`) 또는 `group:<묶음>` |
+| `src` / `dst` | 대역 쉼표 목록 | | 출발지 / 목적지(`10.0.0.0/24`, 한 대는 `/32`) |
+| `dst_port` | 포트 쉼표 목록 | | `443/tcp` 형식(프로토콜 필수) |
+| `service` | 쉼표 목록 | | Zeek 서비스 이름(`ssl`, `ssh` …) |
+| `domain` | 쉼표 목록 | | SNI·HTTP Host·DNS 질의. 하위 도메인 포함 |
+| `ja4` | 쉼표 목록 | | JA4 지문(JA4 패키지가 있어야 맞음) |
+| `disposition` | `drop`·`suppress` | | 비우면 `drop` |
+| `reason` / `owner` | 문자열 | 예 | 사유 / 작성자 |
+| `expires` | epoch 초 | | 만료 시각. 비우면 만료 없음(재검토 알림은 Manager가 담당) |
+| `ref` | 문자열 | | 근거 알림(`detection_id`) |
+
+축은 하나 이상 있어야 하고, 값이 없으면 `-`, 빈 목록은 `(empty)`로 씁니다(둘 다 "조건 없음").
+
+```
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#fields	id	scope	src	dst	dst_port	service	domain	ja4	disposition	reason	owner	expires	ref
+E-001	Encrypted_C2	-	203.0.113.0/26	-	-	-	-	drop	백업 SaaS 정기 동기화	kim	-	DET-123
+E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운영팀 정상 접근 경로	lee	1814400000	-
+```
+
 ## 8. 비기능 요구사항
 
 성능·클러스터·호환성·신뢰성은 아래 기준을 따르며, 각 항목은 코드와 테스트에 반영돼 있습니다.
@@ -1069,6 +1145,8 @@ redef NSM::log_paths += {
 | NFR-10 | 신뢰성 | 예외 목록은 기본으로 비어 있고 환경별 설정으로만 채운다 | 모든 `*_allowlist` 기본 `{}` |
 | NFR-11 | 추적성 | 모든 notice는 evidence.log에서 근거를 찾을 수 있어야 한다 | 룰마다 `assert-evidence-join` 테스트 |
 | NFR-12 | 보안 | 패킷 내용을 로그에 원문 그대로 남기지 않는다 | 근거는 최대 256바이트 발췌·요약값만 |
+| NFR-13 | 운영 | 예외 변경은 재시작 없이 반영되고, 클러스터 모든 노드에 같은 예외가 적용된다 | Input Framework 다시 읽기, 매니저→워커·프록시 배포, btest cluster 테스트 |
+| NFR-14 | 성능 | 예외 판정은 예외가 없는 탐지 종류에서 추가 비용이 거의 없어야 한다 | notice 종류별 색인, 없으면 표 조회 1번으로 반환 |
 
 ## 9. 검증 요구사항
 
@@ -1076,7 +1154,7 @@ redef NSM::log_paths += {
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 44개 — 룰·계약·선별 전송 테스트 39개(`tests/btest/rules`), 클러스터 테스트 5개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
+| btest | 46개 — 룰·계약·선별 전송·예외 엔진 테스트 40개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1116,6 +1194,7 @@ redef NSM::log_paths += {
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
+| 예외 엔진 이관이 09·16만 끝남 | 나머지 룰의 예외는 기존 `redef` 목록으로만 등록(재시작 필요) | 순차 이관(검토 문서 E3), 자산 그룹(E4), suppress의 상관 처리(E5) |
 | 자산 식별 PoC 미머지 | 서버 역할(DC·파일 서버·DNS 서버)을 예외에 자동 반영 못함 | 5단계: `nsm_rules/asset-id/`로 머지, 로그 필터에 `AssetID::LOG` 추가 |
 | OCSF 변환기가 신규 탐지 15종·Impact 단계를 모름 | SIEM으로 넘길 때 분류 누락 | 5단계: claudtest 저장소 매핑 추가 |
 | 메타데이터 선별 전송의 운영 전송량·CPU 미측정 | 합성 pcap 기준으로는 전체 로그 대비 20%(공격 트래픽 비중이 커서 실제보다 높음) | 운영 pcap으로 `tests/measure_meta_export.sh` 측정 후 주기·상한·예외 도메인 조정. `docs/METADATA_EXPORT_PLAN.md` |

@@ -24,6 +24,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -52,6 +53,17 @@ export {
     const enc_c2_w_ja4_a      = 1 &redef;   # JA4 "a" 워치리스트(부분 매칭, 보조)
 }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |enc_c2_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:enc_c2_allowlist",
+            [$scope=set("Encrypted_C2"), $dst=enc_c2_allowlist]);
+    if ( |enc_c2_allowlist_sni| > 0 )
+        NSM::exception_add_legacy("legacy:enc_c2_allowlist_sni",
+            [$scope=set("Encrypted_C2"), $domain=enc_c2_allowlist_sni]);
+    }
+
 event ssl_established(c: connection)
     {
     if ( ! detect_encrypted_c2 )
@@ -61,13 +73,8 @@ event ssl_established(c: connection)
     local resp = c$id$resp_h;
     if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
         return;                            # 내부 -> 외부 방향만
-    if ( resp in enc_c2_allowlist )
-        return;
-
-    # SNI 도메인 예외(부분매칭): 신뢰 SNI 의 TLS 는 C2 판정 스킵.
-    #   ja3 우연 매칭 등으로 정상 서비스가 오탐되는 것을 IP 변동과 무관하게 억제.
-    if ( c$ssl?$server_name &&
-         NSM::domain_matches(c$ssl$server_name, enc_c2_allowlist_sni) )
+    # 예외(예외 파일 + 기존 enc_c2_allowlist·enc_c2_allowlist_sni). 축: dst, SNI(domain), ja4 등
+    if ( NSM::exception_drop(Encrypted_C2, c) )
         return;
 
     local score = 0;

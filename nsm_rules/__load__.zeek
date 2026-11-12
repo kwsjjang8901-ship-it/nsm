@@ -3,6 +3,8 @@
 
 @load ./detections/main
 @load ./detections/evidence_log
+# 예외 엔진: 룰이 입구에서 NSM::exception_drop* 을 부르므로 룰보다 먼저 로드
+@load ./detections/exceptions
 
 # 탐지 룰 (킬체인 순서, 1탐지 = 1파일)
 @load ./detections/01_port_scan
