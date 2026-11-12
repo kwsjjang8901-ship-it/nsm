@@ -1423,6 +1423,83 @@ def gen_lateral_auth(out):
     cap.write(os.path.join(out, "lateral_auth.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 24 QUIC(HTTP/3)
+
+QUIC_V1_SALT = bytes.fromhex("38762cf7f55934b34d179ae6a4c80cadccbb7f0a")
+
+
+def hkdf_expand_label(secret, label, length):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
+    full = b"tls13 " + label
+    info = struct.pack(">H", length) + bytes([len(full)]) + full + b"\x00"
+    return HKDFExpand(hashes.SHA256(), length, info).derive(secret)
+
+
+def quic_initial_keys(dcid, is_client):
+    """RFC 9001 5.2: 원래 DCID 로 만든 Initial 키(key, iv, hp)."""
+    import hmac
+    import hashlib
+    initial = hmac.new(QUIC_V1_SALT, dcid, hashlib.sha256).digest()
+    secret = hkdf_expand_label(initial, b"client in" if is_client else b"server in", 32)
+    return (hkdf_expand_label(secret, b"quic key", 16), hkdf_expand_label(secret, b"quic iv", 12),
+            hkdf_expand_label(secret, b"quic hp", 16))
+
+
+def quic_varint(v):
+    if v < 64:
+        return bytes([v])
+    if v < 16384:
+        return struct.pack(">H", 0x4000 | v)
+    return struct.pack(">I", 0x80000000 | v)
+
+
+def quic_initial(odcid, dcid, scid, crypto, is_client, pn=0, pad_to=1200):
+    """CRYPTO 프레임 하나를 담은 QUIC v1 Initial 패킷(암호화·헤더 보호 적용)."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    key, iv, hp = quic_initial_keys(odcid, is_client)
+    payload = b"\x06" + quic_varint(0) + quic_varint(len(crypto)) + crypto
+    pn_len = 2
+    hdr_fixed = (bytes([0xC0 | (pn_len - 1)]) + struct.pack(">I", 1) + bytes([len(dcid)]) + dcid
+                 + bytes([len(scid)]) + scid + quic_varint(0))
+    if is_client:   # 클라이언트 Initial 은 UDP 1200바이트 이상(PADDING 프레임 0x00)
+        payload += b"\x00" * max(0, pad_to - (len(hdr_fixed) + 2 + pn_len + len(payload) + 16))
+    hdr = hdr_fixed + quic_varint(pn_len + len(payload) + 16) + struct.pack(">H", pn)
+    nonce = bytes(a ^ b for a, b in zip(iv, pn.to_bytes(12, "big")))
+    ct = AESGCM(key).encrypt(nonce, payload, hdr)
+    pn_off = len(hdr) - pn_len
+    sample = ct[4 - pn_len:4 - pn_len + 16]
+    mask = Cipher(algorithms.AES(hp), modes.ECB()).encryptor().update(sample)
+    out = bytearray(hdr + ct)
+    out[0] ^= mask[0] & 0x0F
+    for i in range(pn_len):
+        out[pn_off + i] ^= mask[1 + i]
+    return bytes(out)
+
+
+def quic_session(cap, src, dst, t, sni, dport=443):
+    """QUIC 핸드셰이크 앞부분: 클라이언트 Initial(ClientHello) + 서버 Initial(ServerHello)."""
+    sport = RNG.randint(40000, 60000)
+    odcid, cscid, sscid = rand_bytes(8), rand_bytes(8), rand_bytes(8)
+    ch = client_hello(sni, ciphers=(0x1301, 0x1302))[5:]        # QUIC 은 TLS 레코드 없이 핸드셰이크 메시지
+    sh = tls_hs(2, b"\x03\x03" + rand_bytes(32) + b"\x00" + struct.pack(">H", 0x1301) + b"\x00")
+    cap.add(cap.l3(src, dst) / UDP(sport=sport, dport=dport) / Raw(quic_initial(odcid, odcid, cscid, ch, True)), t)
+    cap.add(cap.l3(dst, src) / UDP(sport=dport, dport=sport) / Raw(quic_initial(odcid, cscid, sscid, sh, False)),
+            t + 0.02)
+    return t + 0.05
+
+
+def gen_quic(out):
+    """HTTP/3(QUIC, 443/udp)는 표준 포트(.95, 미탐), 다른 UDP 포트의 QUIC 은 비표준(.96, 탐지)."""
+    cap = Capture()
+    t = quic_session(cap, "10.0.0.95", "93.184.215.170", T0 + 1, "www.example-h3.com")
+    t = quic_session(cap, "10.0.0.96", "93.184.215.171", t + 1, "quic.example-odd.net", dport=4433)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "nonstd_quic.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1430,7 +1507,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes, gen_lateral_auth]
+              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic]
 
 
 def main():

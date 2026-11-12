@@ -499,9 +499,10 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 프로토콜 | `analyzer_confirmation_info`의 분석기 이름(DPD로 내용 확인, 소문자: http·ssl·ssh) |
-| 표준 포트 | `nonstd_port_standard`: HTTP 80·8080·8000·8008·8888·3128, SSL 443·8443과 메일·LDAPS·FTPS 등, SSH 22 |
+| 표준 포트 | `nonstd_port_standard`: HTTP 80·8080·8000·8008·8888·3128, SSL 443·8443과 메일·LDAPS·FTPS 등과 QUIC 443/udp·853/udp, SSH 22 |
 
 - SSH는 Zeek가 NEWKEYS(키 교환 완료) 시점에 확인합니다.
+- QUIC(HTTP/3, DNS over QUIC)은 Zeek가 핸드셰이크를 SSL 분석기로 넘겨 UDP 연결도 `ssl`로 확인됩니다. 그래서 443/udp·853/udp를 SSL 표준 포트로 둡니다(이전에는 정상 HTTP/3가 모두 비표준 포트로 잡힘). 다른 UDP 포트의 QUIC은 탐지합니다. 단, Zeek 8.x는 QUIC을 443/udp에서만 분석하므로 그 경우는 Zeek 9 이상에서만 보입니다.
 - 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
 - 집계·억제: 단건. (출발지, 목적지, 포트, 프로토콜) 단위 1시간 억제.
 - 제외·오탐 통제: 표에 없는 프로토콜은 검사하지 않습니다. 허용 포트·목적지·출발지(기존 `nonstd_port_allowed_ports`·`nonstd_port_allowed_dsts`·`nonstd_port_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
@@ -1071,7 +1072,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
-| `nonstd_port_standard` | http: 80·8080·8000·8008·8888·3128 / ssl: 443·8443·993·995·465·587·636·853·989·990·5061·3389·25·143·110 / ssh: 22 | 프로토콜별 표준 포트 | 포트 추가는 아래 허용 포트 사용 권장 |
+| `nonstd_port_standard` | http: 80·8080·8000·8008·8888·3128 / ssl: 443·8443·993·995·465·587·636·853·989·990·5061·3389·25·143·110(tcp), 443·853(udp, QUIC) / ssh: 22 | 프로토콜별 표준 포트 | 포트 추가는 아래 허용 포트 사용 권장 |
 | `nonstd_port_allowed_ports` | 비어 있음 | 사내에서 허용한 외부 포트 | `+= { 8081/tcp }`. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `nonstd_port_allowed_dsts` / `nonstd_port_allowlist` | 비어 있음 | 허용 외부 서비스 / 예외 출발지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `long_conn_duration` | 6hr | 장기 연결 기준 시간 | 오탐이 많으면 12hr 등으로 늘림 |

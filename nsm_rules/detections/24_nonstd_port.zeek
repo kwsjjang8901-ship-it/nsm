@@ -26,10 +26,13 @@ module NSM;
 
 export {
     ## 프로토콜(분석기 이름, 소문자)별 표준 포트. 여기 없는 프로토콜은 검사하지 않는다.
+    ##   QUIC(HTTP/3, DNS over QUIC)은 Zeek 가 핸드셰이크를 SSL 분석기로 넘겨 UDP 연결에서도 "ssl" 로 확인되므로
+    ##   443/udp·853/udp 를 ssl 표준 포트에 둔다(없으면 정상 HTTP/3 가 모두 비표준 포트로 잡힌다).
     const nonstd_port_standard: table[string] of set[port] = {
         ["http"] = set(80/tcp, 8080/tcp, 8000/tcp, 8008/tcp, 8888/tcp, 3128/tcp),
         ["ssl"]  = set(443/tcp, 8443/tcp, 993/tcp, 995/tcp, 465/tcp, 587/tcp, 636/tcp,
-                                        853/tcp, 989/tcp, 990/tcp, 5061/tcp, 3389/tcp, 25/tcp, 143/tcp, 110/tcp),
+                                        853/tcp, 989/tcp, 990/tcp, 5061/tcp, 3389/tcp, 25/tcp, 143/tcp, 110/tcp,
+                                        443/udp, 853/udp),
         ["ssh"]  = set(22/tcp),
     } &redef;
 
