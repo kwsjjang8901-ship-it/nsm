@@ -1527,6 +1527,27 @@ def gen_service_ports(out):
     cap.write(os.path.join(out, "service_ports.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 자산 식별 PTR(클래스 없는 역방향 위임)
+
+def gen_ptr_classless(out):
+    """정규 PTR(5.0.0.10.in-addr.arpa -> pc05)은 dns_name 신호, RFC 2317 위임 이름(71.64/27.37.40.113.in-addr.arpa)은
+    오류 없이 무시."""
+    cap = Capture()
+    t = T0 + 1
+    for qname, target in (("5.0.0.10.in-addr.arpa", "pc05.corp.example"),
+                          ("71.64/27.37.40.113.in-addr.arpa", "mail.example-isp.net")):
+        qid, sport = RNG.randint(1, 65535), RNG.randint(20000, 60000)
+        cap.add(cap.l3("10.0.0.91", DNS_SERVER) / UDP(sport=sport, dport=53)
+                / DNS(id=qid, rd=1, qd=DNSQR(qname=qname, qtype="PTR")), t)
+        cap.add(cap.l3(DNS_SERVER, "10.0.0.91") / UDP(sport=53, dport=sport)
+                / DNS(id=qid, qr=1, rd=1, ra=1, qd=DNSQR(qname=qname, qtype="PTR"),
+                      an=DNSRR(rrname=qname, type="PTR", ttl=60, rdata=target)), t + 0.002)
+        t += 1
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "ptr_classless.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1534,7 +1555,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports]
+              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless]
 
 
 def main():

@@ -464,7 +464,8 @@ def collect(z, assets_path, args):
     meta_rows.sort(key=lambda r: -r["bytes"])
     mgr = {k: size(logs.get(k)) for k in MGR}
     local = {k: size(p) for k, p in logs.items() if k not in MGR}
-    ts_all = [r["ts"] for p in list(logs.values()) + list(meta.values()) for r in rows(p)
+    # reporter 는 오프라인 실행에서 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 캡처 구간에서 뺀다
+    ts_all = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" for r in rows(p)
               if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
     span = (max(ts_all) - min(ts_all)) if len(ts_all) >= 2 else 0
 
