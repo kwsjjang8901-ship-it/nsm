@@ -517,15 +517,36 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 :root{--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--surf:#fff}
 @media (prefers-color-scheme: dark){:root{--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--surf:#1c2027}}
 .st0{--c:var(--s0)}.st1{--c:var(--s1)}.st2{--c:var(--s2)}.st3{--c:var(--s3)}.st4{--c:var(--s4)}.st5{--c:var(--s5)}.st6{--c:var(--s6)}.stn{--c:var(--mut)}
-svg .mk{fill:var(--c);stroke:var(--surf);stroke-width:2}svg .mk.cand{fill:var(--surf);stroke:var(--c);stroke-width:2.5}
-svg .ar{stroke:var(--c);stroke-width:2;fill:none}svg .ar.cand{stroke-dasharray:4 3}svg .end{fill:var(--surf);stroke:var(--c);stroke-width:2}
-svg .lane{stroke:var(--line);stroke-width:1}svg text{fill:var(--fg);font-size:13px}svg .mt{fill:var(--mut);font-size:12px}svg .gap{fill:var(--mut);font-size:12px;font-style:italic}
-svg .hit{fill:transparent;cursor:pointer}svg .col.on rect.bg{fill:var(--chip)}
+svg text{fill:var(--fg);font-size:13px}svg .mt{fill:var(--mut);font-size:12px}svg .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+svg .node{fill:var(--card);stroke:var(--line);stroke-width:1.5}svg .node.seed{stroke:var(--fg);stroke-width:2}svg .node.ext{fill:var(--chip);stroke-dasharray:4 3}svg .node.grp{fill:var(--bg);stroke-dasharray:2 3}
+svg .ln{stroke:var(--c);stroke-width:2;fill:none}svg .ln.cand{stroke-dasharray:5 4}
+svg .nb{cursor:pointer}svg .nb circle{fill:var(--c);stroke:var(--c);stroke-width:2}svg .nb text{fill:#fff;font-size:10.5px;font-weight:600}
+svg .nb.cand circle{fill:var(--surf)}svg .nb.cand text{fill:var(--c)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);margin-right:4px;vertical-align:-1px}.sw.cand{background:transparent;border:2px solid var(--c);width:8px;height:8px}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0}
-.story{margin:10px 0 0;padding:0;list-style:none}.story li{padding:8px 0;border-top:1px solid var(--line)}.story li.on{background:var(--chip)}
-.story .t{color:var(--mut);font-variant-numeric:tabular-nums;margin-right:6px}.story .how{margin:4px 0 0 18px;font-size:12px;color:var(--mut)}.story .how b{color:var(--fg);font-weight:600}
 .lead{font-size:14px;margin:4px 0 8px}select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);max-width:100%}
+.sub3{font-size:13px;color:var(--mut);margin:18px 0 8px;font-weight:600}
+.prog{display:flex;align-items:center;margin:2px 0 12px;min-width:700px}
+.pst{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;position:relative;font-size:12px;color:var(--fg)}
+.pst::before{content:"";position:absolute;top:11px;left:-50%;right:50%;height:2px;background:var(--line)}.pst:first-child::before{display:none}.pst.on::before{background:var(--mut)}
+.pc{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;color:#fff;background:var(--c);position:relative;z-index:1}
+.pst.off{color:var(--mut)}.pst.off .pc{background:var(--card);border:2px dashed var(--line);color:var(--mut)}
+.board{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:8px;min-width:700px}
+.bcol{display:flex;flex-direction:column;gap:6px;min-width:0}.bcol .none{font-size:12px;color:var(--mut);padding:4px 2px}
+.bcard{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;background:var(--card);cursor:pointer;min-width:0}.bcard:hover{background:var(--chip)}
+.bcard.cand{border-style:dashed}.bcard .h{display:flex;gap:6px;align-items:baseline;font-weight:600;font-size:12.5px}.bcard .w{color:var(--mut);overflow-wrap:anywhere}
+.bnum{font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.nar{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.nar li{display:grid;grid-template-columns:70px 26px minmax(0,1fr);gap:0 10px;border-radius:8px}.nar li.on{background:var(--chip)}
+.nar .tm{font-size:12px;color:var(--mut);padding-top:3px;text-align:right;font-variant-numeric:tabular-nums}
+.nar .sp{position:relative;display:flex;justify-content:center}.nar .sp::before{content:"";position:absolute;top:0;bottom:0;width:2px;background:var(--line)}
+.nar li:first-child .sp::before{top:12px}.nar li:last-child .sp::before{bottom:calc(100% - 12px)}
+.nn{position:relative;z-index:1;margin-top:2px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:600;color:#fff;background:var(--c);box-shadow:0 0 0 3px var(--card)}
+.nn.cand{background:var(--card);color:var(--c);border:2px solid var(--c);width:18px;height:18px}
+.nar .bd{padding:0 0 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.nar .tt{font-weight:600}.nar .k{font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-weight:400;margin-left:4px}
+.nar .how{font-size:12px;color:var(--mut);overflow-wrap:anywhere}.nar .how b{color:var(--fg);font-weight:600}
+.nar li.gapr{display:grid;font-size:12px;color:var(--mut);font-style:italic}.nar li.gapr .sp::before{background:none;border-left:2px dotted var(--line)}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;max-width:420px;box-shadow:0 4px 14px rgba(0,0,0,.15);display:none}
 </style></head><body>
 <header><h1>NSM 통합 리포트</h1><div class="sub" id="sub"></div></header>
@@ -534,9 +555,12 @@ svg .hit{fill:transparent;cursor:pointer}svg .col.on rect.bg{fill:var(--chip)}
 <section id="sum"><h2>요약</h2><div class="cards" id="cards"></div></section>
 <section id="story"><h2>공격 스토리</h2><div class="box">
  <select id="storysel"></select> <label class="note"><input type="checkbox" id="storycand" checked> 체인 밖 탐지도 보기(같은 공격자·확산 대상에서 나온 후보)</label>
- <div class="lead" id="storylead"></div><div class="legend" id="storyleg"></div><div style="display:flex"><div id="storylab" style="flex:0 0 clamp(120px,32vw,230px);overflow:hidden"></div><div id="storysvg" style="overflow-x:auto;flex:1 1 auto;min-width:0"></div></div><ol class="story" id="storylist"></ol>
+ <div class="lead" id="storylead"></div><div class="legend" id="storyleg"></div>
+ <h3 class="sub3">어느 단계까지 왔나</h3><div id="storyprog" style="overflow-x:auto"></div>
+ <h3 class="sub3">어디서 어디로 퍼졌나</h3><div id="storygraph" style="overflow-x:auto"></div>
+ <h3 class="sub3">무슨 일이 있었나</h3><ol class="nar" id="storylist"></ol>
  <details style="margin-top:8px"><summary class="note">근거 연결률(탐지 종류별, 빈틈 검토용)</summary><div id="storycov"></div></details>
- <div class="note">세로는 host(시작 공격자 → 확산으로 닿은 순서 → 그 밖의 대상, 외부는 아래), 가로는 탐지 순서입니다(간격은 시간 비례가 아님, 사이가 10분 이상이면 경과 시간 표시). 채운 점은 상관 규칙이 이은 확정 체인, 빈 점·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. 단계 아래 <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값이라 정확한 연결이 아닙니다.</div></div></section>
+ <div class="note">번호는 탐지 순서이고 세 그림에서 같습니다(그림의 번호·카드를 누르면 아래 설명으로 이동). 확산 경로의 열은 시작 공격자에서 몇 번 건너갔는지이며, 대상이 5대를 넘는 탐지는 4대만 그리고 나머지는 "외 N대"로 묶습니다. 채운 표시는 상관 규칙이 이은 확정 체인, 빈 표시·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값입니다.</div></div></section>
 <section id="det"><h2>탐지</h2><div class="box"><div id="detbars"></div></div>
  <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·역할·OS·기법"><div id="dett"></div>
  <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산(<span class="chip role">역할</span>·<span class="os">OS</span> 함께, 이름에 마우스를 올리면 자산 ID·식별 근거), 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다. 검색 칸에 역할·OS(예: DC, Windows)를 넣으면 그 자산이 공격자·대상인 탐지만 남습니다.</div></div></section>
@@ -606,51 +630,89 @@ const dur=s=>s>=3600?`${Math.floor(s/3600)}시간 ${Math.round(s%3600/60)}분`:s
 const howHtml=d=>(d.facts||[]).map(f=>`<div><b>근거</b> ${esc(f)}</div>`).join('')+(d.ev_accounts&&d.ev_accounts.length?`<div><b>계정</b> ${esc(d.ev_accounts.join(', '))}</div>`:'')+
  (d.how||[]).map(([k,v])=>`<div><b>${esc(k)}</b> ${esc(v)} <i>추정</i></div>`).join('');
 const ST=D.stories;
-// 열 제목을 두 줄로(단어 단위, 줄당 n자, 넘치면 …)
-function wrap2(t,n){const w=t.split(' ');let a='',b='';for(const x of w){if(!b&&(a+(a?' ':'')+x).length<=n)a+=(a?' ':'')+x;else b+=(b?' ':'')+x}
- if(!a){a=t.slice(0,n);b=t.slice(n)}return [a,b.length>n?b.slice(0,n-1)+'…':b]}
 const sel=document.getElementById('storysel');
 sel.innerHTML=ST.length?ST.map((s,i)=>{const a=s.lanes[0];const st=[...new Set(s.steps.map(j=>D.detections[j].stages))].sort((x,y)=>stIdx(x)-stIdx(y));
  return `<option value="${i}">${s.confirmed.length?'확정 체인':'후보'} · ${esc(whoTxt(a))} · ${st.map(x=>STK[x]||x).join('→')} · 탐지 ${s.steps.length}건</option>`}).join(''):'<option>스토리 없음</option>';
+const short=t=>String(t||'').replace(/\\(.*\\)/,'').trim();
+const hostLbl=l=>l.ext?'외부':[l.name||l.asset,(l.roles||[])[0]].filter(Boolean).join(' · ');
+function jump(k){const li=document.getElementById('sn'+k);if(!li)return;document.querySelectorAll('#storylist li.on').forEach(x=>x.classList.remove('on'));li.classList.add('on');li.scrollIntoView({block:'center',behavior:'smooth'})}
+const tipHtml=x=>{const d=x.d;return `<b>${x.k}. ${esc(d.ko)}</b> <span class="mut">${esc(STK[d.stages]||d.stages)} · ${esc(d.techniques)}${x.c?' · 확정 체인':' · 체인 밖'}</span><br>${fmtT(d.first||d.ts)}${d.last&&d.last-d.first>=1?` ~ ${fmtT(d.last).slice(11)}`:''}<br>${who(d.attacker)} → ${d.victims.slice(0,6).map(who).join(', ')||'-'}${d.victims.length>6?` 외 ${d.victims.length-6}`:''}<div class="how">${howHtml(d)}</div>`};
+// 진행 보드: 7단계 줄 + 단계별 카드(단계마다 6장까지)
+function drawProg(steps){
+ const order=D.stage_order;
+ const prog=order.map(st=>{const n=steps.filter(x=>x.d.stages===st).length;
+  return `<div class="pst st${stIdx(st)} ${n?'on':'off'}"><span class="pc">${n||'–'}</span>${esc(STK[st]||st)}${n?'':' · 관측 없음'}</div>`}).join('');
+ const cols=order.map(st=>{const xs=steps.filter(x=>x.d.stages===st),more=xs.length-6;
+  return `<div class="bcol"><div class="note" style="margin:0 0 2px;font-weight:600">${esc(STK[st]||st)}</div>`+(xs.length?xs.slice(0,6).map(x=>{const d=x.d;
+   return `<div class="bcard st${stIdx(st)}${x.c?'':' cand'}" data-k="${x.k}"><div class="h"><span class="sw${x.c?'':' cand'}"></span><span class="bnum">${x.k}</span>${esc(short(d.ko))}</div><div class="w">${fmtT(d.first||d.ts).slice(11)} · ${esc((d.attacker&&(d.attacker.name||d.attacker.ip))||'-')}${d.victims.length?' → '+esc(d.victims.slice(0,2).map(v=>v.name||v.ip).join(', '))+(d.victims.length>2?` 외 ${d.victims.length-2}`:''):''}</div></div>`}).join('')+(more>0?`<div class="none">외 ${more}건</div>`:''):'<div class="none">없음</div>')+'</div>'}).join('');
+ const el=document.getElementById('storyprog');el.innerHTML=`<div class="prog">${prog}</div><div class="board">${cols}</div>`;
+ el.querySelectorAll('.bcard').forEach(c=>{const x=steps.find(y=>y.k===+c.dataset.k);c.onclick=()=>jump(x.k);c.onmousemove=e=>showTip(e,tipHtml(x));c.onmouseleave=hideTip});
+}
+// 확산 경로: 열 = 시작 공격자에서 몇 번 건너갔나. 대상이 5대 넘는 탐지는 다른 데 안 나오는 대상을 묶는다
+function drawGraph(s,steps){
+ const L={};s.lanes.forEach(l=>L[l.ip]=l);
+ const actors=new Set(steps.map(x=>x.d.attacker&&x.d.attacker.ip).filter(Boolean));
+ const seen={};steps.forEach(x=>x.d.victims.forEach(v=>seen[v.ip]=(seen[v.ip]||0)+1));
+ const node={},depth={},edges=[],local={};
+ const seed=s.seed;depth[seed]=0;node[seed]=L[seed]||{ip:seed};
+ steps.forEach(x=>{const d=x.d,a=d.attacker&&d.attacker.ip;if(!a)return;
+  if(!(a in depth)){depth[a]=1;node[a]=L[a]||d.attacker}
+  const vs=d.victims.filter(v=>v.ip!==a);
+  if(!vs.length){(local[a]=local[a]||[]).push(x);return}
+  let show=vs,grp=[];
+  if(vs.length>5){show=vs.filter(v=>actors.has(v.ip)||seen[v.ip]>1||v.ip in node);const rest=vs.filter(v=>!show.includes(v));
+   show=show.concat(rest.slice(0,Math.max(0,4-show.length)));grp=vs.filter(v=>!show.includes(v))}
+  show.forEach(v=>{if(!(v.ip in depth)){depth[v.ip]=depth[a]+1;node[v.ip]=L[v.ip]||v}edges.push({x,a,b:v.ip})});
+  if(grp.length){const id='grp:'+x.k;depth[id]=depth[a]+1;node[id]={ip:id,grp:grp.length,ext:grp.every(v=>v.ext)};edges.push({x,a,b:id})}});
+ const NW=200,NH=56,CG=130,RG=16,P=6,cols={};
+ Object.keys(depth).forEach(ip=>{(cols[depth[ip]]=cols[depth[ip]]||[]).push(ip)});
+ const ci=Object.keys(cols).map(Number).sort((a,b)=>a-b);
+ const firstSeen=ip=>steps.findIndex(x=>(x.d.attacker&&x.d.attacker.ip)===ip||x.d.victims.some(v=>v.ip===ip)||('grp:'+x.k)===ip);
+ ci.forEach(c=>cols[c].sort((p,q)=>((node[p].ext?1:0)-(node[q].ext?1:0))||(firstSeen(p)-firstSeen(q))));
+ const maxN=Math.max(...ci.map(c=>cols[c].length)),H=Math.max(140,maxN*(NH+RG)+24),pos={};
+ ci.forEach((c,i)=>{const a=cols[c],tot=a.length*(NH+RG)-RG,y0=Math.max(18,(H-tot)/2);a.forEach((ip,j)=>pos[ip]={x:P+i*(NW+CG),y:y0+j*(NH+RG)})});
+ const W=P+ci.length*(NW+CG)-CG+P,g=[],nb=[],pairN={};
+ edges.forEach(e=>{const A=pos[e.a],B=pos[e.b],cls='st'+stIdx(e.x.d.stages),cand=e.x.c?'':' cand',key=e.a+'>'+e.b,n=pairN[key]=(pairN[key]||0)+1,off=(n-1)*14;
+  let d,lx,ly;
+  if(B.x>A.x){const x1=A.x+NW,y1=A.y+NH/2+off,x2=B.x,y2=B.y+NH/2+off,mx=(x1+x2)/2;d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2-5},${y2}`;lx=x2-20-(n-1)*20;ly=y2}
+  else{const x1=A.x+NW/2+off,y1=B.y>A.y?A.y+NH:A.y,x2=B.x+NW/2+off,y2=B.y>A.y?B.y:B.y+NH,dy=B.y>A.y?28:-28;d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2-Math.sign(dy)*5}`;lx=(x1+x2)/2;ly=(y1+y2)/2}
+  g.push(`<path class="ln ${cls}${cand}" d="${d}"/>`);nb.push({x:e.x,lx,ly})});
+ Object.keys(pos).forEach(ip=>{const p=pos[ip],n=node[ip]||{ip},cls=ip===seed?' seed':n.grp?' grp':n.ext?' ext':'';
+  g.push(`<rect class="node${cls}" x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="8"/>`);
+  if(n.grp)g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">외 ${n.grp}대</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${n.ext?'외부':'내부'} 대상(번호의 탐지 참고)</text>`);
+  else{const l=L[ip]||n,nm=l.ext?ip:(l.name||l.asset||ip);
+   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,(local[ip]||[]).length?Math.max(12,24-3*Math.min(4,(local[ip]||[]).length)):30))}</text>`)}
+  if(ip===seed)g.push(`<text class="mt" x="${p.x}" y="${p.y-6}">시작</text>`);
+  (local[ip]||[]).slice(0,7).forEach((x,i)=>nb.push({x,lx:p.x+NW-14-i*22,ly:p.y+NH-13}))});
+ nb.forEach(o=>g.push(`<g class="nb st${stIdx(o.x.d.stages)}${o.x.c?'':' cand'}" data-k="${o.x.k}"><circle cx="${o.lx}" cy="${o.ly}" r="9"/><text x="${o.lx}" y="${o.ly+3.6}" text-anchor="middle">${o.x.k}</text></g>`));
+ const el=document.getElementById('storygraph');el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="확산 경로">${g.join('')}</svg>`;
+ el.querySelectorAll('g.nb').forEach(c=>{const x=steps.find(y=>y.k===+c.dataset.k);c.onclick=()=>jump(x.k);c.onmousemove=e=>showTip(e,tipHtml(x));c.onmouseleave=hideTip});
+}
+// 내러티브: 번호·시각·문장·근거, 10분 넘는 공백 표시
+function drawNarr(steps){
+ const out=[];
+ steps.forEach((x,k)=>{const d=x.d;
+  if(k){const p=steps[k-1].d,gap=(d.first||d.ts)-(p.last||p.ts);if(gap>=600)out.push(`<li class="gapr"><span></span><span class="sp"></span><span>${dur(gap)} 뒤</span></li>`)}
+  const vs=d.victims.filter(v=>!d.attacker||v.ip!==d.attacker.ip);
+  out.push(`<li id="sn${x.k}" class="st${stIdx(d.stages)}"><span class="tm">${fmtT(d.first||d.ts).slice(11)}</span><span class="sp"><span class="nn${x.c?'':' cand'}">${x.k}</span></span><div class="bd">
+   <div class="tt">${esc(d.ko)}<span class="k">${esc(STK[d.stages]||d.stages)}</span><span class="k">${esc(d.techniques)}</span>${x.c?'':'<span class="k">체인 밖</span>'}</div>
+   <div>${who(d.attacker)}${vs.length?' → '+vs.slice(0,4).map(who).join(', ')+(vs.length>4?` 외 ${vs.length-4}`:''):''} <span class="mut">· 근거 ${d.evidence_count}건</span></div>
+   <div class="how">${howHtml(d)||'근거·선별 전송 기록 없음'}</div></div></li>`)});
+ document.getElementById('storylist').innerHTML=out.join('');
+}
 function drawStory(){
- const box=document.getElementById('storysvg'),list=document.getElementById('storylist'),lead=document.getElementById('storylead'),leg=document.getElementById('storyleg');
- if(!ST.length){box.innerHTML='';document.getElementById('storylab').innerHTML='';list.innerHTML='';lead.innerHTML='<span class="mut">탐지가 없습니다.</span>';leg.innerHTML='';return}
+ const lead=document.getElementById('storylead'),leg=document.getElementById('storyleg');
+ if(!ST.length){['storyprog','storygraph','storylist'].forEach(i=>document.getElementById(i).innerHTML='');lead.innerHTML='<span class="mut">탐지가 없습니다.</span>';leg.innerHTML='';return}
  const s=ST[+sel.value||0],conf=new Set(s.confirmed),showC=document.getElementById('storycand').checked;
- const steps=s.steps.filter(j=>showC||!conf.size||conf.has(j)).map(j=>({j,d:D.detections[j],c:conf.has(j)}));
- const used=new Set();steps.forEach(x=>{if(x.d.attacker)used.add(x.d.attacker.ip);x.d.victims.forEach(v=>used.add(v.ip))});
- const lanes=s.lanes.filter(l=>used.has(l.ip)),li={};lanes.forEach((l,i)=>li[l.ip]=i);
- // 열 폭은 화면 폭에 맞춘다(열당 124~280px, 열이 1~2개면 420px까지, 넘치면 가로 스크롤)
- const n=steps.length,avail=Math.max(300,(box.clientWidth||900)-24),CW=Math.max(124,Math.min(n<=2?420:280,Math.floor(avail/Math.max(1,n))));
- const LW=0,LH=48,TOP=78,W=Math.max(1,n)*CW+20,H=TOP+lanes.length*LH+10,wch=Math.max(10,Math.floor((CW-16)/13));
- let g=`<svg width="${W}" height="${H}" role="img" aria-label="공격 스토리 타임라인">`,lab=`<svg width="230" height="${H}" style="max-width:none">`;
- lanes.forEach((l,i)=>{const y=TOP+i*LH+LH/2;g+=`<line class="lane" x1="0" x2="${W-10}" y1="${y}" y2="${y}"/>`;
-  lab+=`<text x="4" y="${y-3}">${esc(l.ip)}${l.ext?' <tspan class="mt">외부</tspan>':''}</text><text class="mt" x="4" y="${y+12}">${esc([l.name||l.asset,(l.roles||[]).join(', ')].filter(Boolean).join(' · ').slice(0,34))}</text>`});
- steps.forEach((x,k)=>{const d=x.d,cx=LW+k*CW+CW/2,cls='st'+stIdx(d.stages),cand=x.c?'':' cand';
-  const prev=k?steps[k-1].d:null,gap=prev?(d.first||d.ts)-(prev.last||prev.ts):0;
-  g+=`<g class="col" data-k="${k}"><rect class="bg" x="${cx-CW/2+2}" y="0" width="${CW-4}" height="${H}" rx="6" fill="transparent"/>`;
-  if(gap>=600)g+=`<text class="gap" x="${cx-CW/2}" y="${TOP-54}" text-anchor="middle">+${dur(gap)}</text>`;
-  const [l1,l2]=wrap2((d.ko||'').replace(/\\(.*\\)/,''),wch);
-  g+=`<text class="mt" x="${cx}" y="${TOP-38}" text-anchor="middle">${fmtT(d.first||d.ts).slice(11)}</text><text x="${cx}" y="${TOP-23}" text-anchor="middle">${esc(l1)}</text><text x="${cx}" y="${TOP-9}" text-anchor="middle">${esc(l2)}</text>`;
-  const ay=d.attacker&&li[d.attacker.ip]!==undefined?TOP+li[d.attacker.ip]*LH+LH/2:null;
-  // 대상이 여럿이면 공격자 점에서 부채꼴로 퍼지게 그린다(가까운 줄이 왼쪽)
-  const vs=ay===null?[]:d.victims.filter(v=>li[v.ip]!==undefined&&v.ip!==(d.attacker&&d.attacker.ip)).sort((a,b)=>Math.abs(li[a.ip]*LH+TOP-ay)-Math.abs(li[b.ip]*LH+TOP-ay));
-  const fan=vs.length>1?Math.min(40,(CW-40)/(vs.length-1)):0;
-  vs.forEach((v,m)=>{const vy=TOP+li[v.ip]*LH+LH/2,ex=cx+(m-(vs.length-1)/2)*fan,dx=ex-cx,dy=vy-ay,len=Math.hypot(dx,dy)||1;
-   g+=`<line class="ar ${cls}${cand}" x1="${(cx+dx/len*9).toFixed(1)}" y1="${(ay+dy/len*9).toFixed(1)}" x2="${(ex-dx/len*6).toFixed(1)}" y2="${(vy-dy/len*6).toFixed(1)}"/><circle class="end ${cls}" cx="${ex.toFixed(1)}" cy="${vy}" r="5"/>`});
-  if(ay!==null)g+=`<circle class="mk ${cls}${cand}" cx="${cx}" cy="${ay}" r="9"/>`;
-  g+=`<rect class="hit" x="${cx-CW/2+2}" y="0" width="${CW-4}" height="${H}"/></g>`});
- box.innerHTML=g+'</svg>';document.getElementById('storylab').innerHTML=lab+'</svg>';
- box.querySelectorAll('g.col').forEach(el=>{const x=steps[+el.dataset.k],d=x.d;
-  el.onmousemove=e=>showTip(e,`<b>${esc(d.ko)}</b> <span class="mut">${esc(STK[d.stages]||d.stages)} · ${esc(d.techniques)}${x.c?' · 확정 체인':' · 체인 밖'}</span><br>${fmtT(d.first||d.ts)}${d.last&&d.last-d.first>=1?` ~ ${fmtT(d.last).slice(11)}`:''}<br>${who(d.attacker)} → ${d.victims.map(who).join(', ')||'-'}<br>근거 ${d.evidence_count}건${!(d.ev_accounts&&d.ev_accounts.length)&&d.accounts&&d.accounts.length?` · 계정(추정) ${esc(d.accounts.slice(0,3).join(', '))}`:''}<div class="how">${howHtml(d)}</div>`);
-  el.onmouseleave=hideTip;el.onclick=()=>{const li2=list.children[+el.dataset.k];if(li2){[...list.children].forEach(c=>c.classList.remove('on'));li2.classList.add('on');li2.scrollIntoView({block:'nearest',behavior:'smooth'})}}});
+ const steps=s.steps.filter(j=>showC||!conf.size||conf.has(j)).map((j,i)=>({j,k:i+1,d:D.detections[j],c:conf.has(j)}));
  const stUsed=[...new Set(steps.map(x=>x.d.stages))].sort((a,b)=>stIdx(a)-stIdx(b));
  leg.innerHTML=stUsed.map(x=>`<span class="st${stIdx(x)}"><span class="sw"></span>${esc(STK[x]||x)}</span>`).join('')+'<span class="stn" style="margin-left:8px"><span class="sw"></span>확정 체인</span><span class="stn"><span class="sw cand"></span>체인 밖(후보)</span>';
  const t0=steps.length?(steps[0].d.first||steps[0].d.ts):0,t1=steps.length?Math.max(...steps.map(x=>x.d.last||x.d.ts)):0;
- const intH=lanes.filter(l=>!l.ext).length,extH=lanes.filter(l=>l.ext).length;
+ const used=new Set();steps.forEach(x=>{if(x.d.attacker)used.add(x.d.attacker.ip);x.d.victims.forEach(v=>used.add(v.ip))});
+ const lanes=s.lanes.filter(l=>used.has(l.ip)),intH=lanes.filter(l=>!l.ext).length,extH=lanes.filter(l=>l.ext).length;
  lead.innerHTML=`<b>${esc(whoTxt(s.lanes[0]))}</b>에서 시작해 ${fmtT(t0)}부터 약 ${dur(Math.max(0,t1-t0))} 동안 ${stUsed.map(x=>STK[x]||x).join(' → ')} (탐지 ${steps.length}건, 관련 내부 host ${intH}대, 외부 ${extH}곳).`+
   (s.chains.length?` <span class="mut">상관 체인 ${s.chains.length}개: <code>${esc(s.chains.slice(-1)[0])}</code>${s.chains.length>1?' 등':''}</span>`:' <span class="mut">상관 규칙이 이은 체인은 없습니다.</span>');
- list.innerHTML=steps.map(x=>{const d=x.d;const tg=d.victims.length?` → ${d.victims.slice(0,4).map(who).join(', ')}${d.victims.length>4?` 외 ${d.victims.length-4}`:''}`:'';
-  return `<li class="st${stIdx(d.stages)}"><span class="sw${x.c?'':' cand'}"></span><span class="t">${fmtT(d.first||d.ts)}</span>${who(d.attacker)} <b>${esc(d.ko)}</b>${tg} <span class="mut">· ${esc(STK[d.stages]||d.stages)} · ${esc(d.techniques)} · 근거 ${d.evidence_count}건${x.c?'':' · 체인 밖'}</span><div class="how">${howHtml(d)||'<span class="mut">근거·선별 전송 기록 없음</span>'}</div></li>`}).join('');
+ drawProg(steps);drawGraph(s,steps);drawNarr(steps);
 }
 table('storycov',[['단계',r=>esc(STK[r.stage]||r.stage),r=>stIdx(r.stage)],['탐지',r=>esc(r.ko),r=>r.ko],['건수',r=>r.n,r=>r.n,'num'],
  ['근거 내용',r=>`${r.facts}/${r.n}`,r=>r.facts/r.n,'num'],['근거 계정',r=>`${r.eacct}/${r.n}`,r=>r.eacct/r.n,'num'],
@@ -658,7 +720,6 @@ table('storycov',[['단계',r=>esc(STK[r.stage]||r.stage),r=>stIdx(r.stage)],['�
  ['외부 대상 이름(SNI·Host)',r=>r.ext?`${r.ext_named}/${r.ext}`:'-',r=>r.ext?r.ext_named/r.ext:-1,'num'],
  ['근거 행 uid',r=>r.ev?`${r.ev_uid}/${r.ev}`:'-',r=>r.ev?r.ev_uid/r.ev:-1,'num']],D.coverage);
 sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;drawStory();
-let rsz;addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(drawStory,150)});
 // 자산
 const roleChips=a=>a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join('');
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
