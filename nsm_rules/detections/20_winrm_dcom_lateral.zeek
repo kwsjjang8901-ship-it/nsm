@@ -23,6 +23,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./auth_context
 
 module NSM;
 
@@ -42,6 +43,10 @@ redef record connection += {
     ## ISystemActivator 로 바인드된 (fid, ctx_id)
     nsm_dcom_ctx: set[count, count] &optional;
 };
+
+# 근거의 계정: 같은 대상 NTLM, 없으면 출발지의 해당 종류 서비스 티켓 계정(auth_context)
+const winrm_auth_classes: set[string] = { "http", "wsman" };
+const dcom_auth_classes: set[string] = { "rpcss", "host" };
 
 const isystemactivator_uuid = "000001a0-0000-0000-c000-000000000046";
 const remote_create_instance_opnum = 4;
@@ -66,7 +71,8 @@ function lm_mgmt_target(c: connection, note: Notice::Type): bool
 
 ## epoch_result 공통 처리: 임계 이상이면 표본(목적지)마다 근거 1행 + NOTICE 1건
 function lm_mgmt_report(note: Notice::Type, technique: string, operation: string, label: string,
-                        tag: string, threshold: count, key: SumStats::Key, res: SumStats::ResultVal)
+                        tag: string, threshold: count, key: SumStats::Key, res: SumStats::ResultVal,
+                        uids: table[string] of string, klasses: set[string])
     {
     local n = res$unique;
     if ( n < threshold )
@@ -96,6 +102,8 @@ function lm_mgmt_report(note: Notice::Type, technique: string, operation: string
                 $technique=technique,
                 $src=key$host,
                 $dst=dst,
+                $uid=NSM::ev_uid(uids, cat(dst)),
+                $account=NSM::auth_accounts(key$host, dst, klasses),
                 $operation=operation,
                 $detail=fmt("unique_dst=%d window=%s", n, lm_mgmt_epoch)]);
         }
@@ -115,29 +123,36 @@ event zeek_init()
     # UNIQUE + SAMPLE 를 한 스트림에 둔다(str = 목적지 주소 하나라 섞일 값이 없다).
     local r_winrm = SumStats::Reducer($stream="nsm.winrm_lm", $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
                                       $num_samples=lm_num_samples);
+    # 근거용 대표 연결(목적지|uid). 고유 수와 섞이지 않게 따로 둔다
+    local r_winrm_ev = SumStats::Reducer($stream="nsm.winrm_lm.ev", $apply=set(SumStats::SAMPLE),
+                                         $num_samples=lm_num_samples);
     SumStats::create([
         $name         = "nsm-detect-winrm-lateral",
         $epoch        = lm_mgmt_epoch,
-        $reducers     = set(r_winrm),
+        $reducers     = set(r_winrm, r_winrm_ev),
         $epoch_result(ts: time, key: SumStats::Key, result: SumStats::Result) =
             {
             if ( "nsm.winrm_lm" in result )
                 lm_mgmt_report(WinRM_Lateral, "T1021.006", "winrm_connect", "WinRM", "winrm-lm",
-                               winrm_lm_threshold, key, result["nsm.winrm_lm"]);
+                               winrm_lm_threshold, key, result["nsm.winrm_lm"],
+                               NSM::ev_uids(result, "nsm.winrm_lm.ev"), winrm_auth_classes);
             }
     ]);
 
     local r_dcom = SumStats::Reducer($stream="nsm.dcom_lm", $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
                                      $num_samples=lm_num_samples);
+    local r_dcom_ev = SumStats::Reducer($stream="nsm.dcom_lm.ev", $apply=set(SumStats::SAMPLE),
+                                        $num_samples=lm_num_samples);
     SumStats::create([
         $name         = "nsm-detect-dcom-lateral",
         $epoch        = lm_mgmt_epoch,
-        $reducers     = set(r_dcom),
+        $reducers     = set(r_dcom, r_dcom_ev),
         $epoch_result(ts: time, key: SumStats::Key, result: SumStats::Result) =
             {
             if ( "nsm.dcom_lm" in result )
                 lm_mgmt_report(DCOM_Lateral, "T1021.003", "dcom_remote_create_instance", "DCOM", "dcom-lm",
-                               dcom_lm_threshold, key, result["nsm.dcom_lm"]);
+                               dcom_lm_threshold, key, result["nsm.dcom_lm"],
+                               NSM::ev_uids(result, "nsm.dcom_lm.ev"), dcom_auth_classes);
             }
     ]);
     }
@@ -147,6 +162,7 @@ event connection_established(c: connection)
     if ( c$id$resp_p !in winrm_ports || ! lm_mgmt_target(c, WinRM_Lateral) )
         return;
     SumStats::observe("nsm.winrm_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
+    NSM::ev_observe("nsm.winrm_lm.ev", c$id$orig_h, c$id$resp_h, c$uid, lm_mgmt_epoch);
     }
 
 event dce_rpc_bind(c: connection, fid: count, ctx_id: count, uuid: string, ver_major: count, ver_minor: count)
@@ -165,4 +181,5 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
     if ( ! lm_mgmt_target(c, DCOM_Lateral) )
         return;
     SumStats::observe("nsm.dcom_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
+    NSM::ev_observe("nsm.dcom_lm.ev", c$id$orig_h, c$id$resp_h, c$uid, lm_mgmt_epoch);
     }

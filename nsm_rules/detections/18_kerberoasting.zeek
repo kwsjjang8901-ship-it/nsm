@@ -109,7 +109,7 @@ event zeek_init()
                     if ( ! res$samples[i]?$str )
                         next;
                     local p = split_string(res$samples[i]$str, /\|/);
-                    if ( |p| != 4 )
+                    if ( |p| < 4 )
                         next;
                     kdc = to_addr(p[1]);
                     if ( ! NSM::evidence_is_new(eid, p[0]) )
@@ -122,6 +122,7 @@ event zeek_init()
                         $account=p[3],
                         $src=key$host,
                         $dst=kdc,
+                        $uid=( |p| > 4 ) ? p[4] : "",
                         $operation="kerberos_tgs_weak_cipher",
                         $detail=fmt("service=%s cipher=%s unique_services=%d window=%s",
                                     p[0], p[2], n, krb_roast_interval)]);
@@ -154,7 +155,7 @@ event krb_tgs_response(c: connection, msg: KRB::KDC_Response)
     local src = c$id$orig_h;
 
     SumStats::observe("nsm.krb_roast.sample", [$host=src],
-                      [$str=cat(spn, "|", c$id$resp_h, "|", krb_weak_ciphers[msg$ticket$cipher], "|", who)]);
+                      [$str=cat(spn, "|", c$id$resp_h, "|", krb_weak_ciphers[msg$ticket$cipher], "|", who, "|", c$uid)]);
     SumStats::observe("nsm.krb_roast", [$host=src], [$str=spn]);
     }
 

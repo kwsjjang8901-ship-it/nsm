@@ -106,7 +106,7 @@ event zeek_init()
                         next;
 
                     local parts = split_string(res$samples[i]$str, /\|/);
-                    if ( |parts| != 3 )
+                    if ( |parts| < 3 )
                         next;
                     if ( ! NSM::evidence_is_new(eid, parts[0]) )
                         next;
@@ -119,6 +119,7 @@ event zeek_init()
                         $account=parts[0],
                         $src=key$host,
                         $dst=to_addr(parts[1]),
+                        $uid=( |parts| > 3 ) ? parts[3] : "",
                         $operation="ntlm_auth_failure",
                         $detail=fmt("result=%s unique_failed_users=%d failures=%d window=%s",
                                     parts[2], n, num, ntlm_interval)]);
@@ -166,7 +167,7 @@ function ntlm_failed(c: connection, result: string)
     # 표본을 먼저 넣는다. 임계 판정은 고유 계정 스트림 observe 에서 즉시 일어날 수 있어(Zeek 8),
     #   순서가 반대면 임계를 넘긴 마지막 실패가 근거 표본에서 빠진다.
     SumStats::observe("nsm.ntlm_spray.sample", [$host=c$id$orig_h],
-                      [$str=cat(acct, "|", c$id$resp_h, "|", result)]);
+                      [$str=cat(acct, "|", c$id$resp_h, "|", result, "|", c$uid)]);
     SumStats::observe("nsm.ntlm_spray", [$host=c$id$orig_h], [$str=acct]);
     }
 

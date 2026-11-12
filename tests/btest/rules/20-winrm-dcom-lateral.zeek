@@ -14,5 +14,8 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.LateralMovement.DcomExec attacker=10.0.0.173
 # @TEST-EXEC: assert-evidence-join NSM::WinRM_Lateral
 # @TEST-EXEC: assert-evidence-join NSM::DCOM_Lateral
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::WinRM_Lateral uid=-
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::DCOM_Lateral uid=-
 
 redef NSM::lm_mgmt_allowlist += { 10.0.0.172/32 };

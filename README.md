@@ -15,6 +15,7 @@ nsm_rules/
   detections/
     main.zeek               # Notice 타입, 공통 파라미터·헬퍼
     evidence_log.zeek       # 증적(evidence.log) 스트림
+    auth_context.zeek       # 확산 근거의 계정(최근 NTLM·Kerberos 서비스 티켓 인증)
     detection_log.zeek      # 탐지 요약(nsm_detection.log) 스트림
     attack_mapping.zeek     # Notice → ATT&CK 매핑
     notice_aggregation.zeek # 동일 notice 집계

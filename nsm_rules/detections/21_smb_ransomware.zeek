@@ -20,6 +20,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./auth_context
 
 module NSM;
 
@@ -103,10 +104,10 @@ event zeek_init()
                     if ( ! o?$str )
                         next;
                     local p = split_string(o$str, /\|/);
-                    if ( |p| != 3 )
+                    if ( |p| < 3 )
                         next;
                     add servers[to_addr(p[1])];
-                    if ( ! NSM::evidence_is_new(eid, o$str) )
+                    if ( ! NSM::evidence_is_new(eid, cat(p[0], "|", p[1], "|", p[2])) )
                         next;
                     NSM::write_evidence([
                         $ts=network_time(),
@@ -115,6 +116,8 @@ event zeek_init()
                         $technique="T1486",
                         $src=key$host,
                         $dst=to_addr(p[1]),
+                        $uid=( |p| > 3 ) ? p[3] : "",
+                        $account=NSM::auth_accounts(key$host, to_addr(p[1]), set("cifs", "host")),
                         $operation=p[0] == "rename" ? "smb_rename_extension_change" : "smb_ransom_note_create",
                         $detail=fmt("%s renamed_files=%d note_dirs=%d window=%s",
                                     p[2], ren, note, ransomware_interval)]);
@@ -163,7 +166,7 @@ event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, ds
     local src = c$id$orig_h;
     local fkey = to_lower(cat(c$id$resp_h, ":", f$prev_name));
     SumStats::observe("nsm.ransom.sample", [$host=src],
-                      [$str=cat("rename|", c$id$resp_h, "|", f$prev_name, " -> ", smb_basename(f$name))]);
+                      [$str=cat("rename|", c$id$resp_h, "|", f$prev_name, " -> ", smb_basename(f$name), "|", c$uid)]);
     SumStats::observe("nsm.ransom.rename", [$host=src], [$str=fkey]);
     }
 
@@ -179,6 +182,6 @@ event smb2_create_response(c: connection, hdr: SMB2::Header, response: SMB2::Cre
     local share = ( c$smb_state?$current_tree && c$smb_state$current_tree?$path ) ? c$smb_state$current_tree$path : "";
     local dir = to_lower(cat(c$id$resp_h, ":", share, "\\", smb_dirname(f$name)));
     SumStats::observe("nsm.ransom.sample", [$host=src],
-                      [$str=cat("note|", c$id$resp_h, "|", f$name)]);
+                      [$str=cat("note|", c$id$resp_h, "|", f$name, "|", c$uid)]);
     SumStats::observe("nsm.ransom.note", [$host=src], [$str=dir]);
     }

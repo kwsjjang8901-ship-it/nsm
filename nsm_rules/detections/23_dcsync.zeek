@@ -26,6 +26,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./auth_context
 
 module NSM;
 
@@ -50,6 +51,15 @@ redef record connection += {
 
 const drsuapi_uuid = "e3514235-4b06-11d1-ab04-00c04fc2dcd2";
 const drs_get_nc_changes_opnum = 3;
+
+# 복제를 요청한 계정: 같은 연결의 NTLM 인증(c$ntlm), 없으면 같은 대상 NTLM·drsuapi·ldap 티켓 계정.
+#   클러스터 워커에서는 auth_context 표가 비어 있어(매니저에 모음) 같은 연결의 NTLM 만 쓰인다.
+function dcsync_account(c: connection): string
+    {
+    if ( c?$ntlm && c$ntlm?$username && c$ntlm$username != "" )
+        return to_lower(c$ntlm?$domainname && c$ntlm$domainname != "" ? cat(c$ntlm$domainname, "\\", c$ntlm$username) : c$ntlm$username);
+    return NSM::auth_accounts(c$id$orig_h, c$id$resp_h, set("e3514235-4b06-11d1-ab04-00c04fc2dcd2", "ldap"));
+    }
 
 function dcsync_is_dc(a: addr): bool
     {
@@ -117,6 +127,7 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
             $dst=c$id$resp_h,
             $operation="drsuapi_DRSGetNCChanges",
             $uid=c$uid,
+            $account=dcsync_account(c),
             $detail=fmt("port=%s target_is_known_dc=%s stub_len=%d",
                         c$id$resp_p, dcsync_is_dc(c$id$resp_h), stub_len)]);
 

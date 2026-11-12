@@ -26,6 +26,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./auth_context
 
 module NSM;
 
@@ -110,10 +111,11 @@ event zeek_init()
                     if ( ! who$samples[i]?$str )
                         next;
 
-                    local item = who$samples[i]$str;          # "목적지|계정"
-                    local parts = split_string(item, /\|/);
+                    local parts = split_string(who$samples[i]$str, /\|/);   # "목적지|계정|uid"
                     local sdst = parts[0];
                     local user = ( |parts| > 1 ) ? parts[1] : "";
+                    local suid = ( |parts| > 2 ) ? parts[2] : "";
+                    local item = cat(sdst, "|", user);        # 근거 1행 단위(연결마다가 아니라 목적지·계정마다)
                     if ( to_addr(sdst) !in targets )
                         samples += fmt("%s ", sdst);
                     add targets[to_addr(sdst)];   # 상관용 피해 host
@@ -129,10 +131,14 @@ event zeek_init()
                         $technique="T1021.001",
                         $src=key$host,
                         $dst=to_addr(sdst),
+                        $uid=suid,
                         $operation="rdp_connect",
                         $detail=fmt("unique_dst=%d window=%s", dst_n, rdp_lm_epoch)];
                     if ( user != "" )
                         ev$account = user;
+                    else
+                        # cookie 가 없으면(NLA 전용 클라이언트 등) 같은 대상 NTLM 이나 termsrv 티켓 계정
+                        ev$account = NSM::auth_accounts(key$host, to_addr(sdst), set("termsrv"));
                     NSM::write_evidence(ev);
                     }
                 }
@@ -180,7 +186,7 @@ function observe_rdp(c: connection, cookie: string)
        [$str=cat(dst)]);
     SumStats::observe("nsm.rdp_lm.who",
        [$host=src],
-       [$str=cat(dst, "|", rdp_user_from_cookie(cookie))]);
+       [$str=cat(dst, "|", rdp_user_from_cookie(cookie), "|", c$uid)]);
     }
 
 # RDP 접속 요청 시 cookie(사용자 힌트 mstshash) 동반. 확산 관측의 진입점.

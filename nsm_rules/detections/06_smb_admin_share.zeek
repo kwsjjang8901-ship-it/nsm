@@ -22,8 +22,12 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./auth_context
 
 module NSM;
+
+# SMB 확산 근거의 계정: 같은 대상 NTLM, 없으면 출발지의 cifs·host 서비스 티켓 계정(auth_context)
+const smb_auth_classes: set[string] = { "cifs", "host" };
 
 export {
     ## 관리 공유 경로 패턴 (끝이 '$' 인 공유): \\HOST\ADMIN$ , \\HOST\C$ ...
@@ -63,10 +67,13 @@ event zeek_init()
     local r = SumStats::Reducer($stream="nsm.smb_admin",
                                 $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
                                 $num_samples=lm_num_samples);
+    # 근거용 대표 연결(목적지|uid). 고유 수와 섞이지 않게 따로 둔다
+    local r_ev = SumStats::Reducer($stream="nsm.smb_admin.ev", $apply=set(SumStats::SAMPLE),
+                                   $num_samples=lm_num_samples);
     SumStats::create([
         $name             = "nsm-detect-smb-admin-share",
         $epoch            = smb_lm_epoch,
-        $reducers         = set(r),
+        $reducers         = set(r, r_ev),
         # 창(epoch) 종료 시 1회만 평가한다.
         #   threshold_series 는 임계치 단계마다 재발화해 같은 창에서 detection 이
         #   여러 건 생기고, 각 건의 evidence_count 가 그 시점 스냅샷이 되어
@@ -86,6 +93,7 @@ event zeek_init()
 
             # 증적 key 는 탐지 시점에 1회만 생성한다(관측 시점과 재계산 금지).
             local eid = smb_evidence_id(key$host);
+            local uids = NSM::ev_uids(result, "nsm.smb_admin.ev");
 
             local samples = "";
             local targets: set[addr] = set();
@@ -109,6 +117,8 @@ event zeek_init()
                             $technique="T1021.002",
                             $src=key$host,
                             $dst=to_addr(sdst),
+                            $uid=NSM::ev_uid(uids, sdst),
+                            $account=NSM::auth_accounts(key$host, to_addr(sdst), smb_auth_classes),
                             $operation="smb_tree_connect",
                             $detail=fmt("unique_dst=%d observed=%d window=%s",
                                         dst_n, res$num, smb_lm_epoch)]);
@@ -155,6 +165,7 @@ function observe_admin_share(c: connection, path: string)
     SumStats::observe("nsm.smb_admin",
        [$host=c$id$orig_h],
        [$str=cat(c$id$resp_h)]);
+    NSM::ev_observe("nsm.smb_admin.ev", c$id$orig_h, c$id$resp_h, c$uid, smb_lm_epoch);
 
     }
 

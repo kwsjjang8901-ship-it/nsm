@@ -21,6 +21,7 @@
 
 @load base/frameworks/logging
 @load base/frameworks/notice
+@load base/frameworks/sumstats
 @load ./main
 
 module NSM;
@@ -71,7 +72,19 @@ export {
 
     ## (eid, item) 이 처음이면 T 를 돌려주고 기록한다. 두 번째부터는 F.
     global evidence_is_new: function(eid: string, item: string): bool;
+
+    ## 집계형 룰의 근거용 대표 연결(uid) 표본.
+    ##   고유 수를 세는 스트림과 따로 두고("목적지|uid"), (스트림, 출발지, 목적지)마다 창(win) 안에서
+    ##   처음 본 연결 하나만 관측한다. 탐지 시점에 ev_uids 로 목적지 -> uid 표를 만든다.
+    ##   관측과 판정 노드가 달라도(클러스터: 워커 관측, 매니저 판정) SumStats 가 표본을 모은다.
+    global ev_observe: function(stream: string, src: addr, dst: addr, uid: string, win: interval);
+    global ev_uids: function(result: SumStats::Result, stream: string): table[string] of string;
+    ## 표에 없으면 "" (write_evidence 가 빈 uid 는 기록하지 않는다)
+    global ev_uid: function(uids: table[string] of string, dst: string): string;
 }
+
+# 근거용 표본 중복 관측 방지(창 단위 키). 창이 바뀌면 키가 달라 다시 관측된다.
+global ev_observed: set[string] &create_expire=30min;
 
 event zeek_init() &priority=5
     {
@@ -87,6 +100,12 @@ function write_evidence(ev: EvidenceInfo)
         if ( stg != "" )
             ev$killchain_stage = stg;
         }
+    # 값이 없는 선택 필드는 빈 문자열 대신 필드 없음으로 남긴다(uid·계정 조회 결과가 없을 때)
+    if ( ev?$uid && ev$uid == "" )
+        delete ev$uid;
+    if ( ev?$account && ev$account == "" )
+        delete ev$account;
+
     # evidence_id 별 실제 기록 건수 누적(detection 의 evidence_count 산출용)
     if ( ev$evidence_id != "" )
         ++evidence_counts[ev$evidence_id];
@@ -107,4 +126,35 @@ function evidence_is_new(eid: string, item: string): bool
         return F;
     add evidence_seen[eid][item];
     return T;
+    }
+
+function ev_observe(stream: string, src: addr, dst: addr, uid: string, win: interval)
+    {
+    local k = cat(stream, "|", src, "|", dst, "|", time_bucket(win));
+    if ( k in ev_observed )
+        return;
+    add ev_observed[k];
+    SumStats::observe(stream, [$host=src], [$str=cat(dst, "|", uid)]);
+    }
+
+function ev_uids(result: SumStats::Result, stream: string): table[string] of string
+    {
+    local out: table[string] of string = table();
+    if ( stream !in result || ! result[stream]?$samples )
+        return out;
+    for ( i in result[stream]$samples )
+        {
+        local o = result[stream]$samples[i];
+        if ( ! o?$str )
+            next;
+        local p = split_string(o$str, /\|/);
+        if ( |p| == 2 && p[0] !in out )
+            out[p[0]] = p[1];
+        }
+    return out;
+    }
+
+function ev_uid(uids: table[string] of string, dst: string): string
+    {
+    return ( dst in uids ) ? uids[dst] : "";
     }

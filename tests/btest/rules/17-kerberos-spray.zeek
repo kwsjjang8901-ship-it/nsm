@@ -20,6 +20,9 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.CredentialAccess.KerberosBruteforce attacker=10.0.0.152
 # @TEST-EXEC: assert-evidence-join NSM::Kerberos_Spray
 # @TEST-EXEC: assert-evidence-join NSM::Kerberos_Bruteforce
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::Kerberos_Spray uid=-
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::Kerberos_Bruteforce uid=-
 
 redef NSM::krb_spray_allowlist += { 10.0.0.153/32 };
 redef NSM::keep_log_streams += { KRB::LOG };

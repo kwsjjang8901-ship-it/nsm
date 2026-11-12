@@ -7,3 +7,5 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.LateralMovement.SmbAccess attacker=10.0.0.20
 # @TEST-EXEC: assert-rows evidence.log eq 3 note=NSM::SMB_Admin_Share src=10.0.0.20
 # @TEST-EXEC: assert-evidence-join NSM::SMB_Admin_Share
+# 근거 행마다 대표 연결 uid(집계형 근거와 원본 연결 조인)
+# @TEST-EXEC: assert-rows evidence.log eq 0 note=NSM::SMB_Admin_Share uid=-
