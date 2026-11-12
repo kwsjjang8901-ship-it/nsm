@@ -20,6 +20,7 @@
 @load base/protocols/dns
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -112,9 +113,18 @@ event zeek_init()
 ##   그래서 질의 이름을 (질의 host, 트랜잭션 ID)로 잠시 기억해 응답과 짝짓는다.
 global nbns_pending: table[addr, count] of string &create_expire=30sec;
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |poisoning_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:poisoning_allowlist",
+            [$scope=set("Name_Poisoning"), $src=poisoning_allowlist]);
+    }
+
 function poisoning_observe(proto: string, responder: addr, querier: addr, name: string)
     {
-    if ( responder in poisoning_allowlist )
+    # 예외(예외 파일 + 기존 poisoning_allowlist). 응답자가 notice src, 질의 host 가 dst 다
+    if ( NSM::exception_drop_ctx(Name_Poisoning, [$src=responder, $dst=querier], T) )
         return;
     local n = to_lower(strip(name));
     if ( n == "" )

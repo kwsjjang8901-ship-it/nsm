@@ -30,6 +30,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -135,11 +136,20 @@ event zeek_init()
     ]);
     }
 
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |ntlm_spray_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:ntlm_spray_allowlist",
+            [$scope=set("NTLM_Spray"), $src=ntlm_spray_allowlist]);
+    }
+
 function ntlm_spray_target(c: connection): bool
     {
-    if ( c$id$orig_h in ntlm_spray_allowlist )
-        return F;
     if ( ntlm_spray_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
+        return F;
+    # 예외(예외 파일 + 기존 ntlm_spray_allowlist): 인증 프록시·VDI 게이트웨이 등. 집계 전 판정
+    if ( NSM::exception_drop_agg(NTLM_Spray, c) )
         return F;
     return T;
     }

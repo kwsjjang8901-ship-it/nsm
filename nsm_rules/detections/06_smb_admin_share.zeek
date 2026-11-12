@@ -21,6 +21,7 @@
 @load base/protocols/ntlm
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -127,6 +128,14 @@ event zeek_init()
     }
 
 ## 공유 경로가 관리 공유이면 "관측"만 한다 (NOTICE·증적은 SumStats 가 담당)
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |smb_lm_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:smb_lm_allowlist",
+            [$scope=set("SMB_Admin_Share"), $src=smb_lm_allowlist]);
+    }
+
 function observe_admin_share(c: connection, path: string)
     {
     if ( ! detect_smb_admin_share )
@@ -138,7 +147,8 @@ function observe_admin_share(c: connection, path: string)
     local comps = split_string(path, /\\/);
     if ( |comps| > 0 && to_upper(comps[|comps| - 1]) in smb_lm_exclude_shares )
         return;
-    if ( c$id$orig_h in smb_lm_allowlist )
+    # 예외(예외 파일 + 기존 smb_lm_allowlist). 집계 전 판정
+    if ( NSM::exception_drop_agg(SMB_Admin_Share, c) )
         return;
 
     # 고유 "목적지 호스트" 카운트(목적지+공유까지 보려면 cat(c$id$resp_h, path))

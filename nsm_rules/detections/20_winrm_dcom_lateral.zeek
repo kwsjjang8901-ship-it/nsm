@@ -22,6 +22,7 @@
 @load base/utils/site
 @load ./main
 @load ./evidence_log
+@load ./exceptions
 
 module NSM;
 
@@ -45,13 +46,22 @@ redef record connection += {
 const isystemactivator_uuid = "000001a0-0000-0000-c000-000000000046";
 const remote_create_instance_opnum = 4;
 
-function lm_mgmt_target(c: connection): bool
+# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+event zeek_init()
+    {
+    if ( |lm_mgmt_allowlist| > 0 )
+        NSM::exception_add_legacy("legacy:lm_mgmt_allowlist",
+            [$scope=set("WinRM_Lateral", "DCOM_Lateral"), $src=lm_mgmt_allowlist]);
+    }
+
+function lm_mgmt_target(c: connection, note: Notice::Type): bool
     {
     local src = c$id$orig_h;
     local dst = c$id$resp_h;
     if ( ! Site::is_local_addr(src) || ! Site::is_local_addr(dst) || src == dst )
         return F;
-    return src !in lm_mgmt_allowlist;
+    # 예외(예외 파일 + 기존 lm_mgmt_allowlist). 집계 전 판정
+    return ! NSM::exception_drop_agg(note, c);
     }
 
 ## epoch_result 공통 처리: 임계 이상이면 표본(목적지)마다 근거 1행 + NOTICE 1건
@@ -134,7 +144,7 @@ event zeek_init()
 
 event connection_established(c: connection)
     {
-    if ( c$id$resp_p !in winrm_ports || ! lm_mgmt_target(c) )
+    if ( c$id$resp_p !in winrm_ports || ! lm_mgmt_target(c, WinRM_Lateral) )
         return;
     SumStats::observe("nsm.winrm_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
     }
@@ -152,7 +162,7 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
     {
     if ( opnum != remote_create_instance_opnum || ! c?$nsm_dcom_ctx || [fid, ctx_id] !in c$nsm_dcom_ctx )
         return;
-    if ( ! lm_mgmt_target(c) )
+    if ( ! lm_mgmt_target(c, DCOM_Lateral) )
         return;
     SumStats::observe("nsm.dcom_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
     }
