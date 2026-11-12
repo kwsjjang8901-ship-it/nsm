@@ -5,7 +5,7 @@
          [--asset-report 상대경로] [--pcap 이름] [--elapsed 초] [--tz 9]
 
 탐지(탐지 요약·근거), 킬체인 상관, 예외, 자산(리졸버 assets.json 이 있으면 자산 단위, 없으면 신호 단위),
-메타데이터 선별 전송, Manager 로 가는 전송량, 센서 상태를 한 페이지에 모은다. 탐지의 공격자·피해 IP 는
+메타데이터 선별 전송, Manager 로 가는 전송량, 센서 상태를 한 페이지에 모은다. 탐지의 공격자·대상 IP 는
 탐지 시각에 그 IP 를 쓰던 자산(assets.json 의 IP 점유 구간)으로 이름을 붙이고, 자산 표에는 관련 탐지 수를 센다.
 
 리포트에는 주소·호스트명·계정 같은 원문이 들어 있다. 로컬에서 보는 용도이며 외부로 보내지 않는다.
@@ -15,6 +15,7 @@ import argparse
 import collections
 import datetime
 import html
+import ipaddress
 import json
 import os
 import sys
@@ -88,11 +89,44 @@ def collect(z, assets_path, args):
         assets = assets.get("assets", [])
     idx = AssetIndex(assets or [])
 
+    # 내부 대역: --nets(run_pcap.sh -n) 또는 사설 대역. 대상이 외부면 자산 식별 대상이 아니다(C2·유출의 대상은 외부 서버).
+    nets = []
+    for n in (args.nets or "").split(","):
+        n = n.strip()
+        if n:
+            try:
+                nets.append(ipaddress.ip_network(n, strict=False))
+            except ValueError:
+                pass
+
+    def internal(ip):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return True
+        return a.is_private or any(a in n for n in nets)
+
+    # 리졸버 결과가 없을 때 IP 옆에 붙일 이름: 자산 신호의 호스트명 > 머신 계정 > FQDN > DNS 이름(판정 전 참고값)
+    pri = {"hostname": 0, "machine_account": 1, "fqdn": 2, "dns_name": 3}
+    sig_names = {}
+    for x in sig:
+        k = x.get("signal")
+        if k in pri and x.get("value"):
+            cur = sig_names.get(x.get("ip"))
+            if cur is None or pri[k] < cur[0]:
+                sig_names[x.get("ip")] = (pri[k], str(x["value"]))
+
     def label(ip, ts):
+        out = {"ip": ip}
+        if not internal(ip):
+            out["ext"] = True
         a = idx.find(ip, ts) if assets else None
-        if not a:
-            return {"ip": ip}
-        return {"ip": ip, "asset": a.get("asset_id"), "name": a.get("display_name") or a.get("hostname") or ""}
+        if a:
+            out.update({"asset": a.get("asset_id"), "name": a.get("display_name") or a.get("hostname") or ""})
+        elif ip in sig_names:
+            out["name"] = sig_names[ip][1]
+            out["guess"] = True
+        return out
 
     ev_by = collections.defaultdict(list)
     for e in ev:
@@ -198,6 +232,7 @@ main{padding:12px 24px 40px;max-width:1400px}section{margin:18px 0}h2{font-size:
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{cursor:pointer;color:var(--mut);font-weight:600;white-space:nowrap;user-select:none}th:hover{color:var(--fg)}
 tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{background:var(--bg)}
+.chip.ext{background:transparent;border:1px solid var(--line);color:var(--mut)}.chip.guess{font-style:italic}
 .chip{display:inline-block;white-space:nowrap;padding:1px 7px;border-radius:10px;background:var(--chip);font-size:12px;margin:1px 2px 1px 0}
 .sus{color:var(--bad);font-weight:600}.sup{color:var(--warn)}.mut{color:var(--mut)}.num{text-align:right;font-variant-numeric:tabular-nums}
 .bar{height:8px;background:var(--acc);border-radius:4px;min-width:2px}.filter{margin:0 0 8px;padding:6px 10px;width:100%;max-width:360px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
@@ -209,7 +244,7 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 <section id="sum"><h2>요약</h2><div class="cards" id="cards"></div></section>
 <section id="det"><h2>탐지</h2><div class="box"><div id="detbars"></div></div>
  <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·기법"><div id="dett"></div>
- <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 공격자·피해 IP 옆 이름은 탐지 시각에 그 IP를 쓰던 자산입니다(자산 판정 결과가 있을 때).</div></div></section>
+ <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산, 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다.</div></div></section>
 <section id="chain"><h2>킬체인 상관</h2><div class="box"><label class="note"><input type="checkbox" id="chainall"> 중간 단계 포함(체인이 길어질 때마다 나온 상관 탐지를 모두 보기)</label><div id="chaint"></div></div></section>
 <section id="asset"><h2>자산</h2><div class="box"><input class="filter" id="asf" placeholder="필터: 이름·IP·OS·역할"><div id="ast"></div><div class="note" id="asnote"></div></div></section>
 <section id="xfer"><h2>전송량</h2><div class="box" id="xft"></div></section>
@@ -222,7 +257,7 @@ const D=JSON.parse(document.getElementById('data').textContent);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtB=b=>b>=1e6?(b/1e6).toFixed(2)+' MB':b>=1e3?(b/1e3).toFixed(1)+' KB':b+' B';
 const fmtT=t=>{if(!t)return'-';const d=new Date((t+D.tz*3600)*1000);return d.toISOString().replace('T',' ').slice(0,19)};
-const who=w=>w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip">${esc(w.name||w.asset)}</span>`:''}`:'-';
+const who=w=>w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip${w.guess?' guess':''}" title="${w.guess?'자산 신호의 이름(판정 전)':'자산 판정 결과'}">${esc(w.name||w.asset)}</span>`:''}${w.ext?' <span class="chip ext">외부</span>':''}`:'-';
 const arrow=s=>esc(String(s??'').replace(/->/g,'→'));
 document.getElementById('sub').textContent=`${D.pcap} · 캡처 ${fmtT(D.start)} ~ ${fmtT(D.end)} (UTC${D.tz>=0?'+':''}${D.tz}, 약 ${(D.span/60).toFixed(1)}분) · 처리 ${D.elapsed}초 · 생성 ${D.generated}`;
 // 표: 열 정의 [제목, 값 함수, 정렬 키 함수, 클래스]
@@ -254,12 +289,12 @@ document.getElementById('detbars').innerHTML=Object.keys(byDiag).length?'<table>
 const evTable=d=>!d.evidence.length?'<span class="mut">근거 없음</span>':'<table>'+'<tr><th>시각</th><th>행위</th><th>출발→대상</th><th>계정</th><th>내용</th></tr>'+d.evidence.map(e=>`<tr><td>${fmtT(e.ts)}</td><td>${esc(e.operation)}</td><td>${esc(e.src)} → ${esc(e.dst)}</td><td>${esc(e.account)}</td><td>${esc(e.detail)}</td></tr>`).join('')+'</table>'+`<div class="note">탐지 ID <code>${esc(d.id)}</code>${d.exception_id?` · 예외 <code>${esc(d.exception_id)}</code>`:''}</div>`;
 table('dett',[['시각',d=>fmtT(d.ts),d=>d.ts],['진단',d=>esc(d.diagnosis),d=>d.diagnosis],['기법',d=>esc(d.techniques),d=>d.techniques],
  ['단계',d=>arrow(d.stages),d=>d.stages],['공격자',d=>who(d.attacker),d=>d.attacker?d.attacker.ip:''],
- ['피해',d=>d.victims.map(who).join('<br>')||'-',d=>d.victims.length],['근거',d=>d.evidence_count,d=>d.evidence_count,'num'],
+ ['대상',d=>d.victims.map(who).join('<br>')||'-',d=>d.victims.length],['근거',d=>d.evidence_count,d=>d.evidence_count,'num'],
  ['처리',d=>d.disposition?`<span class="sup">${esc(d.disposition)}</span>`:'',d=>d.disposition||'']],single,{detail:evTable,filter:'detf'});
 // 킬체인: 상관 탐지는 체인이 한 단계 길어질 때마다 새로 나온다. 기본은 공격자별로 다른 체인의 앞부분이 아닌 것(최종 체인)만.
 const finalChains=chains.filter(c=>!chains.some(o=>o!==c&&o.attacker&&c.attacker&&o.attacker.ip===c.attacker.ip&&String(o.stages).length>String(c.stages).length&&String(o.stages).startsWith(String(c.stages))));
 const chainCols=[['시각',d=>fmtT(d.ts),d=>d.ts],['단계',d=>`<span class="sus">${arrow(d.stages)}</span>`,d=>d.stages],['기법',d=>arrow(d.techniques),d=>d.techniques],
- ['공격자',d=>who(d.attacker),d=>d.attacker?d.attacker.ip:''],['피해',d=>d.victims.map(who).join('<br>')||'-',d=>d.victims.length],['근거',d=>d.evidence_count,d=>d.evidence_count,'num']];
+ ['공격자',d=>who(d.attacker),d=>d.attacker?d.attacker.ip:''],['대상',d=>d.victims.map(who).join('<br>')||'-',d=>d.victims.length],['근거',d=>d.evidence_count,d=>d.evidence_count,'num']];
 const drawChains=()=>table('chaint',chainCols,document.getElementById('chainall').checked?chains:finalChains,{detail:evTable});
 document.getElementById('chainall').onchange=drawChains;drawChains();
 // 자산
@@ -304,6 +339,7 @@ def main():
     ap.add_argument("--pcap", default="")
     ap.add_argument("--elapsed", type=int, default=0)
     ap.add_argument("--tz", type=float, default=9, help="표시 시간대 UTC 오프셋(시), 기본 9(KST)")
+    ap.add_argument("--nets", default="", help="내부 대역(쉼표 구분, run_pcap.sh -n 과 같음). 사설 대역은 항상 내부로 본다")
     args = ap.parse_args()
     data = collect(args.zeek_dir, args.assets, args)
     blob = json.dumps(data, ensure_ascii=False, default=list).replace("</", "<\\/")

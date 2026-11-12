@@ -178,7 +178,7 @@ else
 fi
 echo
 echo "[3/3] 통합 리포트"
-python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$OUT/report.html" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
+python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$OUT/report.html" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
 echo
 echo "결과: $OUT"
 echo "  - report.html    통합 리포트(탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
