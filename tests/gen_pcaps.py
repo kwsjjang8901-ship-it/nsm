@@ -1775,6 +1775,48 @@ def gen_web_xss_bf(out):
     cap.write(os.path.join(out, "web_xss_bf.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 공격 스토리: 7단계 전부(초기 침투 포함)
+
+def gen_killchain_story(out):
+    """한 공격자가 7단계를 모두 거치는 시나리오(T = pcap 시작 기준 초). 통합 리포트의 공격 스토리 확인용.
+
+    공격자 A(172.16.0.66, NAT 뒤 외부 공격자 형태)
+      T1    정찰      A -> 웹서버 W 포트 30개 스캔(Port_Scan)
+      T60   초기 침투  A -> W SQL 인젝션(SQL_Injection), T70 업로드한 웹쉘로 명령 실행(Webshell_Access)
+    침해된 웹서버 W(10.0.10.81, 초기 침투 대상이라 스토리에 이어짐)
+      T120  C2        W -> 93.184.215.140 30초 주기 HTTP 콜백 14회(~T510 HTTP_Beaconing)
+      T540  자격증명   W -> KDC RC4 서비스 티켓 6개(Kerberoasting, 10분 창 끝)
+      T600  확산      W -> V1·V2 ADMIN$·C$ 접근(1분 창 끝 SMB_Admin_Share, 피해 host 2대)
+    확산 대상
+      T700  유출      V1(10.0.20.31) -> 93.184.215.141 60MB 업로드(Exfil_Large_Transfer·Exfil_Volume_Aggregate)
+      T760  영향      V2(10.0.20.32) -> 파일 서버 40개 .lockd 이름 변경 + 랜섬 노트 6곳(SMB_Ransomware)
+    """
+    mb = 1024 * 1024
+    cap = Capture()
+    a, w, v1, v2 = "172.16.0.66", "10.0.10.81", "10.0.20.31", "10.0.20.32"
+    port_scan(cap, a, w, range(8000, 8030), T0 + 1)
+    http_req(cap, a, w, "GET", "/shop/item.php?id=1%27%20UNION%20SELECT%20username,password%20FROM%20users--", T0 + 60)
+    http_req(cap, a, w, "GET", "/uploads/img_cache.php?cmd=whoami", T0 + 70)
+    beacon(cap, w, "93.184.215.140", "cdn.update-check.net", T0 + 120, [30] * 13)
+    t = T0 + 540
+    for i in range(1, 7):
+        t = krb_service_ticket(cap, w, "svc_web", "MSSQLSvc/db%02d.corp.example:1433" % i, KRB_RC4, t + 1)
+    smb_tree_connect(cap, w, v1, "ADMIN$", T0 + 600)
+    smb_tree_connect(cap, w, v2, "C$", T0 + 602)
+    bulk_upload(cap, v1, "93.184.215.141", 443, 60 * mb, T0 + 700)
+    dirs = ["finance", "hr", "sales", "legal", "it", "ops"]
+    s = Smb2Session(cap, v2, FILE_SERVER, "data", T0 + 760)
+    for i in range(40):
+        name = "%s\\doc_%02d.xlsx" % (dirs[i % 6], i)
+        s.rename(s.create(name), name + ".lockd")
+    for d in dirs:
+        s.create("%s\\README_DECRYPT_FILES.txt" % d, disposition=2)
+    s.close()
+    cap.tick(T0 + 1800)
+    cap.write(os.path.join(out, "killchain_story.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1783,7 +1825,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
-              gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf]
+              gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
+              gen_killchain_story]
 
 
 def main():
