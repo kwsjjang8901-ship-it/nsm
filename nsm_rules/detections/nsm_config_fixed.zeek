@@ -41,6 +41,8 @@
 # redef NSM::port_scan_count_established   = T;          # F면 미응답/거부만 카운트(FP↓)
 redef NSM::port_scan_threshold           = 25;          # (src,dst) 고유 포트 수 임계
 redef NSM::scan_interval                 = 5min;        # 집계 윈도우(01·02 공유)
+# redef NSM::port_scan_count_nosyn       = T;          # SYN 없는 TCP 탐침(FIN·NULL·Xmas·ACK·Window)도 셈
+# redef NSM::port_scan_count_udp         = T;          # 응답 없는 UDP 탐침도 셈(traceroute 33434~33534 제외)
 # redef NSM::port_scan_exclude_ports      += { 3389/tcp };            # 제외 포트, nsm_config_custom.zeek에 포함됨.
 # redef NSM::port_scan_allowlist          += { 10.20.99.10/32 };      # 취약점 스캐너 등
 
@@ -167,6 +169,7 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # [30] TLS_Beaconing (T1071.001) — 같은 외부 목적지로 일정 주기·비슷한 크기의 TLS 연결 12회 연속(주기 파라미터는 [07] 공통)
 # =============================================================================
 # redef NSM::tls_beacon_size_tolerance    = 0.25;                 # 크기 허용 비율
+# redef NSM::tls_beacon_min_span          = 30min;                # 연속 구간 최소 길이(웹 페이지 스크립트 오탐 방지)
 # 업데이트·텔레메트리 등 정상 주기 서비스는 예외 파일(SNI·목적지 축)로 뺀다.
 
 # =============================================================================

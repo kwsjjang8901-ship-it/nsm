@@ -8,6 +8,8 @@
 ##!     같은 (출발지, 목적지)로 07 과 같은 주기(beacon_min_interval~max, 오차 beacon_jitter, 누락 허용)가
 ##!     beacon_min_hits(12)회 이어지고, 그 연결들의 양방향 바이트가 기준 연결의 ±tls_beacon_size_tolerance
 ##!     (또는 tls_beacon_size_slack 바이트) 안이면 탐지한다. 크기가 벗어나면 연속 수를 다시 센다.
+##!   - 그 연속 구간이 tls_beacon_min_span(30분) 이상 이어져야 한다. 웹 페이지의 광고·분석 스크립트처럼
+##!     몇 분 주기 통신을 하다 멈추는 정상 트래픽을 거른다(상주 C2 는 몇 시간씩 이어짐).
 ##!   - 짧은 연결만 센다(tls_beacon_max_duration). 메신저·푸시처럼 오래 붙어 있는 연결은 24 장기 연결이 본다.
 ##!
 ##! 클러스터: 07 과 같이 (출발지, 목적지) HRW 로 프록시(없으면 매니저) 한 곳에 상태를 모은다.
@@ -33,6 +35,10 @@ export {
     const tls_beacon_size_slack = 512 &redef;
     ## 이보다 오래 이어진 연결은 비커닝 관측에서 뺀다
     const tls_beacon_max_duration = 2min &redef;
+    ## 박자·크기가 맞는 연속 구간이 이 시간 이상 이어져야 탐지한다. 열어 둔 웹 페이지의 광고·분석 스크립트는
+    ## 몇 분 주기로 같은 크기 요청을 보내다 탭을 닫으면 멈춘다(CIC-IDS2017 5일 오탐 101건 중 대부분이
+    ## 2~12분짜리 연속). 상주 C2 는 몇 시간씩 이어진다. 0 이면 연속 횟수(beacon_min_hits)만 본다.
+    const tls_beacon_min_span = 30min &redef;
 
     type TlsBeaconObs: record {
         orig:  addr;
@@ -50,6 +56,7 @@ type TlsBeaconState: record {
     last_seen:   time;
     base_ival:   interval &default=0secs;
     ref_bytes:   count    &default=0;
+    streak_start: time    &optional;             # 지금 연속 구간의 첫 연결 시각
     consecutive: count    &default=1;
     total:       count    &default=1;
     fired:       bool     &default=F;
@@ -131,6 +138,7 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             {
             st$base_ival = delta;
             st$consecutive = 2;
+            st$streak_start = now - delta;
             }
         else
             st$ref_bytes = obs$bytes;
@@ -152,10 +160,12 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             st$base_ival = delta;           # 박자 또는 크기 이탈 -> 새 기준
             st$ref_bytes = obs$bytes;
             st$consecutive = 2;
+            st$streak_start = now - delta;
             }
         }
 
-    if ( st$consecutive >= beacon_min_hits && ! st$fired )
+    local span = st?$streak_start ? now - st$streak_start : 0secs;
+    if ( st$consecutive >= beacon_min_hits && span >= tls_beacon_min_span && ! st$fired )
         {
         st$fired = T;
         local eid_base = cat(orig, "|tls-beacon|", resp);
@@ -170,8 +180,8 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             $dst=resp,
             $operation="tls_beacon",
             $uid=obs$uid,
-            $detail=fmt("interval=%.1fs consecutive=%d total=%d bytes~%d sni=%s",
-                        ival_s, st$consecutive, st$total, st$ref_bytes, obs$sni)]);
+            $detail=fmt("interval=%.1fs consecutive=%d span=%s total=%d bytes~%d sni=%s",
+                        ival_s, st$consecutive, span, st$total, st$ref_bytes, obs$sni)]);
         NOTICE([$note=TLS_Beaconing,
                 $src=orig,
                 $dst=resp,
