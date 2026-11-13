@@ -30,6 +30,8 @@
 @load ./detections/13_dga
 @load ./detections/24_nonstd_port         # 외부향 비표준 포트 프로토콜·장기 외부 연결
 @load ./detections/25_unknown_protocol     # 식별 안 된 프로토콜의 외부 통신(역방향 셸 등)
+@load ./detections/26_service_bruteforce   # SSH·FTP 무차별 대입
+@load ./detections/27_heartbleed           # TLS Heartbleed
 @load ./detections/14_large_transfer_exfil
 @load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 

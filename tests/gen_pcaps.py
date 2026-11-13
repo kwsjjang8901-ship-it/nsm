@@ -1587,6 +1587,92 @@ def gen_unknown_proto(out):
     cap.write(os.path.join(out, "unknown_proto.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 26 SSH·FTP 무차별 대입
+
+def ftp_session(cap, src, dst, t, tries, success=False, users=("admin",)):
+    """FTP 로그인 시도: USER/PASS 마다 530, success 면 마지막에 230."""
+    s = Tcp(cap, src, dst, 21)
+    t = s.handshake(t)
+    t = s.server_send(b"220 FTP server ready\r\n", t + 0.01)
+    for i in range(tries):
+        u = users[i % len(users)]
+        t = s.client_send(b"USER %s\r\n" % u.encode(), t + 0.05)
+        t = s.server_send(b"331 Password required\r\n", t + 0.01)
+        t = s.client_send(b"PASS guess%03d\r\n" % i, t + 0.05)
+        t = s.server_send(b"530 Login incorrect.\r\n", t + 0.2)
+    if success:
+        t = s.client_send(b"USER %s\r\n" % users[0].encode(), t + 0.05)
+        t = s.server_send(b"331 Password required\r\n", t + 0.01)
+        t = s.client_send(b"PASS right\r\n", t + 0.05)
+        t = s.server_send(b"230 Login successful.\r\n", t + 0.05)
+    t = s.client_send(b"QUIT\r\n", t + 0.05)
+    t = s.server_send(b"221 Goodbye.\r\n", t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_bruteforce(out):
+    """.132 -> SSH 25회(탐지, 임계 20), .133 -> SSH 5회(미탐), .130 -> FTP 530 12회·계정 3개(탐지, 임계 10),
+    .131 -> FTP 530 3회 뒤 성공(미탐)."""
+    cap = Capture()
+    t = T0 + 1
+    for _ in range(25):
+        t = ssh_session(cap, "10.0.0.132", "10.0.60.22", t + 2)
+    for _ in range(5):
+        t = ssh_session(cap, "10.0.0.133", "10.0.60.22", t + 2)
+    t = ftp_session(cap, "10.0.0.130", "10.0.60.21", t + 1, 12, users=("admin", "root", "ftpuser"))
+    t = ftp_session(cap, "10.0.0.131", "10.0.60.21", t + 1, 3, success=True)
+    cap.tick(t + 400)
+    cap.write(os.path.join(out, "bruteforce.pcap"))
+
+
+# --------------------------------------------------------------------------- 27 Heartbleed
+
+def hb_client_hello():
+    """하트비트 확장(0x000f, peer_allowed_to_send)을 넣은 TLS 1.1 ClientHello."""
+    exts = tls_ext(0x000F, b"\x01") + tls_ext(0x000D, b"\x00\x04\x04\x01\x05\x01")
+    ciphers = (0xC014, 0x0035, 0x002F)
+    body = (b"\x03\x02" + rand_bytes(32) + b"\x00"
+            + struct.pack(">H", 2 * len(ciphers)) + b"".join(struct.pack(">H", c) for c in ciphers)
+            + b"\x01\x00" + struct.pack(">H", len(exts)) + exts)
+    return tls_record(22, tls_hs(1, body), ver=0x0301)
+
+
+def hb_server_hello():
+    exts = tls_ext(0x000F, b"\x01")
+    body = b"\x03\x02" + rand_bytes(32) + b"\x00" + struct.pack(">H", 0x0035) + b"\x00" + struct.pack(">H", len(exts)) + exts
+    return tls_record(22, tls_hs(2, body) + tls_hs(14, b""), ver=0x0302)
+
+
+def hb_session(cap, src, dst, t, req, resp):
+    """핸드셰이크 앞부분 뒤 평문 하트비트 요청/응답(레코드 타입 24). req·resp = (페이로드 선언 길이, 실제 바이트) 또는 None."""
+    s = Tcp(cap, src, dst, 443)
+    t = s.handshake(t)
+    t = s.client_send(hb_client_hello(), t)
+    t = s.server_send(hb_server_hello(), t + 0.02)
+    if req:
+        plen, data = req
+        t = s.client_send(tls_record(24, b"\x01" + struct.pack(">H", plen) + data, ver=0x0302), t + 0.01)
+    if resp:
+        plen, data = resp
+        t = s.server_send(tls_record(24, b"\x02" + struct.pack(">H", plen) + data, ver=0x0302), t + 0.01)
+    return s.close(t + 0.05)
+
+
+def gen_heartbleed(out):
+    """.140 과다 읽기 요청(선언 16384, 실제 0) + 16KB 응답(성공), .141 과다 읽기 요청만(시도),
+    .142 정상 하트비트(선언 16 = 실제 16 + 패딩 16, 같은 크기 응답, 미탐), .143 하트비트 없는 TLS(미탐)."""
+    cap = Capture()
+    t = T0 + 1
+    t = hb_session(cap, "10.0.0.140", "10.0.60.30", t + 1, (0x4000, b""), (0x4000, rand_bytes(0x4000)))
+    t = hb_session(cap, "10.0.0.141", "10.0.60.31", t + 1, (0x4000, b""), None)
+    body = rand_bytes(16)
+    t = hb_session(cap, "10.0.0.142", "10.0.60.32", t + 1, (16, body + rand_bytes(16)), (16, body + rand_bytes(16)))
+    t = hb_session(cap, "10.0.0.143", "10.0.60.33", t + 1, None, None)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "heartbleed.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1594,7 +1680,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto]
+              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
+              gen_bruteforce, gen_heartbleed]
 
 
 def main():

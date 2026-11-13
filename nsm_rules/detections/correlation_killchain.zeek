@@ -86,6 +86,7 @@ export {
     ## 자격증명 탈취 시도(출발지 = 공격 host)
     const corr_cred_notes: set[Notice::Type] = {
         NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning,
+        SSH_Bruteforce, FTP_Bruteforce,
     } &redef;
     ## 도메인 장악(자격증명 단계의 끝)
     const corr_domain_notes: set[Notice::Type] = { DCSync } &redef;
@@ -305,6 +306,9 @@ const stage_tag_map: table[Notice::Type] of string = {
     [Nonstandard_Port]       = "C2",
     [Long_Connection]        = "C2",
     [Unknown_Protocol]       = "C2",
+    [SSH_Bruteforce]         = "CredentialAccess",
+    [FTP_Bruteforce]         = "CredentialAccess",
+    [TLS_Heartbleed]         = "InitialAccess",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",
