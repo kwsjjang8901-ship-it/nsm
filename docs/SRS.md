@@ -114,17 +114,20 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
 - 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
-- 신규: 2026-11 4단계에서 새로 추가한 룰(17\~24).
+- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~27).
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 정찰 | 기존 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 시도만) | 예외 출발지, 제외 포트 |
 | 정찰 | 기존 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
 | 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
+| 초기 침투 | 신규 | 27_heartbleed | TLS_Heartbleed | T1190 | 평문 TLS 하트비트 요청의 선언 페이로드 길이가 실제 레코드보다 큼(시도), 응답이 요청보다 큼(성공). 연결당 1건 | 평문 하트비트만, 목적지 예외 |
 | 초기 침투 | 기존(재작성) | 04_webshell | Webshell_Access | T1505.003 | 웹쉘 파일명+스크립트 확장자, 명령 파라미터 값이 실제 명령(`cmd=whoami`), China Chopper류 본문 | 파라미터 이름만으로는 탐지하지 않음 |
 | 자격증명 접근 | 기존(재작성) | 05_ntlm_spray | NTLM_Spray | T1110.003 | 한 출발지에서 10분 안 **인증 실패** 고유 계정 10개 이상(SMB 상태코드·SPNEGO reject) | 성공은 세지 않음, 대소문자 정규화 |
 | 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Spray | T1110.003 | 10분 안 AS 사전인증 실패(코드 24·6·18·23) 고유 계정 10개 이상 | 정상 로그온 첫 단계(코드 25) 제외 |
 | 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Bruteforce | T1110.001 | 한 출발지가 같은 계정으로 10분 안 비밀번호 실패(코드 24·18) 20회 이상 | 예외 출발지 |
+| 자격증명 접근 | 신규 | 26_service_bruteforce | SSH_Bruteforce | T1110.001 | 같은 (출발지, 목적지)로 5분 안 인증이 성공하지 않은 SSH 세션 20개 이상 | 인증 성공 추정 세션 제외, 출발지·목적지 예외 |
+| 자격증명 접근 | 신규 | 26_service_bruteforce | FTP_Bruteforce | T1110.001 | 같은 (출발지, 목적지)로 5분 안 FTP 로그인 실패(530) 10회 이상 | 출발지·목적지 예외 |
 | 자격증명 접근 | 신규 | 18_kerberoasting | Kerberoasting | T1558.003 | 10분 안 RC4·DES 서비스 티켓을 받은 고유 SPN 5개 이상 | krbtgt·kadmin 제외 |
 | 자격증명 접근 | 신규 | 18_kerberoasting | ASREP_Roasting | T1558.004 | 사전인증 없는 AS 요청에 RC4·DES로 암호화된 AS-REP(계정마다 1건) | AES 응답은 제외(스마트카드 오탐 방지) |
 | 자격증명 접근 | 신규 | 19_outbound_smb | NTLM_Credential_Leak | T1187 | 내부 호스트가 외부 서버에 NTLM 인증을 보냄(1건) | 익명 인증 제외, 허용 목적지 |
@@ -162,7 +165,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ### 4.3 룰별 탐지 상세
 
-탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~24)에 있습니다.
+탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~27)에 있습니다.
 
 각 항목의 목록은 다음 순서로 씁니다.
 
@@ -234,6 +237,21 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 - 제외·오탐 통제: 03과 같은 대상 판정·정규화·예외. 경로 조작(`../`)은 웹쉘이 아니라서 넣지 않았습니다.
 - 근거: 매칭 위치, 메서드, 원문 앞부분, uid.
 
+##### Heartbleed (`TLS_Heartbleed`, T1190) · 27_heartbleed
+
+OpenSSL 1.0.1–1.0.1f(CVE-2014-0160)는 하트비트 요청이 선언한 페이로드 길이를 실제 받은 길이와 비교하지 않고 그만큼 메모리를 복사해 돌려줍니다. 공격자는 페이로드 길이를 16KB로 선언하고 실제로는 거의 보내지 않아 서버 메모리(개인 키·세션 쿠키·비밀번호)를 빼냅니다. 정상 하트비트는 선언 길이만큼 페이로드가 실려 있고 응답도 같은 크기입니다. **평문 하트비트 요청의 선언 페이로드 길이가 실제 레코드에서 헤더(3바이트)와 최소 패딩(16바이트)을 뺀 길이보다 크면 시도, 그 연결의 하트비트 응답이 요청 레코드보다 크면 성공**으로 연결당 1건 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 하트비트 요청·응답 | `ssl_heartbeat`(`heartbeat_type` 1 = 요청, 2 = 응답)의 `length`(레코드 길이)와 `payload_length`(선언 길이). Zeek 기본 `policy/protocols/ssl/heartbleed.zeek`와 같은 비교 |
+| 판정 시점 | 연결 상태(`connection` 레코드 확장)에 요청·응답 수, 마지막 요청 길이, 최대 응답 길이를 모아 `connection_state_remove`에서 1건 |
+| 암호화된 하트비트 | 보지 않음. Zeek에 해당 이벤트가 없고(기본 스크립트는 레코드마다 오는 `ssl_encrypted_data`로 직접 만듦) 기본 설정 `SSL::disable_analyzer_after_detection=T`에서는 핸드셰이크 뒤 분석기가 떨어져 어차피 보이지 않습니다. 공격 도구는 보통 핸드셰이크가 끝나기 전에 평문으로 보냅니다 |
+
+- 주체: `src` = 공격 host(TLS 클라이언트), `dst` = 대상 서버.
+- 집계·억제: 연결 단위 단건, (출발지, 서버) 단위 1시간 억제. 결과는 근거 `operation`의 `tls_heartbleed_attempt`·`tls_heartbleed_success`와 `sub`의 `result=`로 구분합니다.
+- 제외·오탐 통제: 기본 Zeek 스크립트를 로드하지 않아도 동작하며 그 스크립트의 notice와는 별개입니다. 취약점 스캐너는 예외 엔진(5.4절, `exception_drop`)으로 출발지 축 예외를 등록합니다. 새 `*_allowlist`는 두지 않습니다.
+- 근거: 결과, 요청·응답 수, 마지막 요청 길이, 최대 응답 길이, 과다 읽기 요청 여부, 포트, uid. 킬체인 묶음에는 넣지 않았습니다(초기 침투 묶음이 없음). 탐지 요약 진단명 `NSM.WebAttack.Heartbleed`.
+
 #### 4.3.3 자격증명 접근
 
 ##### NTLM 패스워드 스프레이 (`NTLM_Spray`, T1110.003) · 05_ntlm_spray
@@ -251,6 +269,35 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
 - 제외·오탐 통제: 내부 서버 대상만(`ntlm_spray_local_servers_only`), 익명(null session) 제외, 예외 출발지 `ntlm_spray_allowlist`(인증 프록시·VDI 게이트웨이). 대소문자만 바꾼 같은 계정은 1개로 셉니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 계정, 대상 서버, 실패 결과(상태 코드 이름), 연결 uid 표본.
+
+##### SSH 무차별 대입 (`SSH_Bruteforce`, T1110.001) · 26_service_bruteforce
+
+Hydra·Patator·Medusa 같은 도구는 비밀번호마다 SSH 연결을 새로 열거나 짧은 연결 안에서 몇 번 시도하고 끊습니다. SSH는 암호화라 계정·비밀번호는 보이지 않지만, 정상 사용자는 한 번 인증에 성공해 세션을 이어 가고 공격은 인증이 성공하지 않은 짧은 세션을 같은 서버에 대량으로 남깁니다. **같은 (출발지, 목적지)로 5분 안에 버전 교환까지 마치고 인증이 성공하지 않은 SSH 세션이 20개 이상**이면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| SSH 세션 | `connection_state_remove`의 `c$ssh`. `c$ssh$client`·`c$ssh$server`(버전 문자열)가 모두 있는 세션만 셈 |
+| 인증 결과 | `c$ssh$auth_success`(Zeek가 패킷 크기로 추정). `T`인 세션은 빼고, `F`이거나 추정되지 않은(값 없음) 세션은 셈 |
+| 계정 | 없음(암호화). 근거에는 클라이언트 버전 문자열을 남깁니다 |
+
+- 주체: `src` = 공격 host, `dst` = 대상 SSH 서버.
+- 집계·억제: SumStats (출발지, 목적지) 키, 5분 창 종료 시 판정(창당 1건). 같은 창 동안 억제.
+- 제외·오탐 통제: 인증 성공 추정 세션은 세지 않아 Ansible·백업처럼 키로 바로 로그인하는 자동화는 쌓이지 않습니다. 배너만 확인하는 모니터링(분당 1회 수준)은 임계 아래입니다. 인터넷에 노출된 SSH 서버로 들어오는 외부 스캐너도 조건에 맞으므로, 노출 서버가 있으면 예외 엔진(5.4절, `exception_drop_agg`)으로 목적지 축 예외를 등록합니다. 내부 취약점 점검 장비는 출발지 축 예외.
+- 근거: 실패 세션 수, 창 길이, 표본 세션의 uid와 클라이언트 버전(최대 10개). 킬체인 묶음은 자격증명(`corr_cred_notes`).
+
+##### FTP 무차별 대입 (`FTP_Bruteforce`, T1110.001) · 26_service_bruteforce
+
+FTP는 평문이라 로그인 시도마다 `USER`·`PASS`와 서버의 결과 코드가 보입니다. 정상 사용자는 비밀번호를 한두 번 틀리는 정도이고, 무차별 대입은 같은 서버에서 실패(530)를 연속으로 받습니다. **같은 (출발지, 목적지)로 5분 안에 FTP 로그인 실패 응답(530)이 10회 이상**이면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 로그인 실패 | `ftp_reply`의 `code` = 530. 기본 FTP 스크립트가 `c$ftp`를 채운 뒤 보도록 `&priority=-5` |
+| 계정 | `c$ftp$user`(마지막 `USER` 값, 소문자). Zeek 기본값 `<unknown>`이면 비움 |
+
+- 주체: `src` = 공격 host, `dst` = 대상 FTP 서버.
+- 집계·억제: SumStats (출발지, 목적지) 키, 실패 수(SUM)·고유 계정 수(UNIQUE)·표본(SAMPLE). 5분 창 종료 시 판정(창당 1건).
+- 제외·오탐 통제: 실패 뒤 성공(230)한 연결도 실패 횟수는 셉니다(성공한 공격도 놓치지 않기 위해). 접속 확인용 자동 점검 계정 등은 예외 엔진(5.4절, `exception_drop_agg`)으로 출발지·목적지 축 예외를 등록합니다.
+- 근거: 실패 수, 고유 계정 수, 표본 계정·uid(계정당 1행). 킬체인 묶음은 자격증명.
 
 ##### Kerberos 패스워드 스프레이 (`Kerberos_Spray`, T1110.003) · 17_kerberos_spray
 
@@ -671,7 +718,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
 | C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol |
-| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning |
+| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce |
 | 도메인 장악 | `corr_domain_notes` | DCSync |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral |
 | 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB |
@@ -1016,7 +1063,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~24)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~27)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1107,6 +1154,22 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `unknown_proto_min_bytes` | 1000000 | 한 방향 페이로드 임계(바이트) | 오탐이 많으면 올림. 다른 룰의 ConnThreshold 값(1MiB 등)과 같은 값은 피함 |
 | `unknown_proto_min_duration` / `unknown_proto_min_bytes_long` | 30min / 10000 | 대화형 연결 기준(지속 시간과 양방향 합계) |  |
 | `unknown_proto_skip_ports` | 80·443·8080·8443·21·22·25·53·110·143·465·587·853·993·995·5223·5228(tcp) | 검사하지 않는 목적지 포트 | 고객 환경의 미식별 표준 서비스 포트를 `+=` |
+
+#### 26 SSH·FTP 무차별 대입
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_ssh_bruteforce` / `detect_ftp_bruteforce` | T / T | 룰 켜기 |  |
+| `svc_bf_epoch` | 5min | 집계 창 |  |
+| `ssh_bf_threshold` | 20 | 창 안 인증이 성공하지 않은 SSH 세션 수 | 느린 공격까지 보려면 낮춤 |
+| `ftp_bf_threshold` | 10 | 창 안 FTP 530 응답 수 |  |
+| `svc_bf_num_samples` | 10 | 근거 표본 수 |  |
+
+#### 27 Heartbleed
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_heartbleed` | T | 룰 켜기 |  |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 

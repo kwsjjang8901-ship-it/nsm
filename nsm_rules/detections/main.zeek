@@ -62,6 +62,11 @@ export {
         Long_Connection,
         ## 25. 식별 안 된 프로토콜의 외부 통신 (역방향 셸·자체 프로토콜 C2)
         Unknown_Protocol,
+        ## 26. SSH·FTP 무차별 대입 (같은 서버로 인증 실패 반복)
+        SSH_Bruteforce,
+        FTP_Bruteforce,
+        ## 27. Heartbleed (TLS 하트비트 과다 읽기)
+        TLS_Heartbleed,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -288,6 +293,9 @@ export {
         [Nonstandard_Port]       = "Command and Control",
         [Long_Connection]        = "Command and Control",
         [Unknown_Protocol]       = "Command and Control",
+        [SSH_Bruteforce]         = "Credential Access",
+        [FTP_Bruteforce]         = "Credential Access",
+        [TLS_Heartbleed]         = "Initial Access",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",
