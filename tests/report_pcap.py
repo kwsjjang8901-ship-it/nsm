@@ -97,6 +97,7 @@ NOTE_KO = {
     "Xss": "크로스 사이트 스크립팅 시도", "HttpBruteforce": "웹 로그인 무차별 대입",
     "TlsBeaconing": "HTTPS 주기 통신(비콘)", "RemoteService": "원격 서비스 생성", "RemoteTask": "원격 예약 작업 등록",
     "RemoteWmi": "원격 WMI 실행", "MachineAccountMisuse": "남의 머신 계정 사용(NTLM 릴레이)",
+    "AiServiceUpload": "AI 서비스로 대량 업로드", "AiApiFromServer": "서버의 AI 서비스 접속", "AiServiceExploit": "AI 인프라 관리 API 호출",
 }
 STORY_META = ("kerberos", "ntlm", "smb_mapping", "smb_files", "dce_rpc", "rdp", "ssh", "ssl", "http", "flow_summary", "dns_summary")
 REACH_WINDOW = 86400   # 확산으로 닿은 host 는 닿은 뒤 이 시간 안의 탐지만 같은 스토리로 본다
@@ -147,6 +148,8 @@ ENRICH = {
     "RemoteTask": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
     "RemoteWmi": ({"ntlm", "kerberos", "dce_rpc", "flow_summary"}, ("rpcss/", "host/")),
     "MachineAccountMisuse": ({"ntlm", "kerberos", "flow_summary"}, ()),
+    "AiServiceUpload": ({"ssl", "flow_summary"}, None), "AiApiFromServer": ({"ssl", "flow_summary"}, None),
+    "AiServiceExploit": ({"http", "flow_summary"}, None),
     "DgaDomain": ({"dns"}, None), "DnsTunneling": ({"dns"}, None), "DnsTunnel": ({"dns"}, None),
 }
 
@@ -344,7 +347,8 @@ DIAG_NOTE = {
     "SSH_Bruteforce": "SshBruteforce", "FTP_Bruteforce": "FtpBruteforce", "TLS_Heartbleed": "Heartbleed",
     "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce", "TLS_Beaconing": "TlsBeaconing",
     "Remote_Service_Creation": "RemoteService", "Remote_Task_Creation": "RemoteTask", "Remote_WMI_Execution": "RemoteWmi",
-    "Machine_Account_Misuse": "MachineAccountMisuse",
+    "Machine_Account_Misuse": "MachineAccountMisuse", "AI_Service_Upload": "AiServiceUpload",
+    "AI_API_From_Server": "AiApiFromServer", "AI_Service_Exploit": "AiServiceExploit",
 }
 
 

