@@ -72,6 +72,9 @@ function unk_report(c: connection, reason: string)
     local eid = cat(c$id$orig_h, "|unknown-proto|", c$id$resp_h, "|", c$uid);
     local ob = c$orig$size;
     local rb = c$resp$size;
+    # 바이트 임계(ConnThreshold)는 IP 바이트(헤더 포함)로 센다. 페이로드(orig_bytes)와 함께 남겨 숫자가 맞아 보이게 한다.
+    local oib = c$orig?$num_bytes_ip ? c$orig$num_bytes_ip : 0;
+    local rib = c$resp?$num_bytes_ip ? c$resp$num_bytes_ip : 0;
     local dur = network_time() - c$start_time;
     NSM::write_evidence([
         $ts=network_time(),
@@ -82,7 +85,8 @@ function unk_report(c: connection, reason: string)
         $dst=c$id$resp_h,
         $operation="unidentified_protocol_outbound",
         $uid=c$uid,
-        $detail=fmt("port=%s %s orig_bytes=%d resp_bytes=%d duration=%s", c$id$resp_p, reason, ob, rb, dur)]);
+        $detail=fmt("port=%s %s orig_bytes=%d resp_bytes=%d orig_ip_bytes=%d resp_ip_bytes=%d duration=%s",
+                    c$id$resp_p, reason, ob, rb, oib, rib, dur)]);
 
     NOTICE([$note=Unknown_Protocol,
             $conn=c,
@@ -109,7 +113,7 @@ event ConnThreshold::bytes_threshold_crossed(c: connection, threshold: count, is
     {
     if ( ! c$nsm_unk_watch || threshold != unknown_proto_min_bytes )
         return;
-    unk_report(c, fmt("bytes_%s>=%d", is_orig ? "sent" : "received", threshold));
+    unk_report(c, fmt("ip_bytes_%s>=%d", is_orig ? "sent" : "received", threshold));
     }
 
 event ConnThreshold::duration_threshold_crossed(c: connection, threshold: interval, is_orig: bool)
@@ -126,7 +130,7 @@ event connection_state_remove(c: connection)
     if ( c$nsm_unk_reported || ! unk_candidate(c) )
         return;
     if ( c$orig$size >= unknown_proto_min_bytes || c$resp$size >= unknown_proto_min_bytes )
-        unk_report(c, fmt("bytes>=%d(at_close)", unknown_proto_min_bytes));
+        unk_report(c, fmt("payload_bytes>=%d(at_close)", unknown_proto_min_bytes));
     else if ( c$duration >= unknown_proto_min_duration && c$orig$size + c$resp$size >= unknown_proto_min_bytes_long )
         unk_report(c, fmt("duration>=%s(at_close)", unknown_proto_min_duration));
     }
