@@ -138,7 +138,8 @@ event connection_rejected(c: connection)    { observe_port_scan(c, T, "rejected"
 event connection_established(c: connection) { observe_port_scan(c, F, "established"); }  # 열린 포트
 
 # SYN 없는 TCP 탐침(nmap -sF·-sN·-sX·-sA·-sW)과 UDP 스캔(-sU). 연결 이벤트가 없으므로 연결이 끝날 때 본다.
-#   TCP: 출발지 SYN 이 없고(history 에 'S' 없음) 출발지 패킷 2개 이하·양쪽 페이로드 0. 데이터가 오가는
+#   TCP: 출발지 SYN 이 없고(history 에 'S' 없음) 출발지 RST 도 없고('R', 뒤집힘 '^' 없음) 출발지 패킷 2개 이하·
+#        양쪽 페이로드 0. 데이터가 오가는
 #        캡처 시작 전 연결(중간부터 보인 연결)은 페이로드가 있어 빠진다.
 #   UDP: 응답 패킷 없음(닫힌 포트는 ICMP 도달 불가, 막힌 포트는 무응답), 출발지 패킷 2개 이하.
 event connection_state_remove(c: connection)
@@ -147,6 +148,11 @@ event connection_state_remove(c: connection)
     if ( proto == tcp && port_scan_count_nosyn )
         {
         if ( "S" in c$history || c$orig$size > 0 || c$resp$size > 0 || c$orig$num_pkts > 2 )
+            return;
+        # 출발지가 RST 를 보냈거나(R) Zeek 가 방향을 뒤집은(^) 연결은 탐침이 아니라 응답이다.
+        #   캡처 손실로 스캐너의 SYN 이 빠지면 피해 host 의 RST 응답만 남아 피해 host 가 스캐너의
+        #   임시 포트를 두드린 것처럼 보인다(CIC-IDS2017 Friday). FIN·NULL·Xmas·ACK 탐침은 출발지 RST 가 없다.
+        if ( "R" in c$history || "^" in c$history )
             return;
         observe_port_scan(c, T, "nosyn");
         }
