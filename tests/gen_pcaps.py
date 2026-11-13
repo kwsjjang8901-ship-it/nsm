@@ -1817,6 +1817,39 @@ def gen_killchain_story(out):
     cap.write(os.path.join(out, "killchain_story.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 27 Heartbleed 즉시 탐지(긴 연결)
+
+def hb_enc_session_long(cap, src, dst, t, beats, gap):
+    """hb_enc_session 과 같은 핸드셰이크 뒤 암호화된 하트비트를 gap 초 간격으로 보낸다(연결을 길게 유지)."""
+    s = Tcp(cap, src, dst, 443)
+    t = s.handshake(t)
+    t = s.client_send(hb_client_hello(), t)
+    exts = tls_ext(0x000F, b"\x01")
+    body = b"\x03\x03" + rand_bytes(32) + b"\x00" + struct.pack(">H", 0x0035) + b"\x00" + struct.pack(">H", len(exts)) + exts
+    t = s.server_send(tls_record(22, tls_hs(2, body) + tls_hs(14, b"")), t + 0.02)
+    t = s.client_send(tls_record(22, tls_hs(16, rand_bytes(130)))
+                      + tls_record(20, b"\x01") + tls_record(22, rand_bytes(64)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(64)), t + 0.01)
+    for req, resp in beats:
+        t = s.client_send(tls_record(24, rand_bytes(req)), t + gap)
+        if resp:
+            t = s.server_send(tls_record(24, rand_bytes(resp)), t + 0.01)
+    return s.close(t + 0.05)
+
+
+def gen_heartbleed_long(out):
+    """연결을 10분 넘게 유지하는 Heartbleed. .147 첫 요청부터 16KB 응답(성공)이 30초마다 20회,
+    .148 패치된 서버(응답 없음)에 30초마다 10회. 탐지는 연결 종료가 아니라 첫 유출(.147, 요청 1·응답 1)·
+    응답 없는 요청 4번째(.148)에 나와야 한다."""
+    cap = Capture()
+    t = T0 + 1
+    hb_enc_session_long(cap, "10.0.0.147", "10.0.60.37", t, [(64, 16448)] * 20, 30)
+    hb_enc_session_long(cap, "10.0.0.148", "10.0.60.38", t + 5, [(64, None)] * 10, 30)
+    cap.tick(T0 + 900)
+    cap.write(os.path.join(out, "heartbleed_long.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1826,7 +1859,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
-              gen_killchain_story]
+              gen_killchain_story, gen_heartbleed_long]
 
 
 def main():
