@@ -19,7 +19,7 @@
 ##! 오탐 통제
 ##!   - 등록 도메인은 parent_domain()(co.kr 등 2단계 공용 접미사 처리)으로 구한다(H5 해소).
 ##!   - 내부 출발지만(dnstun_local_only), 내부 재귀 리졸버 제외(dns_tunnel_resolvers),
-##!     역방향 조회 제외, 도메인 예외(dns_tunnel_allowlist_domains: 기본 AV·스팸 평판 조회).
+##!     역방향 조회 제외, 도메인 예외(dns_tunnel_allowlist_domains: 기본 AV·스팸 평판 조회, AWS 로드밸런서 이름).
 ##!
 ##! 이전 구현과의 차이
 ##!   - 08: 신호 OR 로 관측해 TXT·고엔트로피 정상 조회가 섞였고 co.kr 이 한 부모로 묶였다.
@@ -56,6 +56,7 @@ export {
         "sophosxl.net", "e5.sk",                                   # AV 평판 조회
         "spamhaus.org", "spamcop.net", "sorbs.net", "surbl.org",
         "uribl.com", "barracudacentral.org",                       # DNSBL
+        "elb.amazonaws.com",                                       # AWS 로드밸런서 이름(AWS 가 발급하는 무작위형 라벨, 임의 인코딩 불가)
     } &redef;
 
     ## 질의 1건이 수상한지(서브도메인, 질의 타입).

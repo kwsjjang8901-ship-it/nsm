@@ -1699,6 +1699,25 @@ def gen_heartbleed(out):
     cap.write(os.path.join(out, "heartbleed.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 08 오탐 튜닝: AWS 로드밸런서 이름
+
+def gen_dns_elb(out):
+    """.116: AWS 로드밸런서 이름(<이름>-<10자리 숫자>.<리전>.elb.amazonaws.com) 고유 80개 A 질의 -> 기본 예외로 미탐.
+    CIC-IDS2017 5일 동안 내부 리졸버·PC 가 광고 서버 ELB 이름을 대량 조회해 DNS_Tunneling 9건이 나온 형태."""
+    cap = Capture()
+    t = T0
+    names = ["adserver-balancer", "acds-prod-us-east-1-ext-a", "bdex-prod-elb", "adtechjp-ads",
+             "alb-we-conversion", "adservers-users-1", "aws-p-or-ask-cassandra-3", "rtb-bidder-prod"]
+    regions = ["us-east-1", "us-west-2", "ap-northeast-1", "eu-west-1"]
+    digits = "0123456789"
+    for i in range(80):
+        q = "%s-%s.%s.elb.amazonaws.com" % (names[i % len(names)], rand_from(digits, 10), regions[i % len(regions)])
+        dns_query_only(cap, "10.0.0.116", q, "A", t + i * 1.5)
+    cap.tick(T0 + 11 * 60)
+    cap.write(os.path.join(out, "dns_elb.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1707,7 +1726,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
-              gen_bruteforce, gen_heartbleed]
+              gen_bruteforce, gen_heartbleed, gen_dns_elb]
 
 
 def main():
