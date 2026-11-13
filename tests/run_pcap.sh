@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # pcap 하나를 운영과 같은 설정으로 한 번 돌려 탐지·자산 식별·메타데이터 선별 전송 결과를 한 화면에 요약한다.
 #
-#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] <pcap>
+#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] <pcap | 디렉터리> ...
 #
-#     -o DIR    출력 디렉터리(기본: out/<pcap 이름>). Zeek 로그는 DIR/zeek/, 선별 전송은 DIR/zeek/meta/
+#     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
+#       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
+#       끝에 파일별 결과 표와 DIR/index.html(각 report.html 링크)을 만든다. 한 파일이 실패해도 나머지는 계속한다.
+#     -o DIR    출력 디렉터리(기본: out/<pcap 이름>, 여러 개면 out/<디렉터리 이름> 또는 out/batch).
+#               Zeek 로그는 DIR/zeek/, 선별 전송은 DIR/zeek/meta/
 #     -n CIDRS  내부 대역(쉼표 구분). Site::local_nets 에 더하며 자산 식별 대상 대역도 이 값을 따른다.
 #               생략하면 사설 대역. 내부에 공인 IP 를 쓰면 반드시 지정한다.
 #     -x FILE   예외 파일(docs/SRS.md 7.8절). NSM::exception_file 로 넘긴다.
@@ -16,20 +20,79 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,18p' "$0"; exit 2; }
-OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""
+usage() { sed -n '2,21p' "$0"; exit 2; }
+OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; PASS=()
 while getopts "o:n:x:r:z:h" opt; do
     case $opt in
         o) OUT=$OPTARG ;;
-        n) NETS=$OPTARG ;;
-        x) EXC=$OPTARG ;;
-        r) RESOLVER_DIR=$OPTARG ;;
-        z) ZARGS=$OPTARG ;;
+        n) NETS=$OPTARG; PASS+=(-n "$OPTARG") ;;
+        x) EXC=$OPTARG; PASS+=(-x "$(realpath "$OPTARG")") ;;
+        r) RESOLVER_DIR=$OPTARG; PASS+=(-r "$(realpath "$OPTARG")") ;;
+        z) ZARGS=$OPTARG; PASS+=(-z "$OPTARG") ;;
         *) usage ;;
     esac
 done
 shift $((OPTIND - 1))
-[ $# -eq 1 ] || usage
+[ $# -ge 1 ] || usage
+
+# 디렉터리 또는 여러 파일: 파일마다 이 스크립트를 다시 불러 따로 실행하고, 끝에 결과 표와 index.html 을 만든다.
+if [ $# -gt 1 ] || [ -d "$1" ]; then
+    if [ $# -eq 1 ]; then BASE_NAME=$(basename "$(realpath "$1")"); else BASE_NAME=batch; fi
+    BASE=$(realpath -m "${OUT:-out/$BASE_NAME}")
+    mkdir -p "$BASE"
+    LIST=()   # "출력 이름<TAB>pcap 경로"
+    for a in "$@"; do
+        if [ -d "$a" ]; then
+            d=$(realpath "$a")
+            while IFS= read -r -d '' f; do
+                rel=${f#"$d"/}; rel=${rel%.*}
+                LIST+=("${rel//\//_}"$'\t'"$f")
+            done < <(find "$d" -type f \( -iname '*.pcap' -o -iname '*.pcapng' -o -iname '*.cap' \) -print0 | sort -z)
+        elif [ -f "$a" ]; then
+            n=$(basename "$a"); LIST+=("${n%.*}"$'\t'"$(realpath "$a")")
+        else
+            echo "건너뜀(없는 파일): $a" >&2
+        fi
+    done
+    [ ${#LIST[@]} -gt 0 ] || { echo "pcap 파일이 없습니다: $*" >&2; exit 1; }
+    dup=$(printf '%s\n' "${LIST[@]}" | cut -f1 | sort | uniq -d | head -3)
+    [ -z "$dup" ] || { echo "출력 이름이 겹칩니다(파일 이름이 같음): $dup" >&2; exit 1; }
+
+    echo "pcap ${#LIST[@]}개를 파일마다 따로 실행합니다. 결과: $BASE"
+    RES=()   # "이름<TAB>상태<TAB>탐지 건수"
+    i=0
+    for ent in "${LIST[@]}"; do
+        i=$((i + 1)); name=${ent%%$'\t'*}; f=${ent#*$'\t'}
+        echo ""; echo "================ [$i/${#LIST[@]}] $name"
+        mkdir -p "$BASE/$name"
+        if "$0" ${PASS[@]+"${PASS[@]}"} -o "$BASE/$name" "$f" 2>&1 | tee "$BASE/$name/run.txt"; then st=ok; else st=FAIL; fi
+        if [ $st = FAIL ] && [ -s "$BASE/$name/zeek/stderr.txt" ]; then
+            echo "  Zeek 오류:"; tail -3 "$BASE/$name/zeek/stderr.txt" | sed 's/^/    /' | tee -a "$BASE/$name/run.txt"
+        fi
+        det=-; [ -f "$BASE/$name/zeek/nsm_detection.log" ] && det=$(grep -vc '^#' "$BASE/$name/zeek/nsm_detection.log" || true)
+        RES+=("$name"$'\t'"$st"$'\t'"$det")
+    done
+
+    echo ""; echo "================ 결과 (${#LIST[@]}개)"
+    printf '%-40s %-5s %s\n' "pcap" "상태" "탐지 건수"
+    {
+        echo '<!doctype html><meta charset="utf-8"><title>run_pcap 결과</title>'
+        echo '<style>body{font:14px system-ui,sans-serif;margin:24px}td,th{padding:4px 12px;text-align:left;border-bottom:1px solid #ddd}.FAIL{color:#c00}</style>'
+        echo "<h1>run_pcap 결과 (${#LIST[@]}개)</h1><table><tr><th>pcap</th><th>상태</th><th>탐지 건수</th><th>리포트</th><th>실행 출력</th></tr>"
+    } > "$BASE/index.html"
+    nfail=0
+    for r in "${RES[@]}"; do
+        IFS=$'\t' read -r name st det <<< "$r"
+        [ "$st" = ok ] || nfail=$((nfail + 1))
+        printf '%-40s %-5s %s\n' "$name" "$st" "$det"
+        link=-; [ -f "$BASE/$name/report.html" ] && link="<a href=\"$name/report.html\">report.html</a>"
+        echo "<tr><td>$name</td><td class=\"$st\">$st</td><td>$det</td><td>$link</td><td><a href=\"$name/run.txt\">run.txt</a></td></tr>" >> "$BASE/index.html"
+    done
+    echo "</table>" >> "$BASE/index.html"
+    echo ""; echo "목록: $BASE/index.html"
+    [ $nfail -eq 0 ] || { echo "실패 ${nfail}개(각 run.txt 참고)" >&2; exit 1; }
+    exit 0
+fi
 
 ROOT=$(realpath "$(dirname "$0")/..")
 PCAP=$(realpath "$1")
