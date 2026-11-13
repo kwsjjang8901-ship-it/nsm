@@ -67,6 +67,10 @@ export {
         FTP_Bruteforce,
         ## 27. Heartbleed (TLS 하트비트 과다 읽기)
         TLS_Heartbleed,
+        ## 28. 크로스 사이트 스크립팅 시도 (내부 웹서버 요청의 스크립트 구조)
+        Cross_Site_Scripting,
+        ## 29. 웹 로그인 무차별 대입 (같은 경로로 비밀번호 값 반복 변경, Basic 인증 401 반복)
+        HTTP_Bruteforce,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -296,6 +300,8 @@ export {
         [SSH_Bruteforce]         = "Credential Access",
         [FTP_Bruteforce]         = "Credential Access",
         [TLS_Heartbleed]         = "Initial Access",
+        [Cross_Site_Scripting]   = "Initial Access",
+        [HTTP_Bruteforce]        = "Credential Access",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

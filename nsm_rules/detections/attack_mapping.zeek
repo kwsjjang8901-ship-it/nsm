@@ -28,6 +28,8 @@ export {
         [SSH_Bruteforce]       = "T1110.001",
         [FTP_Bruteforce]       = "T1110.001",
         [TLS_Heartbleed]       = "T1190",
+        [Cross_Site_Scripting] = "T1190",
+        [HTTP_Bruteforce]      = "T1110.001",
         [SMB_Admin_Share]      = "T1021.002",    
         [RDP_Lateral]          = "T1021.001",    
         [SSH_Lateral]          = "T1021.004",    

@@ -1,5 +1,5 @@
 ##! ============================================================================
-##! 웹 공격 룰(03 SQLi, 04 웹쉘) 공통 — 대상 판정, 입력 정규화, 예외
+##! 웹 공격 룰(03 SQLi, 04 웹쉘, 28 XSS, 29 웹 로그인 무차별 대입) 공통 — 대상 판정, 입력 정규화, 예외
 ##! ============================================================================
 
 @load base/protocols/http
@@ -15,7 +15,7 @@ export {
     const web_attack_local_servers_only = T &redef;
 
     ## 예외 출발지(사내 취약점 스캐너·모의해킹 장비 등). 예외 엔진에 drop 예외로 등록된다(호환).
-    ##   새 예외는 예외 파일(docs/SRS.md 7.8절)에 SQL_Injection·Webshell_Access 범위로 쓴다.
+    ##   03·04·28·29 에 함께 적용된다. 새 예외는 예외 파일(docs/SRS.md 7.8절)에 쓴다.
     const web_attack_allowlist: set[subnet] = {} &redef;
 
     ## 본문 검사 최대 바이트(요청당). 대용량 업로드 본문 전체를 정규식에 넣지 않는다.
@@ -48,7 +48,7 @@ event zeek_init()
     {
     if ( |web_attack_allowlist| > 0 )
         NSM::exception_add_legacy("legacy:web_attack_allowlist",
-            [$scope=set("SQL_Injection", "Webshell_Access"), $src=web_attack_allowlist]);
+            [$scope=set("SQL_Injection", "Webshell_Access", "Cross_Site_Scripting", "HTTP_Bruteforce"), $src=web_attack_allowlist]);
     }
 
 function web_normalize(s: string): string
