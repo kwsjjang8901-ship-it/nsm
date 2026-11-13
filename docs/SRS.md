@@ -676,7 +676,7 @@ Metasploit 역방향 셸이나 자체 프로토콜 RAT는 HTTP·TLS·SSH가 아�
 - 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
 - 집계·억제: 연결 단위 단건, (출발지, 목적지, 포트) 단위 1시간 억제. 임계는 `connection_established`가 아니라 `new_connection`에서 걸어 핸드셰이크가 캡처되지 않은 연결도 봅니다.
 - 제외·오탐 통제: 표준 포트(80·443·8080·8443·메일·DNS·SSH·푸시 등, `unknown_proto_skip_ports`)는 미식별 트래픽이 많아 뺍니다. 사내 전용 프로그램·VPN·게임 서버 등은 예외 엔진(5.4절, `exception_drop`)으로 목적지·포트·출발지 축 예외를 등록합니다. 바이트 임계는 10진 MB(1,000,000)로 두어 다른 룰(14)의 ConnThreshold 임계와 겹치지 않게 합니다.
-- 근거: 포트, 판정 경로(`bytes_sent>=`·`bytes_received>=`·`duration>=`·`(at_close)`), 양방향 바이트, 지속 시간, uid. 킬체인 묶음은 C2.
+- 근거: 포트, 판정 경로(`ip_bytes_sent>=`·`ip_bytes_received>=`·`duration>=`·`payload_bytes>=…(at_close)`), 양방향 페이로드 바이트(`orig_bytes`·`resp_bytes`)와 IP 바이트(`orig_ip_bytes`·`resp_ip_bytes`), 지속 시간, uid. 연결 중 바이트 임계는 ConnThreshold가 IP 바이트(헤더 포함)로 세므로 `ip_bytes_`로 표시하고 IP 바이트도 함께 남깁니다(이전에는 `bytes_sent>=1000000 orig_bytes=928985`처럼 페이로드와 숫자가 맞지 않아 보였음). 연결 종료 때 판정은 페이로드로 봅니다. 킬체인 묶음은 C2.
 - 검증: 공개 데이터셋 CIC-IDS2017 Thursday에서 감염 PC 두 대의 Metasploit 역방향 연결(444/tcp, 서비스 미식별, 각 약 13MB)이 이 조건에 해당하고, 같은 날 정상 외부 트래픽 중 이 조건(100KB 기준에서도)을 넘는 (출발지, 목적지, 포트)는 없었습니다(선별 전송 `flow_summary` 기준). 실제 고객망의 미식별 프로토콜 양은 운영 pcap으로 확인이 필요합니다.
 
 #### 4.3.6 유출
@@ -939,11 +939,12 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `category` | `Single`(단일) 또는 `Correlated`(킬체인 상관) |
 | `killchain_stages` | 킬체인 단계명(상관은 `정찰->C2->확산`처럼 이어 붙임) |
 | `severity` | 단일 `Information`, 상관 `Suspicious` |
-| `first_seen` / `last_seen` | 관측 시작·끝 |
+| `first_seen` / `last_seen` | 관측 시작·끝. 같은 사건의 갱신 탐지(`occurrence` > 1)는 `first_seen`이 사건의 첫 탐지 시각 |
 | `attacker` / `attacker_subnet` | 공격 호스트와 그 대역 |
 | `victims` | 피해 호스트(최대 8개, 쉼표 구분) |
 | `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 |
 | `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
+| `incident_id` / `occurrence` | 같은 사건 묶기(단일 탐지만). 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
 
 ### 6.3 evidence.log — 근거
 
@@ -1246,7 +1247,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `detect_unknown_protocol` | T | 룰 켜기 |  |
-| `unknown_proto_min_bytes` | 1000000 | 한 방향 페이로드 임계(바이트) | 오탐이 많으면 올림. 다른 룰의 ConnThreshold 값(1MiB 등)과 같은 값은 피함 |
+| `unknown_proto_min_bytes` | 1000000 | 한 방향 바이트 임계. 연결 중에는 IP 바이트(헤더 포함), 연결 종료 때는 페이로드 | 오탐이 많으면 올림. 다른 룰의 ConnThreshold 값(1MiB 등)과 같은 값은 피함 |
 | `unknown_proto_min_duration` / `unknown_proto_min_bytes_long` | 30min / 10000 | 대화형 연결 기준(지속 시간과 양방향 합계) |  |
 | `unknown_proto_skip_ports` | 80·443·8080·8443·21·22·25·53·110·143·465·587·853·993·995·5223·5228(tcp) | 검사하지 않는 목적지 포트 | 고객 환경의 미식별 표준 서비스 포트를 `+=` |
 
@@ -1317,6 +1318,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
+| `detection_continue_gap` | 15min | 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지를 같은 사건(`incident_id`)으로 묶는 최대 간격 | 집계형 룰의 창(5·10분)보다 길게 둠 |
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
 | `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
 | `auth_ctx_max_accounts` | 3 | 키마다 남기는 계정 수 |  |

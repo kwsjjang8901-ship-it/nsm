@@ -233,6 +233,9 @@ def build_stories(detections, midx, label):
     """확정 체인(상관 탐지) + 공격자에서 확산 대상으로 이어지는 후보 탐지를 공격자별 스토리로 묶는다."""
     singles = [i for i, d in enumerate(detections) if d.get("category") != "Correlated"]
     by_id = {detections[i]["id"]: i for i in singles}
+    for i in singles:                      # 합쳐진 같은 사건의 갱신 탐지 id 도 첫 탐지로
+        for a in detections[i].get("aliases", []):
+            by_id[a] = i
     confirmed = collections.defaultdict(set)   # 공격자 IP -> 체인에 들어간 탐지
     chain_ids = collections.defaultdict(list)
     for d in detections:
@@ -411,8 +414,9 @@ def collect(z, assets_path, args):
         ev_by[e.get("evidence_id")].append({k: e.get(k) for k in ("ts", "note", "operation", "src", "dst", "account", "uid", "detail", "technique")})
 
     detections = []
+    heads = {}
     related = collections.Counter()
-    for d in det:
+    for d in sorted(det, key=lambda r: r.get("ts") or 0):
         ts = d.get("ts")
         att = d.get("attacker")
         vics = split_list(d.get("victims"))
@@ -427,8 +431,22 @@ def collect(z, assets_path, args):
             "evidence_count": d.get("evidence_count", 0), "disposition": d.get("disposition"),
             "exception_id": d.get("exception_id"), "evidence": sorted(evs, key=lambda e: e.get("ts") or 0)[:200],
             "first": d.get("first_seen") or ts, "last": d.get("last_seen") or ts, "eids": eids,
+            "incident": d.get("incident_id"), "occurrences": 1,
         }
+        if d.get("category") != "Correlated" and (d.get("occurrence") or 1) > 1 and item["incident"] in heads:
+            # 진행 중인 같은 사건의 갱신: 첫 탐지 한 행으로 합친다(횟수·마지막 시각·근거).
+            h = heads[item["incident"]]
+            h["occurrences"] += 1
+            h["last"] = max(h["last"] or 0, item["last"] or 0)
+            h["evidence"] = (h["evidence"] + item["evidence"])[:200]
+            h["evidence_count"] = (h["evidence_count"] or 0) + (item["evidence_count"] or 0)
+            h["eids"] = h["eids"] + item["eids"]
+            h.setdefault("aliases", []).append(item["id"])
+            continue
+        if item["incident"] and d.get("category") != "Correlated":
+            heads[item["incident"]] = item
         detections.append(item)
+    for item in detections:
         for who in [item["attacker"]] + item["victims"]:
             if who and who.get("asset"):
                 related[who["asset"]] += 1
@@ -632,7 +650,8 @@ document.getElementById('cards').innerHTML=cards.map(c=>`<div class="card"><div 
 const byDiag={};single.forEach(d=>byDiag[d.diagnosis]=(byDiag[d.diagnosis]||0)+1);const mx=Math.max(1,...Object.values(byDiag));
 document.getElementById('detbars').innerHTML=Object.keys(byDiag).length?'<table>'+Object.entries(byDiag).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td style="width:40%">${esc(k)}</td><td class="num" style="width:60px">${v}</td><td><div class="bar" style="width:${100*v/mx}%"></div></td></tr>`).join('')+'</table>':'<span class="mut">탐지 없음</span>';
 const evTable=d=>!d.evidence.length?'<span class="mut">근거 없음</span>':'<table>'+'<tr><th>시각</th><th>행위</th><th>출발→대상</th><th>계정</th><th>내용</th></tr>'+d.evidence.map(e=>`<tr><td>${fmtT(e.ts)}</td><td>${esc(e.operation)}</td><td>${esc(e.src)} → ${esc(e.dst)}</td><td>${esc(e.account)}</td><td>${esc(e.detail)}</td></tr>`).join('')+'</table>'+`<div class="note">탐지 ID <code>${esc(d.id)}</code>${d.exception_id?` · 예외 <code>${esc(d.exception_id)}</code>`:''}</div>`;
-table('dett',[['시각',d=>fmtT(d.ts),d=>d.ts],['진단',d=>esc(d.diagnosis),d=>d.diagnosis],['기법',d=>esc(d.techniques),d=>d.techniques],
+const occ=d=>d.occurrences>1?` <span class="k" title="같은 공격이 이어져 나온 탐지를 한 사건으로 묶음">${d.occurrences}회 · ~${fmtT(d.last).slice(11)}</span>`:'';
+table('dett',[['시각',d=>fmtT(d.first||d.ts),d=>d.first||d.ts],['진단',d=>esc(d.diagnosis)+occ(d),d=>d.diagnosis],['기법',d=>esc(d.techniques),d=>d.techniques],
  ['단계',d=>arrow(d.stages),d=>d.stages],['공격자',d=>who(d.attacker),d=>d.attacker?d.attacker.ip:''],
  ['대상',d=>d.victims.map(who).join('<br>')||'-',d=>d.victims.length],['근거',d=>d.evidence_count,d=>d.evidence_count,'num'],
  ['처리',d=>d.disposition?`<span class="sup">${esc(d.disposition)}</span>`:'',d=>d.disposition||'']],single,{detail:evTable,filter:'detf'});
@@ -724,7 +743,7 @@ function drawNarr(steps){
   if(k){const p=steps[k-1].d,gap=(d.first||d.ts)-(p.last||p.ts);if(gap>=600)out.push(`<li class="gapr"><span></span><span class="sp"></span><span>${dur(gap)} 뒤</span></li>`)}
   const vs=d.victims.filter(v=>!d.attacker||v.ip!==d.attacker.ip);
   out.push(`<li id="sn${x.k}" class="st${stIdx(d.stages)}"><span class="tm">${fmtT(d.first||d.ts).slice(11)}</span><span class="sp"><span class="nn${x.c?'':' cand'}">${x.k}</span></span><div class="bd">
-   <div class="tt">${esc(d.ko)}<span class="k">${esc(STK[d.stages]||d.stages)}</span><span class="k">${esc(d.techniques)}</span>${x.c?'':'<span class="k">체인 밖</span>'}</div>
+   <div class="tt">${esc(d.ko)}${d.occurrences>1?`<span class="k">${d.occurrences}회 이어짐 · ~${fmtT(d.last).slice(11)}</span>`:''}<span class="k">${esc(STK[d.stages]||d.stages)}</span><span class="k">${esc(d.techniques)}</span>${x.c?'':'<span class="k">체인 밖</span>'}</div>
    <div>${who(d.attacker)}${vs.length?' → '+vs.slice(0,4).map(who).join(', ')+(vs.length>4?` 외 ${vs.length-4}`:''):''} <span class="mut">· 근거 ${d.evidence_count}건</span></div>
    <div class="how">${howHtml(d)||'근거·선별 전송 기록 없음'}</div></div></li>`)});
  document.getElementById('storylist').innerHTML=out.join('');

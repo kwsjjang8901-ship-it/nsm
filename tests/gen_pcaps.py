@@ -1911,6 +1911,23 @@ def gen_detect_gap(out):
     cap.write(os.path.join(out, "detect_gap.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 탐지 요약: 이어지는 공격을 한 사건으로
+
+def gen_bruteforce_long(out):
+    """.134 -> SSH 서버로 12초마다 인증 실패 세션(약 16분, 5분 창 3개 이상) -> SSH_Bruteforce 가 창마다 나오지만 한 사건.
+    40분 쉬었다가 다시 5분 동안 25회 -> 새 사건."""
+    cap = Capture()
+    t = T0 + 1
+    for _ in range(80):
+        t = ssh_session(cap, "10.0.0.134", "10.0.60.23", t + 12)
+    t += 40 * 60
+    for _ in range(25):
+        t = ssh_session(cap, "10.0.0.134", "10.0.60.23", t + 10)
+    cap.tick(t + 700)
+    cap.write(os.path.join(out, "bruteforce_long.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1921,7 +1938,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
-              gen_detect_gap]
+              gen_detect_gap, gen_bruteforce_long]
 
 
 def main():

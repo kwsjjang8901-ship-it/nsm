@@ -28,7 +28,16 @@ export {
         evidence_ids:     string &log &optional;
         disposition:      string &log &optional;   # suppress 예외에 맞은 탐지: suppressed(Manager 는 알림 안 함)
         exception_id:     string &log &optional;   # 맞은 예외 id
+        ## 같은 공격이 이어져 나온 탐지를 묶는 사건 id(그 사건의 첫 탐지 detection_id)와 몇 번째인지.
+        ##   occurrence > 1 은 진행 중인 같은 사건의 갱신: Manager 는 새 알림 없이 사건의 횟수·마지막 시각을 갱신한다.
+        ##   first_seen 은 사건의 첫 탐지 시각이다.
+        incident_id:      string &log &optional;
+        occurrence:       count  &log &optional;
     };
+
+    ## 같은 (탐지 종류, 공격자, 피해 host)의 탐지가 이 간격 안에 다시 나오면 같은 사건으로 묶는다.
+    ##   집계형 룰의 창(5분·10분)보다 길어야 창마다 나오는 탐지가 이어진다.
+    const detection_continue_gap = 15min &redef;
 
     global write_detection: function(d: DetectionInfo);
 
@@ -92,6 +101,16 @@ function attacker_segment(a: addr): subnet
         return Site::local_nets_table[a];
     return ( is_v4_addr(a) ) ? mask_addr(a, 24) : mask_addr(a, 64);
     }
+
+type OngoingIncident: record {
+    incident_id: string;
+    first_seen:  time;
+    occurrences: count &default=1;
+};
+
+## (탐지 종류|공격자|피해 host) -> 진행 중인 사건. 마지막 탐지 후 detection_continue_gap 이 지나면 끝난 사건.
+##   클러스터에서는 탐지를 낸 노드별 상태다(집계형 탐지는 매니저가 내므로 한 곳에 모인다).
+global ongoing_incidents: table[string] of OngoingIncident &write_expire=detection_continue_gap;
 
 hook Notice::policy(n: Notice::Info) &priority=-6
     {
@@ -168,6 +187,24 @@ hook Notice::policy(n: Notice::Info) &priority=-6
         d$evidence_count = 1;
     if ( n?$evidence_id )
         d$evidence_ids = n$evidence_id;
+
+    # 진행 중인 같은 사건이면 사건 id 를 이어 받고 횟수를 올린다.
+    local ikey = cat(n$note, "|", d?$attacker ? cat(d$attacker) : "-", "|", d?$victims ? d$victims : "-");
+    if ( ikey in ongoing_incidents )
+        {
+        local inc = ongoing_incidents[ikey];
+        inc$occurrences += 1;
+        ongoing_incidents[ikey] = inc;          # 쓰기로 만료 시각을 늦춘다
+        d$incident_id = inc$incident_id;
+        d$occurrence  = inc$occurrences;
+        d$first_seen  = inc$first_seen;
+        }
+    else
+        {
+        ongoing_incidents[ikey] = OngoingIncident($incident_id=d$detection_id, $first_seen=d$first_seen);
+        d$incident_id = d$detection_id;
+        d$occurrence  = 1;
+        }
 
     write_detection(d);
     }
