@@ -140,7 +140,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | 확산 | 신규 | 20_winrm_dcom_lateral | DCOM_Lateral | T1021.003 | 5분 안 원격 COM 객체 생성(RemoteCreateInstance) 고유 목적지 3대 이상 | 같은 인터페이스의 다른 호출 제외 |
 | C2 | 기존 | 07_http_beaconing | HTTP_Beaconing | T1071.001 | 같은 목적지로 3초\~1시간 주기의 HTTP 콜백 12회(오차 25%, 누락 2회 허용) | 도메인·출발지 예외 |
 | C2 | 기존(재작성) | 08_dns_tunneling | DNS_Tunneling | T1071.004 | (출발지, 등록 도메인)별 5분 안 고유 서브도메인 50개 이상 + 수상한 질의 비율 0.5 이상 | 내부 리졸버 제외, AV·DNSBL 도메인 기본 예외 |
-| C2 | 기존 | 09_encrypted_c2 | Encrypted_C2 | T1573.002 | TLS 점수 3 이상(자체서명 2, SNI 없음 1, SNI 불일치 1, JA3·JA4 차단목록 3, JA4-a 1) | SNI·출발지 예외 |
+| C2 | 기존 | 09_encrypted_c2 | Encrypted_C2 | T1573.002 | TLS 점수 3 이상(자체서명 2, SNI 없음 1, SNI 불일치 1(자체서명과 함께면 0), JA3 차단목록 2, JA4 차단목록 3, JA4-a 1) | SNI·출발지 예외 |
 | C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
@@ -505,7 +505,7 @@ DNS 터널(iodine, dnscat2 등)은 공격자 도메인의 서브도메인에 데
 
 - 주체: `src` = 감염 host.
 - 집계·억제: (출발지, 등록 도메인)별 전체 질의·수상한 질의·고유 서브도메인 수. 창 종료 시 판정, (출발지, 도메인) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 출발지만, 내부 재귀 리졸버 제외(`dns_tunnel_resolvers`), 역방향 조회 제외, 도메인 예외 `dns_tunnel_allowlist_domains`(기본: AV·스팸 평판 조회 도메인). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 터널링과 DNS 유출은 같은 집계를 쓰므로, 두 탐지 모두에 걸리는 예외는 질의 단위로 집계 전에, 한 탐지에만 걸리는 예외는 창 판정 때 (출발지, 등록 도메인) 기준으로 거릅니다. 내부 리졸버 목록(`dns_tunnel_resolvers`)은 환경 사실이라 설정에 둡니다.
+- 제외·오탐 통제: 내부 출발지만, 내부 재귀 리졸버 제외(`dns_tunnel_resolvers`), 역방향 조회 제외, 도메인 예외 `dns_tunnel_allowlist_domains`(기본: AV·스팸 평판 조회 도메인, AWS 로드밸런서 이름 `elb.amazonaws.com`). 로드밸런서 이름(`<이름>-<10자리 숫자>.<리전>.elb.amazonaws.com`)은 무작위처럼 보여 수상한 질의로 세지지만 AWS가 발급하는 이름이라 데이터를 실을 수 없습니다. CIC-IDS2017 5일 동안 광고 서버 로드밸런서 조회로 9건이 오탐됐습니다(표본 질의 기준, 8건은 내부 리졸버가 출발지). 같은 `amazonaws.com`의 다른 이름은 그대로 셉니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 터널링과 DNS 유출은 같은 집계를 쓰므로, 두 탐지 모두에 걸리는 예외는 질의 단위로 집계 전에, 한 탐지에만 걸리는 예외는 창 판정 때 (출발지, 등록 도메인) 기준으로 거릅니다. 내부 리졸버 목록(`dns_tunnel_resolvers`)은 환경 사실이라 설정에 둡니다.
 - 근거: 수상한 질의 표본.
 
 ##### 암호화 C2 (`Encrypted_C2`, T1573.002) · 09_encrypted_c2
@@ -516,13 +516,14 @@ TLS로 감싼 C2는 본문을 볼 수 없어 핸드셰이크 메타데이터로 
 | --- | --- |
 | 자체서명 인증서 (2) | `ssl_established`에서 `c$ssl$subject` = `c$ssl$issuer` |
 | SNI 없음 (1) | `c$ssl$server_name`이 없거나 빈 값 |
-| SNI·인증서 불일치 (1) | `c$ssl$sni_matches_cert` = F (와일드카드·SAN을 인증서 규칙대로 비교) |
+| SNI·인증서 불일치 (1, 자체서명과 함께면 0) | `c$ssl$sni_matches_cert` = F (와일드카드·SAN을 인증서 규칙대로 비교) |
 | JA4 차단목록 (3) | `get_ja4` 훅 값이 `ja4_blocklist`에 정확히 일치 |
 | JA4-a 워치리스트 (1) | JA4 첫 구간이 `ja4_a_watchlist`에 있음(단독으로는 임계 미달) |
 | JA3 차단목록 (2) | `get_ja3` 훅 값이 `ja3_blocklist`에 있음(레거시, 전환기 병행). 흔한 브라우저·라이브러리와 지문이 겹쳐 단독으로는 임계에 못 미침 |
 
 - TLS 1.3은 인증서가 암호화돼 자체서명·불일치 신호가 없습니다. 이때는 SNI 없음과 지문만 점수에 들어갑니다(JA3는 SNI 없음과 함께여야 탐지).
 - JA3 가중치를 3에서 2로 낮춘 이유: 공개 데이터셋 CIC-IDS2017 Monday(공격 없는 날)에서 차단목록의 "Adware" 해시 3개가 정상 브라우저 지문과 같아 JA3 단독으로 1,176건이 오탐됐습니다. 지문만으로 판정하려면 JA4 차단목록(3)을 씁니다.
+- 자체서명이면서 SNI가 맞지 않으면 불일치는 0점으로 셉니다(`enc_c2_w_mismatch_selfsigned`). 호스팅 업체의 기본 자체서명 인증서(Plesk, `localhost.localdomain` 등)를 쓰는 일반 웹사이트는 자체서명이면 SNI도 당연히 맞지 않아 같은 원인을 두 번 세게 됩니다. CIC-IDS2017 5일 동안 이 조합만으로 3점이 된 일반 사이트 접속이 52건(암호화 C2 오탐 56건 중)이었습니다. SNI 없는 자체서명(Cobalt Strike 기본 설정 등)은 그대로 3점입니다. 자체서명 인증서에 다른 이름의 SNI를 쓰는 C2까지 잡으려면 1로 되돌립니다(이전 동작).
 - 주체: `src` = 감염 host, `dst` = C2 서버.
 - 집계·억제: 연결 단위 단건. (출발지, 목적지) 단위 1시간 억제.
 - 제외·오탐 통제: 내부 → 외부만. 예외는 예외 엔진(5.4절)으로 거릅니다(축: 목적지, SNI, JA4 등). 기존 `enc_c2_allowlist`(목적지)·`enc_c2_allowlist_sni`(SNI)는 그대로 동작합니다(drop 예외로 자동 등록).
@@ -1024,7 +1025,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `dnstun_label_len` / `dnstun_min_label_len` | 40 / 20 | 이 길이 이상 라벨 = 수상 / 무작위성 점수로 판정하는 최소 길이 |  |
 | `dnstun_local_only` | T | 내부 출발지만 |  |
 | `dns_tunnel_resolvers` | 비어 있음 | 내부 재귀 리졸버(출발지에서 제외) | **custom에 기록 권장** |
-| `dns_tunnel_allowlist_domains` | sophosxl.net, e5.sk, spamhaus.org 등 8개 | AV 평판·DNSBL 조회 도메인 | `+=`로 추가. 터널링·유출 두 범위의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `dns_tunnel_allowlist_domains` | sophosxl.net, e5.sk, spamhaus.org 등 8개 + elb.amazonaws.com | AV 평판·DNSBL 조회 도메인, AWS 로드밸런서 이름 | `+=`로 추가. 터널링·유출 두 범위의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 09 암호화 C2
 
@@ -1032,6 +1033,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | --- | --- | --- | --- |
 | `enc_c2_score_threshold` | 3 | 탐지 점수 |  |
 | `enc_c2_w_selfsigned` / `_nosni` / `_mismatch` | 2 / 1 / 1 | 자체서명 / SNI 없음 / SNI·인증서 불일치 가중치 | TLS 1.3은 인증서가 암호화돼 자체서명 신호가 없음 |
+| `enc_c2_w_mismatch_selfsigned` | 0 | 자체서명이면서 SNI 불일치일 때 불일치 가중치 | 1이면 이전 동작(자체서명 + 다른 이름 SNI도 3점). 호스팅 기본 인증서 사이트 오탐이 함께 늘어남 |
 | `enc_c2_w_ja3` / `_ja4` / `_ja4_a` | 2 / 3 / 1 | JA3·JA4 차단목록 일치 / JA4 a부분 워치리스트 | JA3는 단독 탐지가 안 되게 임계(3)보다 낮게 둠 |
 | `ja3_blocklist` / `ja4_blocklist` / `ja4_a_watchlist` | intel_ja3 데이터 / 비어 있음 | 지문 목록 | 위협 인텔로 갱신 |
 | `enc_c2_allowlist` / `enc_c2_allowlist_sni` | 비어 있음 | 예외 목적지 / SNI | 예외 엔진의 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |

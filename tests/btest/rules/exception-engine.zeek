@@ -1,7 +1,8 @@
 # @TEST-DOC: 예외 엔진(E1) — 예외 파일 drop·suppress·검증·만료·적중 수, 집계형 쌍 예외, 묶음 범위, 기존 redef 호환, 다시 읽기, 파일 없음
 #
 # (1) 09 건별 룰: dst drop(.70 은 notice·근거·탐지 요약 모두 없음), SNI suppress(.74 는 표시만), 검증 거부·만료
-# @TEST-EXEC: zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP %INPUT NSM::exception_file=c2.tsv
+# .74(자체서명 + SNI 불일치)를 탐지 대상으로 쓰므로 이전 가중치(1)로 고정한다(기본은 0, 09-encrypted-c2-selfsigned-mismatch 참고)
+# @TEST-EXEC: zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::enc_c2_w_mismatch_selfsigned=1 %INPUT NSM::exception_file=c2.tsv
 # @TEST-EXEC: assert-rows notice.log eq 0 note=NSM::Encrypted_C2 src=10.0.0.70
 # @TEST-EXEC: assert-rows evidence.log eq 0 src=10.0.0.70
 # @TEST-EXEC: assert-rows nsm_detection.log eq 0 attacker=10.0.0.70
@@ -31,19 +32,19 @@
 # @TEST-EXEC: mkdir legacy && cd legacy && zeek -C -r $TRACES/ssh_lateral.pcap $PKG $SETUP ../legacy.zeek
 # @TEST-EXEC: assert-rows legacy/notice.log eq 0 note=NSM::SSH_Lateral
 # @TEST-EXEC: assert-rows legacy/nsm_exception.log eq 1 kind=loaded exception_id=legacy:ssh_lm_allowlist disposition=drop msg=legacy
-# @TEST-EXEC: mkdir legacy2 && cd legacy2 && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP ../legacy.zeek
+# @TEST-EXEC: mkdir legacy2 && cd legacy2 && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::enc_c2_w_mismatch_selfsigned=1 ../legacy.zeek
 # @TEST-EXEC: assert-rows legacy2/notice.log eq 0 note=NSM::Encrypted_C2 src=10.0.0.74
 # @TEST-EXEC: assert-rows legacy2/notice.log eq 1 note=NSM::Encrypted_C2 src=10.0.0.70
 #
 # (4) 파일이 바뀌면 다시 읽는다: v1(.70 drop)으로 시작해 .71 세션에서 v2(.74 drop)로 교체
-# @TEST-EXEC: mkdir reload && cd reload && cp ../v1.tsv ex.tsv && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP ../reload.zeek
+# @TEST-EXEC: mkdir reload && cd reload && cp ../v1.tsv ex.tsv && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::enc_c2_w_mismatch_selfsigned=1 ../reload.zeek
 # @TEST-EXEC: assert-rows reload/notice.log eq 0 note=NSM::Encrypted_C2 src=10.0.0.70
 # @TEST-EXEC: assert-rows reload/notice.log eq 0 note=NSM::Encrypted_C2 src=10.0.0.74
 # @TEST-EXEC: assert-rows reload/nsm_exception.log eq 1 kind=loaded exception_id=E-v1
 # @TEST-EXEC: assert-rows reload/nsm_exception.log eq 1 kind=loaded exception_id=E-v2
 #
 # (5) 파일이 없어도 pcap 처리가 멈추지 않고 탐지는 그대로 나온다
-# @TEST-EXEC: mkdir missing && cd missing && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::exception_file=no-such.tsv
+# @TEST-EXEC: mkdir missing && cd missing && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::enc_c2_w_mismatch_selfsigned=1 NSM::exception_file=no-such.tsv
 # @TEST-EXEC: assert-rows missing/notice.log eq 1 note=NSM::Encrypted_C2 src=10.0.0.70
 # @TEST-EXEC: assert-rows missing/notice.log eq 1 note=NSM::Encrypted_C2 src=10.0.0.74
 # @TEST-EXEC: assert-rows missing/nsm_exception.log eq 1 kind=error

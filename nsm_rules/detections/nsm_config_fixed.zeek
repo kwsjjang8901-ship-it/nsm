@@ -191,6 +191,7 @@ redef NSM::enc_c2_score_threshold        = 3;           # 발화 점수 임계
 redef NSM::enc_c2_w_selfsigned           = 2;           # 자체서명 가중치
 redef NSM::enc_c2_w_nosni                = 1;           # SNI 부재
 redef NSM::enc_c2_w_mismatch             = 1;           # SNI-인증서 불일치
+# redef NSM::enc_c2_w_mismatch_selfsigned = 0;          # 자체서명이면서 SNI 불일치일 때(기본 0: 호스팅 기본 인증서 사이트 오탐 방지, 1 이면 이전 동작)
 redef NSM::enc_c2_w_ja3                  = 2;           # JA3 차단목록 매칭(레거시, 단독으로는 임계 미달: 정상 브라우저와 지문 충돌)
 redef NSM::enc_c2_w_ja4                  = 3;           # JA4 차단목록 정확 일치(주력)
 redef NSM::enc_c2_w_ja4_a                = 1;           # JA4 "a" 워치리스트(보조)

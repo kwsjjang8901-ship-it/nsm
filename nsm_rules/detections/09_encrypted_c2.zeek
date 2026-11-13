@@ -48,6 +48,11 @@ export {
     const enc_c2_w_selfsigned = 2 &redef;   # 자체서명
     const enc_c2_w_nosni      = 1 &redef;   # SNI 부재
     const enc_c2_w_mismatch   = 1 &redef;   # SNI-인증서 불일치
+    ## 자체서명이면서 SNI 불일치일 때 불일치 가중치. 호스팅 기본 자체서명 인증서(Plesk·localhost 등)를 쓰는
+    ## 일반 웹사이트는 자체서명이면 SNI 도 당연히 안 맞아 같은 원인을 두 번 센다(CIC-IDS2017 5일 오탐 52건).
+    ## 0 이면 자체서명(2)만 남아 임계(3) 미달. SNI 없는 자체서명(Cobalt Strike 기본형 등)은 그대로 3점.
+    ## 자체서명 + 다른 이름의 SNI 를 쓰는 C2 까지 잡으려면 1(이전 동작).
+    const enc_c2_w_mismatch_selfsigned = 0 &redef;
     # JA3 는 흔한 브라우저·라이브러리와 지문이 겹친다(CIC-IDS2017 Monday: 'Adware' 해시 3개가 정상 브라우저와 같아
     # 정상 트래픽 1,176건 오탐). 그래서 임계보다 낮게 두어 다른 신호(자체서명·SNI 없음·불일치)가 하나 더 있어야 탐지한다.
     const enc_c2_w_ja3        = 2 &redef;   # JA3 차단목록 매칭(레거시, 단독으로는 임계 미달)
@@ -99,7 +104,10 @@ event ssl_established(c: connection)
     if ( ! has_sni )
         { score += enc_c2_w_nosni; reasons += "no_sni "; }
     else if ( c$ssl?$sni_matches_cert && ! c$ssl$sni_matches_cert )
-        { score += enc_c2_w_mismatch; reasons += "sni_mismatch "; }
+        {
+        score += selfsigned ? enc_c2_w_mismatch_selfsigned : enc_c2_w_mismatch;
+        reasons += "sni_mismatch ";
+        }
 
     # 3) JA4 차단목록 정확 일치(주력: 패키지 없으면 get_ja4 가 "" 반환)
     local ja4 = get_ja4(c);
