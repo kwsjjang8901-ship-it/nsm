@@ -94,6 +94,7 @@ NOTE_KO = {
     "VolumeAggregate": "누적 외부 전송", "DnsTunnel": "DNS로 데이터 유출", "WebUpload": "웹 업로드 유출",
     "DgaDomain": "DGA 도메인 조회", "UnknownProtocol": "식별 안 된 프로토콜 통신",
     "SshBruteforce": "SSH 무차별 대입", "FtpBruteforce": "FTP 무차별 대입", "Heartbleed": "Heartbleed(TLS 서버 메모리 유출)",
+    "Xss": "크로스 사이트 스크립팅 시도", "HttpBruteforce": "웹 로그인 무차별 대입",
 }
 STORY_META = ("kerberos", "ntlm", "smb_mapping", "smb_files", "dce_rpc", "rdp", "ssh", "ssl", "http", "flow_summary", "dns_summary")
 REACH_WINDOW = 86400   # 확산으로 닿은 host 는 닿은 뒤 이 시간 안의 탐지만 같은 스토리로 본다
@@ -138,6 +139,7 @@ ENRICH = {
     "WebUpload": ({"http", "flow_summary"}, None),
     "SshBruteforce": ({"ssh", "flow_summary"}, None), "FtpBruteforce": ({"flow_summary"}, None),
     "Heartbleed": ({"ssl", "flow_summary"}, None),
+    "Xss": ({"http", "flow_summary"}, None), "HttpBruteforce": ({"http", "flow_summary"}, None),
     "DgaDomain": ({"dns"}, None), "DnsTunneling": ({"dns"}, None), "DnsTunnel": ({"dns"}, None),
 }
 
@@ -323,6 +325,7 @@ DIAG_NOTE = {
     "DNS_Tunneling": "DnsTunneling", "Encrypted_C2": "EncryptedChannel", "Exfil_Large_Transfer": "LargeTransfer",
     "Exfil_Volume_Aggregate": "VolumeAggregate", "Exfil_DNS": "DnsTunnel", "Exfil_Web_Upload": "WebUpload", "DGA_Domain": "DgaDomain",
     "SSH_Bruteforce": "SshBruteforce", "FTP_Bruteforce": "FtpBruteforce", "TLS_Heartbleed": "Heartbleed",
+    "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce",
 }
 
 

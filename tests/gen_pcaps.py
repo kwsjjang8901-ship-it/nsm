@@ -1718,6 +1718,63 @@ def gen_dns_elb(out):
     cap.write(os.path.join(out, "dns_elb.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 28 XSS / 29 웹 로그인 무차별 대입
+
+def http_exchange(cap, src, dst, method, uri, t, body=b"", headers="", status="200 OK",
+                  ctype="application/x-www-form-urlencoded", host="intranet.corp.example"):
+    """HTTP 요청 1건과 응답(상태 코드 지정) 1건을 한 TCP 연결로."""
+    s = Tcp(cap, src, dst, 80)
+    t = s.handshake(t)
+    head = "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0\r\n%s" % (method, uri, host, headers)
+    if body:
+        head += "Content-Type: %s\r\nContent-Length: %d\r\n" % (ctype, len(body))
+    t = s.client_send(head.encode() + b"\r\n" + body, t)
+    t = s.server_send(("HTTP/1.1 %s\r\nContent-Length: 2\r\nContent-Type: text/html\r\n\r\nok" % status).encode(), t + 0.02)
+    return s.close(t + 0.01)
+
+
+def gen_web_xss_bf(out):
+    """XSS: .150 URI <script>(탐지), .151 POST 본문 onerror 핸들러(탐지), .152 굵은 글씨 태그 + alert( 단어(미탐),
+    .153 서식 있는 글(미탐), .154 외부 사이트로 보낸 <script>(내부 서버 아님, 미탐).
+    웹 로그인 무차별 대입: .160 GET 로그인 비밀번호 30가지(탐지, DVWA brute 형태), .161 같은 비밀번호 30회(미탐),
+    .162 JSON 로그인 비밀번호 25가지(탐지), .163 Basic 인증 401 25회(탐지), .164 NTLM 401 25회(미탐),
+    .165 비밀번호 10가지(임계 미만, 미탐)."""
+    import base64
+    cap = Capture()
+    t = T0 + 1
+    W = WEB_SERVER
+    t = http_exchange(cap, "10.0.0.150", W, "GET",
+                      "/dvwa/vulnerabilities/xss_r/?name=%3Cscript%3Ealert%28document.cookie%29%3C%2Fscript%3E", t + 1)
+    t = http_exchange(cap, "10.0.0.151", W, "POST", "/dvwa/vulnerabilities/xss_s/", t + 1,
+                      body=b"txtName=kim&mtxMessage=%3Cimg+src%3Dx+onerror%3Dalert%281%29%3E&btnSign=Sign+Guestbook")
+    t = http_exchange(cap, "10.0.0.152", W, "GET", "/search?q=%3Cb%3Ehello%3C%2Fb%3E+alert%28+price", t + 1)
+    t = http_exchange(cap, "10.0.0.153", W, "POST", "/board/write", t + 1,
+                      body=b"title=notes&content=%3Cp%3EMeeting+%3Cb%3Enotes%3C%2Fb%3E+for+%3Ci%3Eonline%3C%2Fi%3E+users%3C%2Fp%3E")
+    t = http_exchange(cap, "10.0.0.154", "93.184.215.50", "GET", "/q?x=%3Cscript%3Ealert(1)%3C/script%3E", t + 1,
+                      host="www.example.com")
+    for i in range(30):
+        t = http_exchange(cap, "10.0.0.160", W, "GET",
+                          "/dvwa/vulnerabilities/brute/?username=admin&password=guess%03d&Login=Login" % i, t + 2)
+    for i in range(30):
+        t = http_exchange(cap, "10.0.0.161", W, "POST", "/login", t + 2, body=b"username=alice&password=Secret1")
+    for i in range(25):
+        t = http_exchange(cap, "10.0.0.162", W, "POST", "/api/login", t + 2, ctype="application/json",
+                          body=('{"username": "bob", "password": "p%03d"}' % i).encode())
+    for i in range(25):
+        cred = base64.b64encode(("user%02d:pw%02d" % (i, i)).encode()).decode()
+        t = http_exchange(cap, "10.0.0.163", W, "GET", "/admin/", t + 2,
+                          headers="Authorization: Basic %s\r\n" % cred, status="401 Unauthorized")
+    for i in range(25):
+        t = http_exchange(cap, "10.0.0.164", W, "GET", "/ews/exchange.asmx", t + 2,
+                          headers="Authorization: NTLM TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAKAGFKAAAADw==\r\n",
+                          status="401 Unauthorized")
+    for i in range(10):
+        t = http_exchange(cap, "10.0.0.165", W, "POST", "/login", t + 2, body=("username=carol&password=try%02d" % i).encode())
+    cap.tick(T0 + 11 * 60)
+    cap.write(os.path.join(out, "web_xss_bf.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1726,7 +1783,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
-              gen_bruteforce, gen_heartbleed, gen_dns_elb]
+              gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf]
 
 
 def main():

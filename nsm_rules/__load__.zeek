@@ -32,6 +32,8 @@
 @load ./detections/25_unknown_protocol     # 식별 안 된 프로토콜의 외부 통신(역방향 셸 등)
 @load ./detections/26_service_bruteforce   # SSH·FTP 무차별 대입
 @load ./detections/27_heartbleed           # TLS Heartbleed
+@load ./detections/28_xss                  # 크로스 사이트 스크립팅
+@load ./detections/29_http_bruteforce      # 웹 로그인 무차별 대입
 @load ./detections/14_large_transfer_exfil
 @load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 

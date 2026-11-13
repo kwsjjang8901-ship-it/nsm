@@ -55,6 +55,8 @@ export {
         [SSH_Bruteforce]         = "NSM.CredentialAccess.SshBruteforce",
         [FTP_Bruteforce]         = "NSM.CredentialAccess.FtpBruteforce",
         [TLS_Heartbleed]         = "NSM.WebAttack.Heartbleed",
+        [Cross_Site_Scripting]   = "NSM.WebAttack.Xss",
+        [HTTP_Bruteforce]        = "NSM.CredentialAccess.HttpBruteforce",
         [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
         [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
         [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",

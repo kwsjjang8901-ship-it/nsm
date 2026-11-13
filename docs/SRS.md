@@ -114,7 +114,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
 - 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
-- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~27).
+- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~29).
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -122,12 +122,14 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | 정찰 | 기존 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
 | 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
 | 초기 침투 | 신규 | 27_heartbleed | TLS_Heartbleed | T1190 | 평문 하트비트 요청의 선언 페이로드 길이가 실제 레코드보다 큼(시도)·응답이 요청보다 큼(성공), 암호화된 하트비트는 응답 레코드가 요청보다 32바이트 넘게 큼(성공)·응답 없는 요청 4개 이상(시도). 연결당 1건 | 서버가 하트비트 확장을 수락한 연결만 핸드셰이크 뒤까지 분석, 출발지 예외 |
+| 초기 침투 | 신규 | 28_xss | Cross_Site_Scripting | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 스크립트가 실행되는 구조(`<script>`, 태그 안 `onerror=` 등, `javascript:` 호출, `document.cookie`) | URL 2회 디코딩 후 검사, 태그·`alert(` 단독은 무시 |
 | 초기 침투 | 기존(재작성) | 04_webshell | Webshell_Access | T1505.003 | 웹쉘 파일명+스크립트 확장자, 명령 파라미터 값이 실제 명령(`cmd=whoami`), China Chopper류 본문 | 파라미터 이름만으로는 탐지하지 않음 |
 | 자격증명 접근 | 기존(재작성) | 05_ntlm_spray | NTLM_Spray | T1110.003 | 한 출발지에서 10분 안 **인증 실패** 고유 계정 10개 이상(SMB 상태코드·SPNEGO reject) | 성공은 세지 않음, 대소문자 정규화 |
 | 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Spray | T1110.003 | 10분 안 AS 사전인증 실패(코드 24·6·18·23) 고유 계정 10개 이상 | 정상 로그온 첫 단계(코드 25) 제외 |
 | 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Bruteforce | T1110.001 | 한 출발지가 같은 계정으로 10분 안 비밀번호 실패(코드 24·18) 20회 이상 | 예외 출발지 |
 | 자격증명 접근 | 신규 | 26_service_bruteforce | SSH_Bruteforce | T1110.001 | 같은 (출발지, 목적지)로 5분 안 인증이 성공하지 않은 SSH 세션 20개 이상 | 인증 성공 추정 세션 제외, 출발지·목적지 예외 |
 | 자격증명 접근 | 신규 | 26_service_bruteforce | FTP_Bruteforce | T1110.001 | 같은 (출발지, 목적지)로 5분 안 FTP 로그인 실패(530) 10회 이상 | 출발지·목적지 예외 |
+| 자격증명 접근 | 신규 | 29_http_bruteforce | HTTP_Bruteforce | T1110.001 | 내부 웹서버의 같은 경로로 5분 안 서로 다른 비밀번호 값 20가지 이상(폼·JSON 로그인), 또는 Basic 인증 401 20회 이상 | 같은 비밀번호 반복·NTLM 챌린지 제외, 비밀번호 값 기록 안 함 |
 | 자격증명 접근 | 신규 | 18_kerberoasting | Kerberoasting | T1558.003 | 10분 안 RC4·DES 서비스 티켓을 받은 고유 SPN 5개 이상 | krbtgt·kadmin 제외 |
 | 자격증명 접근 | 신규 | 18_kerberoasting | ASREP_Roasting | T1558.004 | 사전인증 없는 AS 요청에 RC4·DES로 암호화된 AS-REP(계정마다 1건) | AES 응답은 제외(스마트카드 오탐 방지) |
 | 자격증명 접근 | 신규 | 19_outbound_smb | NTLM_Credential_Leak | T1187 | 내부 호스트가 외부 서버에 NTLM 인증을 보냄(1건) | 익명 인증 제외, 허용 목적지 |
@@ -165,7 +167,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ### 4.3 룰별 탐지 상세
 
-탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~27)에 있습니다.
+탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~29)에 있습니다.
 
 각 항목의 목록은 다음 순서로 씁니다.
 
@@ -254,6 +256,22 @@ OpenSSL 1.0.1–1.0.1f(CVE-2014-0160)는 하트비트 요청이 선언한 페이
 - 제외·오탐 통제: 기본 Zeek 스크립트를 로드하지 않아도 동작하며 그 스크립트의 notice와는 별개입니다. 암호화 판정은 길이만 보므로 응답에 MAC·패딩 차이를 넘는 여유(32바이트)를 둡니다. 취약점 스캐너는 예외 엔진(5.4절, `exception_drop`)으로 출발지 축 예외를 등록합니다. 새 `*_allowlist`는 두지 않습니다.
 - 근거: 결과, 요청·응답 수, 마지막 요청 길이, 최대 응답 길이, 과다 읽기 요청 여부, 포트, uid. 킬체인 묶음에는 넣지 않았습니다(초기 침투 묶음이 없음). 탐지 요약 진단명 `NSM.WebAttack.Heartbleed`.
 
+##### 크로스 사이트 스크립팅 (`Cross_Site_Scripting`, T1190) · 28_xss
+
+XSS는 웹 파라미터에 스크립트를 넣어 다른 사용자의 브라우저에서 실행되게 합니다(반사형은 URI, 저장형은 게시판 같은 POST 본문). 정상 요청에도 `<b>` 같은 태그나 `alert(` 같은 단어는 나오므로, **스크립트가 실행되는 HTML 구조가 있어야 맞는 시그니처**(`<script>` 태그, 태그 안의 이벤트 핸들러 `onerror=`·`onload=`, `javascript:`·`vbscript:` URL의 함수 호출, `document.cookie`·`document.domain`, `src`·`href`의 `data:text/html`, `iframe`·`object` 등의 외부 자원 지정)로만 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| URI | `http_request`의 `original_URI` |
+| POST·PUT 본문 | `http_entity_data` (요청 쪽, 연결당 앞 4096바이트까지, 03과 같은 예산) |
+| 정규화 | `+` → 공백, URL 디코딩 2회, 소문자 (`web_common.zeek`, 03과 같음) |
+
+- 주체: `src` = 공격 출발지, `dst` = 대상 웹서버.
+- 집계·억제: 단건. (출발지, 서버) 단위 10분 억제.
+- 제외·오탐 통제: 내부 웹서버로 들어오는 요청만(`web_attack_local_servers_only`). 서식 있는 글(`<b>`·`<p>`)과 `alert(` 단어 단독은 보지 않습니다. 관리자가 분석 스크립트 같은 `<script>` 조각을 CMS에 정상으로 올리는 서버는 예외 엔진(5.4절, `exception_drop`)으로 출발지·목적지 축 예외를 등록합니다. 취약점 스캐너는 03과 같이 출발지 예외(기존 `web_attack_allowlist`도 이 룰에 적용).
+- 근거: 매칭 위치(uri·body), 메서드, 원문 앞부분, uid. 탐지 요약 진단명 `NSM.WebAttack.Xss`. 킬체인 묶음에는 넣지 않았습니다(초기 침투 묶음 없음).
+- 검증: CIC-IDS2017 Thursday "Web Attack – XSS"(DVWA `xss_r`·`xss_s`)를 놓쳤던 것을 보완합니다.
+
 #### 4.3.3 자격증명 접근
 
 ##### NTLM 패스워드 스프레이 (`NTLM_Spray`, T1110.003) · 05_ntlm_spray
@@ -300,6 +318,23 @@ FTP는 평문이라 로그인 시도마다 `USER`·`PASS`와 서버의 결과 �
 - 집계·억제: SumStats (출발지, 목적지) 키, 실패 수(SUM)·고유 계정 수(UNIQUE)·표본(SAMPLE). 5분 창 종료 시 판정(창당 1건).
 - 제외·오탐 통제: 실패 뒤 성공(230)한 연결도 실패 횟수는 셉니다(성공한 공격도 놓치지 않기 위해). 접속 확인용 자동 점검 계정 등은 예외 엔진(5.4절, `exception_drop_agg`)으로 출발지·목적지 축 예외를 등록합니다.
 - 근거: 실패 수, 고유 계정 수, 표본 계정·uid(계정당 1행). 킬체인 묶음은 자격증명.
+
+##### 웹 로그인 무차별 대입 (`HTTP_Bruteforce`, T1110.001) · 29_http_bruteforce
+
+웹 로그인 무차별 대입은 같은 로그인 경로로 비밀번호만 바꿔 가며 요청을 반복합니다. 정상 사용자는 한두 번 틀리고, 자동화·헬스 체크는 같은 비밀번호를 반복합니다. 그래서 요청 수가 아니라 **같은 (출발지, 서버, 경로)로 5분 안에 서로 다른 비밀번호 값이 20가지 이상**이면 탐지합니다. HTTP Basic 인증은 **같은 (출발지, 서버, 경로)에서 Basic 인증 헤더를 보낸 요청이 5분 안에 401을 20회 이상** 받으면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 폼 로그인(GET) | `http_request`의 `original_URI` 쿼리에서 비밀번호형 파라미터(`web_bf_password_params`: password·passwd·pwd·j_password 등)와 계정형 파라미터(`web_bf_user_params`) |
+| 폼 로그인(POST·PUT) | `http_entity_data` 첫 조각(앞 4096바이트): 폼 인코딩이면 같은 파라미터, `{`·`[`로 시작하면 JSON의 `"password": "…"` |
+| Basic 인증 | `http_reply` 401이면서 `c$http$username`이 있음(기본 HTTP 스크립트가 `Authorization: Basic`에서 채움). NTLM·Negotiate의 정상 401 챌린지는 이 값이 없어 세지 않음 |
+| 비밀번호 고유 수 | 값의 MD5만 SumStats UNIQUE로 셉니다. 비밀번호 값은 어떤 로그에도 남기지 않습니다 |
+
+- 주체: `src` = 공격 host, `dst` = 대상 웹서버.
+- 집계·억제: SumStats (출발지, 서버\|경로) 키, 5분 창(`svc_bf_epoch`, 26과 공통) 종료 시 판정(창당 1건).
+- 제외·오탐 통제: 내부 웹서버로 들어오는 요청만. 같은 비밀번호를 반복하는 자동 로그인·모니터링은 고유 값이 1이라 쌓이지 않습니다. 예외는 관측 전에 `exception_drop_agg`로 거릅니다(축: 출발지·목적지·포트). 취약점 스캐너는 출발지 예외(기존 `web_attack_allowlist`도 적용).
+- 근거: 시도 수, 고유 비밀번호 수, 고유 계정 수, 경로, 표본 요청의 계정·uid(계정당 1행). Basic은 401 수와 사용자명. 킬체인 묶음은 자격증명(`corr_cred_notes`). 탐지 요약 진단명 `NSM.CredentialAccess.HttpBruteforce`.
+- 검증: CIC-IDS2017 Thursday "Web Attack – Brute Force"(DVWA `brute`, GET 로그인)를 놓쳤던 것을 보완합니다.
 
 ##### Kerberos 패스워드 스프레이 (`Kerberos_Spray`, T1110.003) · 17_kerberos_spray
 
@@ -721,7 +756,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
 | C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol |
-| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce |
+| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce |
 | 도메인 장악 | `corr_domain_notes` | DCSync |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral |
 | 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB |
@@ -975,7 +1010,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `web_attack_local_servers_only` | T | 내부 웹서버로 들어오는 요청만 검사 | 외부 사이트 요청까지 보면 오탐 급증 |
-| `web_attack_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너·모의해킹) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+| `web_attack_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너·모의해킹). 03·04·28·29에 적용 | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `web_attack_body_max` | 4096 | 연결당 본문 검사 바이트 | 업로드가 많은 환경에서는 줄여 부하 감소 |
 | `sqli_patterns` | SQL 구문 시그니처 12종 | 정규화(URL 2회 디코딩·소문자) 된 입력에 적용 | 추가 시 `= ... \| /새패턴/`으로 전체 재정의 |
 | `webshell_uri_patterns` / `webshell_body_patterns` | 웹쉘 파일명·명령·China Chopper 서명 | 위와 같음 | 위와 같음 |
@@ -1067,7 +1102,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~27)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~29)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1176,6 +1211,24 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detect_heartbleed` | T | 룰 켜기 |  |
 | `heartbleed_enc_slack` | 32 | 암호화된 하트비트에서 응답이 요청보다 이만큼(바이트) 넘게 크면 성공 | MAC·패딩 차이 여유 |
 | `heartbleed_unanswered` | 3 | 암호화된 하트비트에서 응답 없는 요청이 이 수를 넘으면 시도 |  |
+
+#### 28 크로스 사이트 스크립팅
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_xss` | T | 룰 켜기 |  |
+| `xss_patterns` | `<script>`, 태그 안 이벤트 핸들러 등 7개 | 시그니처(정규화된 소문자 기준) | `\|` 로 패턴 추가 |
+| `web_attack_local_servers_only` / `web_attack_body_max` | T / 4096 | 03·04와 공통 |  |
+
+#### 29 웹 로그인 무차별 대입
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_http_bruteforce` | T | 룰 켜기 |  |
+| `web_bf_threshold` | 20 | 창 안 같은 (출발지, 서버, 경로)의 서로 다른 비밀번호 값 수 | 느린 공격까지 보려면 낮춤 |
+| `web_bf_basic_threshold` | 20 | 창 안 Basic 인증 401 수 |  |
+| `web_bf_password_params` / `web_bf_user_params` | password·passwd·pwd 등 15개 / username·user·email 등 14개 | 비밀번호·계정으로 보는 파라미터 이름(소문자) | 고객 앱의 로그인 필드 이름을 `+=` |
+| `svc_bf_epoch` / `svc_bf_num_samples` | 5min / 10 | 26과 공통 |  |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 

@@ -86,6 +86,8 @@ docs/
 | 25_unknown_protocol | 식별 안 된 프로토콜의 외부 통신(역방향 셸 등) | T1095 | 활성 |
 | 26_service_bruteforce | SSH / FTP 무차별 대입 | T1110.001 | 활성 |
 | 27_heartbleed | TLS Heartbleed(OpenSSL CVE-2014-0160) 시도·성공 | T1190 | 활성 |
+| 28_xss | 크로스 사이트 스크립팅 시도(내부 웹서버) | T1190 | 활성 |
+| 29_http_bruteforce | 웹 로그인 무차별 대입(폼·JSON·Basic 인증) | T1110.001 | 활성 |
 
 ## 사용
 
