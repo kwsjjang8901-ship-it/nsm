@@ -92,7 +92,7 @@ NOTE_KO = {
     "RdpAccess": "RDP 접속 확산", "SshAccess": "SSH 접속 확산", "HttpBeaconing": "HTTP 주기 통신(비콘)",
     "DnsTunneling": "DNS 터널링", "EncryptedChannel": "암호화 C2 의심 통신", "LargeTransfer": "대용량 외부 전송",
     "VolumeAggregate": "누적 외부 전송", "DnsTunnel": "DNS로 데이터 유출", "WebUpload": "웹 업로드 유출",
-    "DgaDomain": "DGA 도메인 조회",
+    "DgaDomain": "DGA 도메인 조회", "UnknownProtocol": "식별 안 된 프로토콜 통신",
 }
 STORY_META = ("kerberos", "ntlm", "smb_mapping", "smb_files", "dce_rpc", "rdp", "ssh", "ssl", "http", "flow_summary", "dns_summary")
 REACH_WINDOW = 86400   # 확산으로 닿은 host 는 닿은 뒤 이 시간 안의 탐지만 같은 스토리로 본다
@@ -133,7 +133,7 @@ ENRICH = {
     "OutboundSmb": ({"ntlm", "smb_mapping", "flow_summary"}, None),
     "HttpBeaconing": ({"http", "flow_summary"}, None), "EncryptedChannel": ({"ssl", "flow_summary"}, None),
     "NonstandardPort": ({"ssl", "http", "flow_summary"}, None), "LongConnection": ({"ssl", "flow_summary"}, None),
-    "LargeTransfer": ({"ssl", "http", "flow_summary"}, None), "VolumeAggregate": ({"ssl", "http", "flow_summary"}, None),
+    "LargeTransfer": ({"ssl", "http", "flow_summary"}, None), "UnknownProtocol": ({"flow_summary"}, None), "VolumeAggregate": ({"ssl", "http", "flow_summary"}, None),
     "WebUpload": ({"http", "flow_summary"}, None),
     "DgaDomain": ({"dns"}, None), "DnsTunneling": ({"dns"}, None), "DnsTunnel": ({"dns"}, None),
 }
@@ -315,7 +315,7 @@ DIAG_NOTE = {
     "NTLM_Spray": "NtlmSpray", "Kerberos_Spray": "KerberosSpray", "Kerberos_Bruteforce": "KerberosBruteforce",
     "Kerberoasting": "Kerberoasting", "ASREP_Roasting": "AsrepRoasting", "NTLM_Credential_Leak": "NtlmCredentialLeak",
     "Outbound_SMB": "OutboundSmb", "WinRM_Lateral": "WinrmAccess", "DCOM_Lateral": "DcomExec", "SMB_Ransomware": "SmbRansomware",
-    "Name_Poisoning": "NamePoisoning", "DCSync": "DcSync", "Nonstandard_Port": "NonstandardPort", "Long_Connection": "LongConnection",
+    "Name_Poisoning": "NamePoisoning", "DCSync": "DcSync", "Nonstandard_Port": "NonstandardPort", "Long_Connection": "LongConnection", "Unknown_Protocol": "UnknownProtocol",
     "SMB_Admin_Share": "SmbAccess", "RDP_Lateral": "RdpAccess", "SSH_Lateral": "SshAccess", "HTTP_Beaconing": "HttpBeaconing",
     "DNS_Tunneling": "DnsTunneling", "Encrypted_C2": "EncryptedChannel", "Exfil_Large_Transfer": "LargeTransfer",
     "Exfil_Volume_Aggregate": "VolumeAggregate", "Exfil_DNS": "DnsTunnel", "Exfil_Web_Upload": "WebUpload", "DGA_Domain": "DgaDomain",

@@ -81,7 +81,7 @@ export {
 
     const corr_recon_notes: set[Notice::Type] = { Port_Scan, Host_Scan } &redef;
     const corr_c2_notes: set[Notice::Type] = {
-        HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection,
+        HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol,
     } &redef;
     ## 자격증명 탈취 시도(출발지 = 공격 host)
     const corr_cred_notes: set[Notice::Type] = {
@@ -304,6 +304,7 @@ const stage_tag_map: table[Notice::Type] of string = {
     [DCSync]                 = "CredentialAccess",
     [Nonstandard_Port]       = "C2",
     [Long_Connection]        = "C2",
+    [Unknown_Protocol]       = "C2",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",

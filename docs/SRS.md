@@ -141,6 +141,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
+| C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
 | 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
 | 유출 | 기존 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 클라우드 저장소(지정 호스트 패턴)로 50MB 이상 업로드 | 출발지 예외 |
@@ -524,6 +525,23 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 제외·오탐 통제: 메신저·VPN·클라우드 동기화는 예외로 뺍니다(기존 `long_conn_allowed_dsts`·`long_conn_allowed_ports`·`long_conn_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 예외는 임계를 넘는 시점에 판정하므로 서비스·SNI 축도 쓸 수 있습니다. 환경에 따라 정상 장기 연결이 많아 초기 튜닝이 필요합니다.
 - 근거: 기준 시간, 포트, 서비스, 양방향 바이트.
 
+##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
+
+Metasploit 역방향 셸이나 자체 프로토콜 RAT는 HTTP·TLS·SSH가 아닌 일반 TCP로 공격자 서버에 붙습니다. 비표준 포트 룰(24)은 프로토콜이 식별돼야 보고, 암호화 C2(09)·비콘(07)은 TLS·HTTP만 보므로 이런 채널은 지금까지 보이지 않았습니다. **내부 → 외부 TCP 연결에서 Zeek가 프로토콜을 식별하지 못했고 표준 포트가 아닌데, 한 방향으로 1MB 이상 보냈거나 30분 이상 이어지며 양방향 합계가 10KB 이상**이면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 프로토콜 식별 여부 | `c$service`가 비어 있음(DPD가 어떤 분석기도 확인하지 못함) |
+| 바이트 | `new_connection`에서 `ConnThreshold::set_bytes_threshold`(방향별) → `ConnThreshold::bytes_threshold_crossed`. 연결 중 판정 |
+| 지속 시간 | 같은 위치에서 `ConnThreshold::set_duration_threshold` → `duration_threshold_crossed`, 그때 `c$orig$size + c$resp$size` 확인 |
+| 보조 판정 | 임계 이벤트가 없던 연결(캡처 손실로 데이터가 빠져 시퀀스로만 크기를 아는 경우 등)은 `connection_state_remove`에서 같은 조건 |
+
+- 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
+- 집계·억제: 연결 단위 단건, (출발지, 목적지, 포트) 단위 1시간 억제. 임계는 `connection_established`가 아니라 `new_connection`에서 걸어 핸드셰이크가 캡처되지 않은 연결도 봅니다.
+- 제외·오탐 통제: 표준 포트(80·443·8080·8443·메일·DNS·SSH·푸시 등, `unknown_proto_skip_ports`)는 미식별 트래픽이 많아 뺍니다. 사내 전용 프로그램·VPN·게임 서버 등은 예외 엔진(5.4절, `exception_drop`)으로 목적지·포트·출발지 축 예외를 등록합니다. 바이트 임계는 10진 MB(1,000,000)로 두어 다른 룰(14)의 ConnThreshold 임계와 겹치지 않게 합니다.
+- 근거: 포트, 판정 경로(`bytes_sent>=`·`bytes_received>=`·`duration>=`·`(at_close)`), 양방향 바이트, 지속 시간, uid. 킬체인 묶음은 C2.
+- 검증: 공개 데이터셋 CIC-IDS2017 Thursday에서 감염 PC 두 대의 Metasploit 역방향 연결(444/tcp, 서비스 미식별, 각 약 13MB)이 이 조건에 해당하고, 같은 날 정상 외부 트래픽 중 이 조건(100KB 기준에서도)을 넘는 (출발지, 목적지, 포트)는 없었습니다(선별 전송 `flow_summary` 기준). 실제 고객망의 미식별 프로토콜 양은 운영 pcap으로 확인이 필요합니다.
+
 #### 4.3.6 유출
 
 ##### DNS 유출 (`Exfil_DNS`, T1048.003) · 08_dns_tunneling
@@ -652,7 +670,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 묶음 | 설정 이름 | 포함 탐지 |
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
-| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection |
+| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol |
 | 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning |
 | 도메인 장악 | `corr_domain_notes` | DCSync |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral |
@@ -1080,6 +1098,15 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `nonstd_port_allowed_dsts` / `nonstd_port_allowlist` | 비어 있음 | 허용 외부 서비스 / 예외 출발지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `long_conn_duration` | 6hr | 장기 연결 기준 시간 | 오탐이 많으면 12hr 등으로 늘림 |
 | `long_conn_allowed_dsts` / `_ports` / `long_conn_allowlist` | 비어 있음 | VPN·메신저·클라우드 동기화 예외 | 초기 운영 시 튜닝 필요. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
+
+#### 25 식별 안 된 프로토콜
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_unknown_protocol` | T | 룰 켜기 |  |
+| `unknown_proto_min_bytes` | 1000000 | 한 방향 페이로드 임계(바이트) | 오탐이 많으면 올림. 다른 룰의 ConnThreshold 값(1MiB 등)과 같은 값은 피함 |
+| `unknown_proto_min_duration` / `unknown_proto_min_bytes_long` | 30min / 10000 | 대화형 연결 기준(지속 시간과 양방향 합계) |  |
+| `unknown_proto_skip_ports` | 80·443·8080·8443·21·22·25·53·110·143·465·587·853·993·995·5223·5228(tcp) | 검사하지 않는 목적지 포트 | 고객 환경의 미식별 표준 서비스 포트를 `+=` |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 
