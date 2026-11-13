@@ -14,7 +14,9 @@
 ##!     (stock heartbleed.zeek 는 모든 TLS 에 대해 F 로 바꾼다).
 ##!   - Zeek 의 policy/protocols/ssl/heartbleed.zeek 와 같은 원리를 NSM 근거·탐지 요약 체계로 옮겼다
 ##!     (그 스크립트는 자체 notice 만 내서 NSM 상관·리포트와 이어지지 않는다).
-##!   - 연결 단위로 상태를 모아 연결이 끝날 때 1건(시도 또는 성공).
+##!   - 연결 단위로 상태를 모으고, 성공은 요청보다 큰 응답이 처음 보이는 즉시, 암호화 시도는 응답 없는 요청이
+##!     heartbleed_unanswered 를 넘는 즉시 낸다. 응답을 기다려야 하는 평문 과다 읽기 시도는 연결이 끝날 때 낸다.
+##!     (CIC-IDS2017 Wednesday: 15:12 시작한 공격을 연결이 끝난 15:32 에야 알리던 것을 보완)
 ##!
 ##! 상관 계약: notice $src = 공격 host(TLS 클라이언트), $dst = 대상 서버. 초기 침투 단계.
 ##! ============================================================================
@@ -43,11 +45,15 @@ type HeartbeatState: record {
     overread:  bool  &default=F;   # 선언 길이 > 실제 길이인 요청(평문)
     leak:      bool  &default=F;   # 요청보다 큰 응답
     enc:       bool  &default=F;   # 암호화된 하트비트를 봄
+    reported:  string &default=""; # 이미 낸 결과("", "attempt", "success")
 };
 
 redef record connection += {
     nsm_hb: HeartbeatState &optional;
 };
+
+# 아래(연결 종료 처리 앞)에 정의. 즉시 판정하는 이벤트들이 먼저 부른다.
+global hb_report: function(c: connection, st: HeartbeatState, result: string);
 
 function hb_state(c: connection): HeartbeatState
     {
@@ -75,7 +81,10 @@ event ssl_heartbeat(c: connection, is_client: bool, length: count, heartbeat_typ
         if ( length > st$max_resp )
             st$max_resp = length;
         if ( st$overread || ( st$last_req > 0 && length > st$last_req ) )
+            {
             st$leak = T;
+            hb_report(c, st, "success");
+            }
         }
     }
 
@@ -104,6 +113,8 @@ event ssl_encrypted_data(c: connection, is_client: bool, record_version: count, 
         {
         ++st$req_n;
         st$last_req = length;
+        if ( st$req_n > st$resp_n + heartbleed_unanswered )
+            hb_report(c, st, "attempt");
         }
     else
         {
@@ -111,25 +122,26 @@ event ssl_encrypted_data(c: connection, is_client: bool, record_version: count, 
         if ( length > st$max_resp )
             st$max_resp = length;
         if ( st$last_req > 0 && length > st$last_req + heartbleed_enc_slack )
+            {
             st$leak = T;
+            hb_report(c, st, "success");
+            }
         }
     }
 
-event connection_state_remove(c: connection)
+# 탐지 1건. 성공은 처음 유출이 보이는 즉시, 시도는 판정이 서는 즉시(또는 연결 종료 때) 낸다.
+# 시도를 낸 뒤 같은 연결에서 성공이 나오면 성공을 한 번 더 낸다(결과별 identifier).
+function hb_report(c: connection, st: HeartbeatState, result: string)
     {
-    if ( ! c?$nsm_hb )
+    if ( st$reported == result || st$reported == "success" )
         return;
-    local st = c$nsm_hb;
-    if ( ! ( st$overread || st$leak || ( st$enc && st$req_n > st$resp_n + heartbleed_unanswered ) ) )
-        return;
+    st$reported = result;
     if ( NSM::exception_drop(TLS_Heartbleed, c) )
         return;
-
-    local result = st$leak ? "success" : "attempt";
-    local nid = cat(c$id$orig_h, c$id$resp_h, "heartbleed");
+    local nid = cat(c$id$orig_h, c$id$resp_h, "heartbleed", result);
     if ( NSM::notice_suppressed(TLS_Heartbleed, nid) )
         return;
-    local eid = cat(c$id$orig_h, "|heartbleed|", c$id$resp_h, "|", c$uid);
+    local eid = cat(c$id$orig_h, "|heartbleed|", c$id$resp_h, "|", c$uid, "|", result);
     NSM::write_evidence([
         $ts=network_time(),
         $evidence_id=eid,
@@ -150,4 +162,14 @@ event connection_state_remove(c: connection)
             $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
+    }
+
+# 연결 종료: 응답을 기다리던 평문 과다 읽기 요청(응답 없음)은 여기서 시도로 낸다.
+event connection_state_remove(c: connection)
+    {
+    if ( ! c?$nsm_hb )
+        return;
+    local st = c$nsm_hb;
+    if ( st$reported == "" && ( st$overread || ( st$enc && st$req_n > st$resp_n + heartbleed_unanswered ) ) )
+        hb_report(c, st, "attempt");
     }
