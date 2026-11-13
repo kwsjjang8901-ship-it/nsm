@@ -42,6 +42,7 @@ tests/
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
   measure_meta_export.sh    # 선별 전송·자산 식별 전송량·처리 시간 측정 (pcap 입력, 반복 실행)
   run_pcap.sh               # pcap 1회 실행 결과 요약 + 통합 리포트(report.html): 공격 스토리·탐지·킬체인·자산·선별 전송·전송량·예외·센서 상태
+                            #   디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행하고 결과 표·index.html 을 만든다
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
