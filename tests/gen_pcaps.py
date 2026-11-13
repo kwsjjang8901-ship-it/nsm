@@ -1659,6 +1659,27 @@ def hb_session(cap, src, dst, t, req, resp):
     return s.close(t + 0.05)
 
 
+def hb_enc_session(cap, src, dst, t, beats):
+    """TLS 1.2 핸드셰이크 완료(서버가 하트비트 확장 수락) 뒤 암호화된 하트비트(레코드 타입 24).
+    beats = [(요청 레코드 길이, 응답 레코드 길이 또는 None), ...]. Heartleech 기본 동작과 같은 형태."""
+    s = Tcp(cap, src, dst, 443)
+    t = s.handshake(t)
+    t = s.client_send(hb_client_hello(), t)
+    exts = tls_ext(0x000F, b"\x01")
+    body = b"\x03\x03" + rand_bytes(32) + b"\x00" + struct.pack(">H", 0x0035) + b"\x00" + struct.pack(">H", len(exts)) + exts
+    t = s.server_send(tls_record(22, tls_hs(2, body) + tls_hs(14, b"")), t + 0.02)
+    t = s.client_send(tls_record(22, tls_hs(16, rand_bytes(130)))
+                      + tls_record(20, b"\x01") + tls_record(22, rand_bytes(64)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(64)), t + 0.01)
+    t = s.client_send(tls_record(23, rand_bytes(96)), t + 0.05)
+    t = s.server_send(tls_record(23, rand_bytes(256)), t + 0.05)
+    for req, resp in beats:
+        t = s.client_send(tls_record(24, rand_bytes(req)), t + 0.5)
+        if resp:
+            t = s.server_send(tls_record(24, rand_bytes(resp)), t + 0.01)
+    return s.close(t + 0.05)
+
+
 def gen_heartbleed(out):
     """.140 과다 읽기 요청(선언 16384, 실제 0) + 16KB 응답(성공), .141 과다 읽기 요청만(시도),
     .142 정상 하트비트(선언 16 = 실제 16 + 패딩 16, 같은 크기 응답, 미탐), .143 하트비트 없는 TLS(미탐)."""
@@ -1669,6 +1690,11 @@ def gen_heartbleed(out):
     body = rand_bytes(16)
     t = hb_session(cap, "10.0.0.142", "10.0.60.32", t + 1, (16, body + rand_bytes(16)), (16, body + rand_bytes(16)))
     t = hb_session(cap, "10.0.0.143", "10.0.60.33", t + 1, None, None)
+    # 암호화된 하트비트: .144 작은 요청 3회에 16KB 응답(성공), .145 같은 크기 응답(정상 keep-alive, 미탐),
+    # .146 응답 없는 요청 5회(패치된 서버가 버림, 시도)
+    t = hb_enc_session(cap, "10.0.0.144", "10.0.60.34", t + 1, [(64, 16448)] * 3)
+    t = hb_enc_session(cap, "10.0.0.145", "10.0.60.35", t + 1, [(64, 64)] * 3)
+    t = hb_enc_session(cap, "10.0.0.146", "10.0.60.36", t + 1, [(64, None)] * 5)
     cap.tick(t + 60)
     cap.write(os.path.join(out, "heartbleed.pcap"))
 
