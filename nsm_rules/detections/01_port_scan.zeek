@@ -4,6 +4,8 @@
 ##!   - (src,dst) 쌍별로 접근한 "고유 목적지 포트 수"를 SumStats 로 집계.
 ##!   - connection_attempt(미응답)·rejected(RST)·established(열린 포트) 모두 관측해
 ##!     실패/성공 포트를 폭넓게 카운트.
+##!   - SYN 없는 TCP 탐침(FIN·NULL·Xmas·ACK·Window)과 UDP 스캔도 연결 종료 때 센다(2026-11).
+##!     (CIC-IDS2017 Friday 방화벽 해제 구간의 nmap -sF·-sX·-sN·-sA·-sW·-sU 를 놓치던 것 보완)
 ##!   - 트래픽량이 크므로 evidence 는 확정(threshold) 시점에 요약 1행만 적재.
 ##!
 ##! 상관 계약: notice $src = 스캐너 host (RECON 단계, SRC_TO_SRC 로 C2 에 연결).
@@ -37,17 +39,25 @@ export {
 
     ## 스캔 집계에서 제외할 목적지 포트(정상 다중접속이 잦은 포트).
     const port_scan_exclude_ports: set[port] = {} &redef;
+
+    ## SYN 없이 보내는 TCP 탐침(FIN·NULL·Xmas·ACK·Window 스캔)과 UDP 스캔도 센다.
+    const port_scan_count_nosyn = T &redef;
+    const port_scan_count_udp = T &redef;
+    ## UDP traceroute(33434~33534)는 스캔이 아니다.
+    const port_scan_udp_skip_low = 33434 &redef;
+    const port_scan_udp_skip_high = 33534 &redef;
 }
 
 event zeek_init()
     {
-    local r = SumStats::Reducer($stream="nsm.port_scan",
-                                $apply=set(SumStats::UNIQUE, SumStats::SAMPLE),
-                                $num_samples=lm_num_samples);
+    local r = SumStats::Reducer($stream="nsm.port_scan", $apply=set(SumStats::UNIQUE));
+    # 표본은 "포트(탐침 종류)"로 남긴다: syn_noreply·rejected·nosyn·udp
+    local rs = SumStats::Reducer($stream="nsm.port_scan.sample", $apply=set(SumStats::SAMPLE),
+                                 $num_samples=lm_num_samples);
     SumStats::create([
         $name     = "nsm-detect-port-scan",
         $epoch    = scan_interval,
-        $reducers = set(r),
+        $reducers = set(r, rs),
         $threshold = port_scan_threshold + 0.0,
         $threshold_val(key: SumStats::Key, result: SumStats::Result) =
             {
@@ -59,10 +69,10 @@ event zeek_init()
             local n_ports = res$unique;
 
             local samples = "";
-            if ( res?$samples )
-                for ( i in res$samples )
-                    if ( res$samples[i]?$str )
-                        samples += fmt("%s ", res$samples[i]$str);
+            if ( "nsm.port_scan.sample" in result && result["nsm.port_scan.sample"]?$samples )
+                for ( i in result["nsm.port_scan.sample"]$samples )
+                    if ( result["nsm.port_scan.sample"]$samples[i]?$str )
+                        samples += fmt("%s ", result["nsm.port_scan.sample"]$samples[i]$str);
             samples = strip(samples);
 
             local scanner = key$host;
@@ -104,7 +114,7 @@ event zeek_init()
             [$scope=set("Port_Scan"), $dst_port=port_scan_exclude_ports]);
     }
 
-function observe_port_scan(c: connection, failed: bool)
+function observe_port_scan(c: connection, failed: bool, kind: string)
     {
     if ( ! detect_port_scan )
         return;
@@ -118,11 +128,35 @@ function observe_port_scan(c: connection, failed: bool)
         return;
 
     # (src,dst) 그룹에 목적지 포트를 관측 -> 고유 포트 수 집계
-    SumStats::observe("nsm.port_scan",
-        [$host=c$id$orig_h, $str=cat(c$id$resp_h)],
-        [$str=cat(c$id$resp_p)]);
+    local key: SumStats::Key = [$host=c$id$orig_h, $str=cat(c$id$resp_h)];
+    SumStats::observe("nsm.port_scan", key, [$str=cat(c$id$resp_p)]);
+    SumStats::observe("nsm.port_scan.sample", key, [$str=fmt("%s(%s)", c$id$resp_p, kind)]);
     }
 
-event connection_attempt(c: connection)     { observe_port_scan(c, T); }  # SYN 미응답
-event connection_rejected(c: connection)    { observe_port_scan(c, T); }  # RST 거부
-event connection_established(c: connection) { observe_port_scan(c, F); }  # 열린 포트
+event connection_attempt(c: connection)     { observe_port_scan(c, T, "syn_noreply"); }  # SYN 미응답
+event connection_rejected(c: connection)    { observe_port_scan(c, T, "rejected"); }     # RST 거부
+event connection_established(c: connection) { observe_port_scan(c, F, "established"); }  # 열린 포트
+
+# SYN 없는 TCP 탐침(nmap -sF·-sN·-sX·-sA·-sW)과 UDP 스캔(-sU). 연결 이벤트가 없으므로 연결이 끝날 때 본다.
+#   TCP: 출발지 SYN 이 없고(history 에 'S' 없음) 출발지 패킷 2개 이하·양쪽 페이로드 0. 데이터가 오가는
+#        캡처 시작 전 연결(중간부터 보인 연결)은 페이로드가 있어 빠진다.
+#   UDP: 응답 패킷 없음(닫힌 포트는 ICMP 도달 불가, 막힌 포트는 무응답), 출발지 패킷 2개 이하.
+event connection_state_remove(c: connection)
+    {
+    local proto = get_port_transport_proto(c$id$resp_p);
+    if ( proto == tcp && port_scan_count_nosyn )
+        {
+        if ( "S" in c$history || c$orig$size > 0 || c$resp$size > 0 || c$orig$num_pkts > 2 )
+            return;
+        observe_port_scan(c, T, "nosyn");
+        }
+    else if ( proto == udp && port_scan_count_udp )
+        {
+        local pn = port_to_count(c$id$resp_p);
+        if ( pn >= port_scan_udp_skip_low && pn <= port_scan_udp_skip_high )
+            return;
+        if ( c$resp$num_pkts > 0 || c$orig$num_pkts > 2 )
+            return;
+        observe_port_scan(c, T, "udp");
+        }
+    }

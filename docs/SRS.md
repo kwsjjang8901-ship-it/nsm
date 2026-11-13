@@ -118,7 +118,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 정찰 | 기존 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 시도만) | 예외 출발지, 제외 포트 |
+| 정찰 | 기존 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 SYN, SYN 없는 TCP 탐침, 응답 없는 UDP) | 예외 출발지, 제외 포트 |
 | 정찰 | 기존 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
 | 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
 | 초기 침투 | 신규 | 27_heartbleed | TLS_Heartbleed | T1190 | 평문 하트비트 요청의 선언 페이로드 길이가 실제 레코드보다 큼(시도)·응답이 요청보다 큼(성공), 암호화된 하트비트는 응답 레코드가 요청보다 32바이트 넘게 큼(성공)·응답 없는 요청 4개 이상(시도). 성공은 첫 유출 즉시 | 서버가 하트비트 확장을 수락한 연결만 핸드셰이크 뒤까지 분석, 출발지 예외 |
@@ -150,7 +150,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
-| C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 | 2분 넘는 연결 제외, SNI·목적지 예외 |
+| C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 + 그 연속 구간이 30분 이상 | 2분 넘는 연결 제외, SNI·목적지 예외 |
 | C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
 | 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
@@ -191,12 +191,15 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | --- | --- |
 | 응답 없는 시도 | `connection_attempt` (SYN에 응답 없음) |
 | 거부된 시도 | `connection_rejected` (RST) |
+| SYN 없는 TCP 탐침 | `connection_state_remove`에서 출발지 SYN이 없고(`history`에 `S` 없음) 출발지 패킷 2개 이하, 양쪽 페이로드 0인 TCP 연결. nmap FIN·NULL·Xmas·ACK·Window 스캔(`-sF`·`-sN`·`-sX`·`-sA`·`-sW`). 캡처 시작 전부터 이어진 연결은 페이로드가 있어 빠짐 |
+| UDP 스캔 | `connection_state_remove`에서 응답 패킷이 없고(닫힌 포트는 ICMP 도달 불가, 막힌 포트는 무응답) 출발지 패킷 2개 이하인 UDP 연결(`-sU`). traceroute 포트(33434\~33534)는 제외 |
 | 열린 포트 | `connection_established`. 기본은 세지 않음(`port_scan_count_established = F`) |
 
 - 주체: `src` = 스캐너, `dst` = 대상 host.
 - 집계·억제: (출발지, 목적지)별 고유 목적지 포트 수(SumStats UNIQUE). 임계를 넘는 순간 탐지하고, 같은 (스캐너, 대상)은 5분 억제합니다.
 - 제외·오탐 통제: 내부 출발지만(`port_scan_local_only`), 예외 출발지 `port_scan_allowlist`, 제외 포트 `port_scan_exclude_ports`. 성공한 연결을 세지 않아 서버 여러 포트를 정상으로 쓰는 클라이언트는 걸리지 않습니다. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 트래픽이 많아 탐지 시점에 요약 1행만 남깁니다.
+- 근거: 트래픽이 많아 탐지 시점에 요약 1행만 남깁니다. 표본 포트에 탐침 종류(`syn_noreply`·`rejected`·`nosyn`·`udp`)를 붙입니다.
+- 검증: CIC-IDS2017 Friday 방화벽 해제 구간에서 SYN 스캔(14:51)만 탐지되고 이어진 `-sF`·`-sX`·`-sN`·`-sA`·`-sW`·`-sU`는 세지 않던 것을 보완했습니다. SYN 없는 탐침과 UDP는 연결이 끝날 때(닫힌 포트는 RST 뒤 수 초, 무응답은 비활성 시간 뒤) 세므로 SYN 스캔보다 늦게 잡힙니다.
 
 ##### 호스트 스캔 (`Host_Scan`, T1018) · 02_host_scan
 
@@ -648,7 +651,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 
 ##### TLS 비커닝 (`TLS_Beaconing`, T1071.001) · 30_tls_beaconing
 
-요즘 C2(Cobalt Strike·Sliver 등)는 대부분 HTTPS라 07(평문 HTTP 비커닝)으로는 주기 통신이 보이지 않습니다. 09(암호화 C2)는 인증서·SNI·지문으로 보므로 정상 인증서를 쓴 C2는 놓칩니다. 내용은 못 보지만 지시가 없는 C2 콜백은 매번 거의 같은 바이트를 주고받으므로 주기와 크기를 함께 봅니다. **같은 외부 목적지로 07과 같은 주기 조건(3초\~1시간, 오차 25%, 누락 2회 허용)의 TLS 연결이 12회 연속이고, 그 연결들의 양방향 바이트가 기준 연결의 ±25%(작은 연결은 ±512바이트) 안**이면 탐지합니다.
+요즘 C2(Cobalt Strike·Sliver 등)는 대부분 HTTPS라 07(평문 HTTP 비커닝)으로는 주기 통신이 보이지 않습니다. 09(암호화 C2)는 인증서·SNI·지문으로 보므로 정상 인증서를 쓴 C2는 놓칩니다. 내용은 못 보지만 지시가 없는 C2 콜백은 매번 거의 같은 바이트를 주고받으므로 주기와 크기를 함께 봅니다. **같은 외부 목적지로 07과 같은 주기 조건(3초\~1시간, 오차 25%, 누락 2회 허용)의 TLS 연결이 12회 연속이고, 그 연결들의 양방향 바이트가 기준 연결의 ±25%(작은 연결은 ±512바이트) 안이며, 그 연속 구간이 30분 이상 이어지면** 탐지합니다.
 
 | 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
 | --- | --- |
@@ -660,7 +663,8 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 주체: `src` = 감염 host, `dst` = C2 서버.
 - 집계·억제: (출발지, 목적지) 단위 상태머신, 탐지 후 `beacon_expire`(30분) 억제. 박자나 크기가 벗어나면 연속 수를 다시 셉니다.
 - 제외·오탐 통제: 내부 → 외부만. 업데이트·텔레메트리처럼 주기적이면서 크기가 일정한 정상 서비스가 걸릴 수 있어, 예외 엔진(5.4절, `exception_drop_agg`)의 SNI(`domain`)·목적지 축으로 뺍니다. 07의 주기 파라미터(`beacon_min_interval`·`beacon_max_interval`·`beacon_jitter`·`beacon_min_hits`·`beacon_max_missed`)를 같이 씁니다.
-- 근거: 주기, 연속 수, 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2.
+- 지속 시간 조건(`tls_beacon_min_span`): 열어 둔 웹 페이지의 광고·분석·채팅 스크립트도 몇 초\~몇 분 주기로 같은 크기 요청을 보내지만, 탭을 닫으면 멈춥니다. CIC-IDS2017 5일에서 이 조건 없이 오탐 101건이 났고 대부분 연속 구간이 2\~12분이었습니다(30초 미만 주기 71건). 상주 C2는 몇 시간씩 이어지므로 30분 이상 이어진 패턴만 탐지합니다. 대신 60초 주기 C2는 12분이 아니라 30분 뒤에 탐지됩니다.
+- 근거: 주기, 연속 수, 연속 구간 길이(`span`), 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2.
 
 ##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
 
@@ -1054,6 +1058,8 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `port_scan_threshold` | 25 | (출발지, 목적지)별 고유 포트 수 | 오탐이 많으면 올림 |
 | `port_scan_local_only` | T | 내부 출발지만 봄 | 외부 스캔도 보려면 F |
 | `port_scan_count_established` | F | F면 미응답·거부된 시도만 셈 | T면 민감해지지만 오탐 증가 |
+| `port_scan_count_nosyn` / `port_scan_count_udp` | T / T | SYN 없는 TCP 탐침(FIN·NULL·Xmas·ACK·Window), 응답 없는 UDP 탐침도 셈 | UDP 단방향 송신이 많은 환경(로그·미디어)에서 오탐이 나면 해당 출발지를 예외로 |
+| `port_scan_udp_skip_low` / `_high` | 33434 / 33534 | UDP traceroute 포트 범위(세지 않음) |  |
 | `port_scan_allowlist` | 비어 있음 | 예외 출발지(취약점 스캐너) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `port_scan_exclude_ports` | 비어 있음 | 세지 않을 포트 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `host_scan_threshold` | 25 | (출발지, 포트)별 고유 호스트 수 |  |
@@ -1294,6 +1300,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detect_tls_beaconing` | T | 룰 켜기 |  |
 | `tls_beacon_size_tolerance` / `tls_beacon_size_slack` | 0.25 / 512 | 박자에 맞은 연결의 크기가 기준 연결과 이 비율(또는 바이트) 안이어야 같은 콜백 | 지터·패딩을 넣는 C2를 보려면 넓힘(오탐 늘어남) |
 | `tls_beacon_max_duration` | 2min | 이보다 긴 연결은 관측에서 뺌 |  |
+| `tls_beacon_min_span` | 30min | 박자·크기가 맞는 연속 구간이 이 시간 이상이어야 탐지 | 짧게 하면 빨리 잡지만 웹 페이지 스크립트 오탐이 늘어남. 0이면 연속 횟수만 봄 |
 | 주기 파라미터 | 07과 공통 | `beacon_min_interval`·`beacon_max_interval`·`beacon_jitter`·`beacon_min_hits`·`beacon_max_missed`·`beacon_expire` |  |
 
 #### 31 단일 대상 원격 실행

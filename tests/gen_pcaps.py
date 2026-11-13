@@ -1928,6 +1928,68 @@ def gen_bruteforce_long(out):
     cap.write(os.path.join(out, "bruteforce_long.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 01 포트 스캔 방식별 / 30 TLS 비커닝 지속 시간
+
+def probe_tcp(cap, scanner, target, dport, flags, reply, t):
+    """SYN 없는 TCP 탐침 1개와(있으면) 응답 1개."""
+    sport = RNG.randint(40000, 60000)
+    seq = RNG.randint(1, 2**31)
+    cap.add(cap.l3(scanner, target) / TCP(sport=sport, dport=dport, flags=flags, seq=seq,
+                                           ack=RNG.randint(1, 2**31) if "A" in flags else 0), t)
+    if reply:
+        cap.add(cap.l3(target, scanner) / TCP(sport=dport, dport=sport, flags=reply, seq=0, ack=seq), t + 0.001)
+
+
+def probe_udp(cap, scanner, target, dport, closed, t):
+    """빈 UDP 탐침. closed 면 ICMP 포트 도달 불가 응답."""
+    from scapy.all import ICMP
+    sport = RNG.randint(40000, 60000)
+    probe = IP(src=scanner, dst=target) / UDP(sport=sport, dport=dport)
+    cap.add(cap.l3(scanner, target) / UDP(sport=sport, dport=dport), t)
+    if closed:
+        cap.add(cap.l3(target, scanner) / ICMP(type=3, code=3) / bytes(probe)[:28], t + 0.001)
+
+
+def gen_scan_types(out):
+    """nmap 방식별 포트 스캔(포트 30개, 닫힌 포트는 RST·ICMP 응답): .240 FIN(-sF), .242 NULL(-sN), .244 Xmas(-sX),
+    .246 ACK(-sA), .248 UDP(-sU) 탐지 / .250 UDP traceroute(33434~), .252 UDP 10포트(임계 미만),
+    .254 캡처 시작 전부터 이어진 데이터 연결(SYN 없음, 페이로드 있음) 미탐."""
+    cap = Capture()
+    t = T0 + 1
+    for scanner, target, flags, reply in (("10.0.1.240", "10.0.1.241", "F", "RA"), ("10.0.1.242", "10.0.1.243", "", "RA"),
+                                          ("10.0.1.244", "10.0.1.245", "FPU", "RA"), ("10.0.1.246", "10.0.1.247", "A", "R")):
+        for p in range(3000, 3030):
+            probe_tcp(cap, scanner, target, p, flags, reply, t)
+            t += 0.05
+    for p in range(5000, 5030):
+        probe_udp(cap, "10.0.1.248", "10.0.1.249", p, True, t)
+        t += 0.05
+    for p in range(33434, 33464):
+        probe_udp(cap, "10.0.1.250", "10.0.1.251", p, True, t)
+        t += 0.05
+    for p in range(6000, 6010):
+        probe_udp(cap, "10.0.1.252", "10.0.1.253", p, True, t)
+        t += 0.05
+    s = Tcp(cap, "10.0.1.254", "10.0.1.255", 8443)       # 중간부터 보인 연결: SYN 없이 데이터
+    t = s.client_send(rand_bytes(600), t + 1)
+    t = s.server_send(rand_bytes(900), t + 0.01)
+    cap.tick(T0 + 700)
+    cap.write(os.path.join(out, "scan_types.pcap"))
+
+
+def gen_tls_beacon_long(out):
+    """.204 60초마다 같은 크기 TLS 40회(39분, 탐지), .205 10초마다 같은 크기 60회(10분, 웹 페이지 분석 스크립트형, 미탐)."""
+    cap = Capture()
+    t0 = T0 + 1
+    for i in range(40):
+        tls_sized_session(cap, "10.0.0.204", "93.184.215.163", t0 + 60 * i, "cdn.health-sync.net", 300, 1200)
+    for i in range(60):
+        tls_sized_session(cap, "10.0.0.205", "93.184.215.164", t0 + 5 + 10 * i, "tt.analytics.example", 400, 900)
+    cap.tick(T0 + 2700)
+    cap.write(os.path.join(out, "tls_beacon_long.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1938,7 +2000,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
-              gen_detect_gap, gen_bruteforce_long]
+              gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long]
 
 
 def main():
