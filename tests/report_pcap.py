@@ -95,6 +95,8 @@ NOTE_KO = {
     "DgaDomain": "DGA 도메인 조회", "UnknownProtocol": "식별 안 된 프로토콜 통신",
     "SshBruteforce": "SSH 무차별 대입", "FtpBruteforce": "FTP 무차별 대입", "Heartbleed": "Heartbleed(TLS 서버 메모리 유출)",
     "Xss": "크로스 사이트 스크립팅 시도", "HttpBruteforce": "웹 로그인 무차별 대입",
+    "TlsBeaconing": "HTTPS 주기 통신(비콘)", "RemoteService": "원격 서비스 생성", "RemoteTask": "원격 예약 작업 등록",
+    "RemoteWmi": "원격 WMI 실행", "MachineAccountMisuse": "남의 머신 계정 사용(NTLM 릴레이)",
 }
 STORY_META = ("kerberos", "ntlm", "smb_mapping", "smb_files", "dce_rpc", "rdp", "ssh", "ssl", "http", "flow_summary", "dns_summary")
 REACH_WINDOW = 86400   # 확산으로 닿은 host 는 닿은 뒤 이 시간 안의 탐지만 같은 스토리로 본다
@@ -140,6 +142,11 @@ ENRICH = {
     "SshBruteforce": ({"ssh", "flow_summary"}, None), "FtpBruteforce": ({"flow_summary"}, None),
     "Heartbleed": ({"ssl", "flow_summary"}, None),
     "Xss": ({"http", "flow_summary"}, None), "HttpBruteforce": ({"http", "flow_summary"}, None),
+    "TlsBeaconing": ({"ssl", "flow_summary"}, None),
+    "RemoteService": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
+    "RemoteTask": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
+    "RemoteWmi": ({"ntlm", "kerberos", "dce_rpc", "flow_summary"}, ("rpcss/", "host/")),
+    "MachineAccountMisuse": ({"ntlm", "kerberos", "flow_summary"}, ()),
     "DgaDomain": ({"dns"}, None), "DnsTunneling": ({"dns"}, None), "DnsTunnel": ({"dns"}, None),
 }
 
@@ -332,7 +339,9 @@ DIAG_NOTE = {
     "DNS_Tunneling": "DnsTunneling", "Encrypted_C2": "EncryptedChannel", "Exfil_Large_Transfer": "LargeTransfer",
     "Exfil_Volume_Aggregate": "VolumeAggregate", "Exfil_DNS": "DnsTunnel", "Exfil_Web_Upload": "WebUpload", "DGA_Domain": "DgaDomain",
     "SSH_Bruteforce": "SshBruteforce", "FTP_Bruteforce": "FtpBruteforce", "TLS_Heartbleed": "Heartbleed",
-    "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce",
+    "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce", "TLS_Beaconing": "TlsBeaconing",
+    "Remote_Service_Creation": "RemoteService", "Remote_Task_Creation": "RemoteTask", "Remote_WMI_Execution": "RemoteWmi",
+    "Machine_Account_Misuse": "MachineAccountMisuse",
 }
 
 

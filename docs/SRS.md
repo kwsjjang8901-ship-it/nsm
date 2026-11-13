@@ -114,7 +114,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
 - 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
-- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~29).
+- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~32).
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -134,18 +134,23 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | 자격증명 접근 | 신규 | 18_kerberoasting | ASREP_Roasting | T1558.004 | 사전인증 없는 AS 요청에 RC4·DES로 암호화된 AS-REP(계정마다 1건) | AES 응답은 제외(스마트카드 오탐 방지) |
 | 자격증명 접근 | 신규 | 19_outbound_smb | NTLM_Credential_Leak | T1187 | 내부 호스트가 외부 서버에 NTLM 인증을 보냄(1건) | 익명 인증 제외, 허용 목적지 |
 | 자격증명 접근 | 신규 | 22_name_poisoning | Name_Poisoning | T1557.001 | 한 응답자가 10분 안 LLMNR·NBT-NS·mDNS로 고유 이름 5개 이상에 긍정 응답 | mDNS 서비스 광고(PTR 등) 제외, WINS 예외 |
+| 자격증명 접근 | 신규 | 32_machine_account | Machine_Account_Misuse | T1557.001 | 한 출발지가 10분 안 서로 다른 머신 계정(`host$`) 2개 이상으로 인증(NTLM·Kerberos AS-REQ) | NAT·장애 조치 클러스터 출발지 예외 |
 | 자격증명 접근 | 신규 | 23_dcsync | DCSync | T1003.006 | DC가 아닌 호스트의 DRSUAPI DRSGetNCChanges 요청(1건) | DC 목록+자동 학습, Azure AD Connect 예외 |
 | 확산 | 기존 | 06_smb_admin_share | SMB_Admin_Share | T1021.002 | 1분 안 관리 공유(`ADMIN$`·`C$` 등)에 접근한 고유 피해 호스트 2대 이상 | `IPC$`·`PRINT$` 제외, 관리 서버 예외 |
 | 확산 | 기존 | 15_rdp_lateral | RDP_Lateral | T1021.001 | 1분 안 내부 RDP 고유 목적지 3대 이상 | 점프 서버 예외 |
 | 확산 | 기존 | 16_ssh_lateral | SSH_Lateral | T1021.004 | 1분 안 SSH 인증 성공 고유 목적지 3대 이상 | 즉시 끊긴 연결 제외 |
 | 확산 | 신규 | 20_winrm_dcom_lateral | WinRM_Lateral | T1021.006 | 5분 안 WinRM(5985·5986) 연결 고유 내부 목적지 3대 이상 | 관리 서버 예외(필수 등록) |
 | 확산 | 신규 | 20_winrm_dcom_lateral | DCOM_Lateral | T1021.003 | 5분 안 원격 COM 객체 생성(RemoteCreateInstance) 고유 목적지 3대 이상 | 같은 인터페이스의 다른 호출 제외 |
+| 확산 | 신규 | 31_remote_exec | Remote_Service_Creation | T1569.002 | 내부 → 내부 svcctl 원격 서비스 생성(CreateService\*), 대상 1대여도(1건) | 조회 호출 제외, 관리 서버 예외 |
+| 확산 | 신규 | 31_remote_exec | Remote_Task_Creation | T1053.005 | 내부 → 내부 원격 예약 작업 등록(atsvc NetrJobAdd, ITaskSchedulerService SchRpcRegisterTask)(1건) | 관리 서버 예외 |
+| 확산 | 신규 | 31_remote_exec | Remote_WMI_Execution | T1047 | 내부 → 내부 원격 WMI 메서드 호출(IWbemServices ExecMethod)(1건) | ExecQuery 등 조회 제외, 관리 서버 예외 |
 | C2 | 기존 | 07_http_beaconing | HTTP_Beaconing | T1071.001 | 같은 목적지로 3초\~1시간 주기의 HTTP 콜백 12회(오차 25%, 누락 2회 허용) | 도메인·출발지 예외 |
 | C2 | 기존(재작성) | 08_dns_tunneling | DNS_Tunneling | T1071.004 | (출발지, 등록 도메인)별 5분 안 고유 서브도메인 50개 이상 + 수상한 질의 비율 0.5 이상 | 내부 리졸버 제외, AV·DNSBL 도메인 기본 예외 |
 | C2 | 기존 | 09_encrypted_c2 | Encrypted_C2 | T1573.002 | TLS 점수 3 이상(자체서명 2, SNI 없음 1, SNI 불일치 1(자체서명과 함께면 0), JA3 차단목록 2, JA4 차단목록 3, JA4-a 1) | SNI·출발지 예외 |
 | C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
+| C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 | 2분 넘는 연결 제외, SNI·목적지 예외 |
 | C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
 | 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
@@ -167,7 +172,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ### 4.3 룰별 탐지 상세
 
-탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~29)에 있습니다.
+탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~32)에 있습니다.
 
 각 항목의 목록은 다음 순서로 씁니다.
 
@@ -424,6 +429,21 @@ Windows는 DNS로 못 찾은 이름을 LLMNR·NBT-NS로 묻고, Responder·Invei
 - 제외·오탐 통제: mDNS 서비스 광고(PTR/SRV/TXT)는 한 장비가 여러 이름을 정상적으로 내므로 제외(A/AAAA만). NBNS는 A·NB·AAAA·ANY 질의만 셉니다. WINS 서버 등은 `poisoning_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 응답한 이름과 피해 질의 host. `lm_targets` = 피해 host(상관 연동). 멀티캐스트·브로드캐스트로 보낸 응답은 질의 host를 알 수 없어 비워 둡니다.
 
+##### 남의 머신 계정 사용 (`Machine_Account_Misuse`, T1557.001) · 32_machine_account
+
+머신 계정(`host$`)은 그 PC 자신만 씁니다. NTLM 릴레이(ntlmrelayx)는 강제 인증·이름 응답 위조로 받은 다른 PC의 인증을 대상 서버로 전달하므로, 공격 host 한 대가 여러 머신 계정으로 인증하는 모습이 됩니다. 탈취한 머신 계정 해시를 쓸 때도 같습니다. **한 출발지가 10분 안에 서로 다른 머신 계정 2개 이상으로 인증**하면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| NTLM | `ntlm_authenticate`의 `user_name`이 `$`로 끝남, `domain_name` |
+| Kerberos | `krb_as_request`의 `client_name`(`@` 앞)이 `$`로 끝남, `service_realm`. 서비스 주체(`a/b`)는 제외 |
+| 계정 맞추기 | `도메인 첫 레이블\계정`(소문자). NTLM `CORP`와 Kerberos `CORP.EXAMPLE`을 같은 도메인으로 셉니다 |
+
+- 주체: `src` = 계정을 쓴 host, `dst` = 표본 인증 대상 서버.
+- 집계·억제: SumStats 출발지 키, 고유 머신 계정 수(UNIQUE)·표본(SAMPLE). 10분 창 종료 시 판정.
+- 제외·오탐 통제: 자기 머신 계정만 반복하는 PC와 사용자 계정은 세지 않습니다. NAT·프록시 뒤 여러 PC, 장애 조치 클러스터 노드(노드 계정과 클러스터 이름 계정을 함께 씀)는 예외 엔진(5.4절, `exception_drop_agg`)으로 출발지 축 예외를 등록합니다.
+- 근거: 머신 계정마다 1행(계정, 인증 대상, uid, NTLM·Kerberos 구분). 자산 식별(SPEC 4.6)이 같은 조건의 IP를 식별 키에서 빼던 것을 탐지로 올렸습니다. 킬체인 묶음은 자격증명.
+
 ##### DCSync (`DCSync`, T1003.006) · 23_dcsync
 
 DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터리 복제 API를 호출해 krbtgt를 포함한 계정 해시를 가져갑니다. 이 호출을 정상적으로 하는 것은 다른 DC뿐이므로 **DC가 아닌 출발지의 DRSGetNCChanges 요청**은 1건으로 탐지합니다(고신뢰).
@@ -509,6 +529,22 @@ MMC20.Application·ShellWindows를 이용한 원격 실행(dcomexec)과 원격 W
 - 집계·억제: WinRM과 같음.
 - 제외·오탐 통제: 같은 인터페이스의 다른 호출은 세지 않습니다. 관리 서버는 `lm_mgmt_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 표본 목적지마다 1행. 대표 연결 uid와 계정(같은 대상 NTLM, 없으면 `rpcss`·`host` 서비스 티켓 계정. 5.6절).
+
+##### 단일 대상 원격 실행 (`Remote_Service_Creation` T1569.002, `Remote_Task_Creation` T1053.005, `Remote_WMI_Execution` T1047) · 31_remote_exec
+
+SMB 관리 공유(2대)·WinRM·DCOM(3대) 확산은 여러 대를 노려야 탐지됩니다. PsExec·impacket smbexec·`sc \\host create`(원격 서비스), `at`·`schtasks /s`(원격 예약 작업), `wmic /node … process call create`·wmiexec(원격 WMI)로 서버 한 대만 노리면 보이지 않았습니다. 정상 업무에서 PC가 다른 PC에 원격으로 서비스·예약 작업을 만드는 일은 드물므로, **내부 → 내부 원격 서비스 생성, 원격 예약 작업 등록, 원격 WMI 메서드 호출을 대상 1대여도 1건으로** 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 호출 이름 | Zeek 기본 DCE-RPC 스크립트가 `dce_rpc_response`(priority 5)에서 바인드 정보로 채우는 `c$dce_rpc$endpoint`·`operation`을 priority 0에서 봄. SMB 명명된 파이프(`\svcctl`, `\atsvc`)와 TCP 동적 포트 모두 |
+| 원격 서비스 | `svcctl`의 `CreateServiceW`·`CreateServiceA`·`CreateServiceWOW64W`·`CreateServiceWOW64A`·`CreateWowService` |
+| 원격 예약 작업 | `atsvc`의 `NetrJobAdd`, `ITaskSchedulerService`의 `SchRpcRegisterTask` |
+| 원격 WMI | `IWbemServices`의 `ExecMethod`·`ExecMethodAsync`. WMI는 보통 패킷 암호화지만 바인드(인터페이스)와 opnum은 평문 |
+
+- 주체: `src` = 실행한 host, `dst`·`lm_targets` = 대상 host(확산 묶음, 대상이 다음 탐지의 출발지가 되면 이어짐).
+- 집계·억제: 단건. (출발지, 대상, 종류) 단위 1시간 억제.
+- 제외·오탐 통제: 조회성 호출(OpenSCManager, ExecQuery 등)은 보지 않습니다. SCCM·백업·배포 도구 등 관리 서버는 예외 엔진(5.4절, `exception_drop`)으로 출발지 축 예외를 등록합니다.
+- 근거: 인터페이스·호출 이름, 포트, 명명된 파이프, uid, 계정(같은 연결 NTLM, 없으면 `cifs`·`host`·`rpcss` 서비스 티켓 계정. 5.6절).
 
 #### 4.3.5 C2
 
@@ -609,6 +645,22 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 집계·억제: 연결 중 실시간 단건. (출발지, 목적지, 포트) 단위로 기준 시간(6시간)만큼 억제.
 - 제외·오탐 통제: 메신저·VPN·클라우드 동기화는 예외로 뺍니다(기존 `long_conn_allowed_dsts`·`long_conn_allowed_ports`·`long_conn_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 예외는 임계를 넘는 시점에 판정하므로 서비스·SNI 축도 쓸 수 있습니다. 환경에 따라 정상 장기 연결이 많아 초기 튜닝이 필요합니다.
 - 근거: 기준 시간, 포트, 서비스, 양방향 바이트.
+
+##### TLS 비커닝 (`TLS_Beaconing`, T1071.001) · 30_tls_beaconing
+
+요즘 C2(Cobalt Strike·Sliver 등)는 대부분 HTTPS라 07(평문 HTTP 비커닝)으로는 주기 통신이 보이지 않습니다. 09(암호화 C2)는 인증서·SNI·지문으로 보므로 정상 인증서를 쓴 C2는 놓칩니다. 내용은 못 보지만 지시가 없는 C2 콜백은 매번 거의 같은 바이트를 주고받으므로 주기와 크기를 함께 봅니다. **같은 외부 목적지로 07과 같은 주기 조건(3초\~1시간, 오차 25%, 누락 2회 허용)의 TLS 연결이 12회 연속이고, 그 연결들의 양방향 바이트가 기준 연결의 ±25%(작은 연결은 ±512바이트) 안**이면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| TLS 연결 | `connection_state_remove`에서 `c?$ssl`인 연결, 시작 시각 `c$start_time` |
+| 크기 | `c$orig$size + c$resp$size`(양방향 페이로드) |
+| 짧은 연결 | `c$duration`이 2분 이하(장기 연결은 24번 룰이 봄) |
+| 클러스터 | 07과 같이 (출발지, 목적지) HRW로 프록시(없으면 매니저) 한 곳에 상태를 모음 |
+
+- 주체: `src` = 감염 host, `dst` = C2 서버.
+- 집계·억제: (출발지, 목적지) 단위 상태머신, 탐지 후 `beacon_expire`(30분) 억제. 박자나 크기가 벗어나면 연속 수를 다시 셉니다.
+- 제외·오탐 통제: 내부 → 외부만. 업데이트·텔레메트리처럼 주기적이면서 크기가 일정한 정상 서비스가 걸릴 수 있어, 예외 엔진(5.4절, `exception_drop_agg`)의 SNI(`domain`)·목적지 축으로 뺍니다. 07의 주기 파라미터(`beacon_min_interval`·`beacon_max_interval`·`beacon_jitter`·`beacon_min_hits`·`beacon_max_missed`)를 같이 씁니다.
+- 근거: 주기, 연속 수, 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2.
 
 ##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
 
@@ -755,15 +807,18 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 묶음 | 설정 이름 | 포함 탐지 |
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
-| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol |
-| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce |
+| 초기 침투 | `corr_initial_notes` | SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed |
+| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing |
+| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse |
 | 도메인 장악 | `corr_domain_notes` | DCSync |
-| 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral |
+| 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral, Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution |
 | 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB |
 | 영향 | `corr_impact_notes` | SMB_Ransomware |
 
 | 앞 단계 | 다음 단계 | 연결 방식 | 시간 창 |
 | --- | --- | --- | --- |
+| 정찰 | 초기 침투 | 같은 출발지 | 1시간 |
+| 초기 침투 | C2, 자격증명, 도메인 장악, 확산 | 침투 대상 host가 다음 탐지의 출발지 | 2시간 |
 | 정찰 | C2, 자격증명 | 같은 출발지 | 1시간 |
 | C2 | 자격증명, 도메인 장악 | 같은 출발지 | 1시간 |
 | C2 | 확산 | 같은 출발지 | 30분 |
@@ -777,6 +832,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 
 - 체인의 기법 ID 표시는 상관 전용 표(`stage_attack`)에 없으면 탐지 공통 표(`attack_map`)를 씁니다. 그래서 8단계 체인도 `T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486`처럼 끝까지 기법 ID로 나옵니다.
 - 묶음에 탐지를 넣거나 빼려면 해당 `corr_*_notes`를 redef 하고 `chain_group_rules`도 함께 다시 정의해야 합니다(묶음 내용은 규칙을 정의할 때 복사되기 때문).
+- 초기 침투 탐지(03·04·27·28)는 침투 대상 서버를 `lm_targets`로 넘깁니다. 그래서 공격자가 웹서버를 침투한 뒤 그 서버가 C2·확산을 하면, 체인이 공격자에서 시작해 이어집니다(`tests/btest/rules/killchain-7-stages.zeek`: 정찰 → 초기 침투 → C2 → 자격증명 → 확산 → 영향).
 - 회귀 테스트 `tests/btest/rules/correlation-ext-chain.zeek`가 정찰 → C2(DGA·비커닝) → Kerberoasting → DCSync → WinRM 확산 → 유출 → 랜섬웨어의 8단계 체인과, 단독 Kerberoasting·단독 랜섬웨어가 상관으로 이어지지 않는 경우를 검증합니다.
 
 ### 5.2 로그 필터 기본값
@@ -1102,7 +1158,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~29)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~32)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1229,6 +1285,32 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `web_bf_basic_threshold` | 20 | 창 안 Basic 인증 401 수 |  |
 | `web_bf_password_params` / `web_bf_user_params` | password·passwd·pwd 등 15개 / username·user·email 등 14개 | 비밀번호·계정으로 보는 파라미터 이름(소문자) | 고객 앱의 로그인 필드 이름을 `+=` |
 | `svc_bf_epoch` / `svc_bf_num_samples` | 5min / 10 | 26과 공통 |  |
+
+#### 30 TLS 비커닝
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_tls_beaconing` | T | 룰 켜기 |  |
+| `tls_beacon_size_tolerance` / `tls_beacon_size_slack` | 0.25 / 512 | 박자에 맞은 연결의 크기가 기준 연결과 이 비율(또는 바이트) 안이어야 같은 콜백 | 지터·패딩을 넣는 C2를 보려면 넓힘(오탐 늘어남) |
+| `tls_beacon_max_duration` | 2min | 이보다 긴 연결은 관측에서 뺌 |  |
+| 주기 파라미터 | 07과 공통 | `beacon_min_interval`·`beacon_max_interval`·`beacon_jitter`·`beacon_min_hits`·`beacon_max_missed`·`beacon_expire` |  |
+
+#### 31 단일 대상 원격 실행
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_remote_exec` | T | 룰 켜기 |  |
+| `remote_exec_service_ops` | CreateService 계열 5개 | svcctl에서 탐지할 호출 |  |
+| `remote_exec_task_ops` | atsvc NetrJobAdd, ITaskSchedulerService SchRpcRegisterTask | (인터페이스, 호출) 쌍 |  |
+| `remote_exec_wmi_ops` | ExecMethod, ExecMethodAsync | IWbemServices에서 탐지할 호출 |  |
+
+#### 32 남의 머신 계정 사용
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_machine_account_misuse` | T | 룰 켜기 |  |
+| `machine_acct_epoch` / `machine_acct_threshold` | 10min / 2 | 집계 창 / 서로 다른 머신 계정 수 |  |
+| `machine_acct_num_samples` | 10 | 근거 표본 수 |  |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 

@@ -161,6 +161,7 @@ function hb_report(c: connection, st: HeartbeatState, result: string)
             $sub=fmt("result=%s requests=%d responses=%d", result, st$req_n, st$resp_n),
             $identifier=nid,
             $suppress_for=1hr,
+            $lm_targets=set(c$id$resp_h),   # 침투 대상: 상관에서 다음 단계의 출발지
             $evidence_id=eid]);
     }
 

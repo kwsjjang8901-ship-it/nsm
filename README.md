@@ -88,6 +88,9 @@ docs/
 | 27_heartbleed | TLS Heartbleed(OpenSSL CVE-2014-0160) 시도·성공 | T1190 | 활성 |
 | 28_xss | 크로스 사이트 스크립팅 시도(내부 웹서버) | T1190 | 활성 |
 | 29_http_bruteforce | 웹 로그인 무차별 대입(폼·JSON·Basic 인증) | T1110.001 | 활성 |
+| 30_tls_beaconing | TLS(HTTPS) 비커닝(주기 + 일정한 크기) | T1071.001 | 활성 |
+| 31_remote_exec | 단일 대상 원격 실행(원격 서비스·예약 작업·WMI) | T1569.002 / T1053.005 / T1047 | 활성 |
+| 32_machine_account | 남의 머신 계정 사용(NTLM 릴레이·해시 전달) | T1557.001 | 활성 |
 
 ## 사용
 
