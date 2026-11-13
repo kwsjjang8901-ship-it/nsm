@@ -1850,6 +1850,67 @@ def gen_heartbleed_long(out):
     cap.write(os.path.join(out, "heartbleed_long.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 30 TLS 비커닝 / 31 원격 실행 / 32 머신 계정
+
+SVCCTL = "367abb81-9844-35f1-ad32-98f038001003"
+ATSVC = "1ff70682-0a51-30e8-076d-740be8cee98b"
+ITASKSCHED = "86d35949-83c9-4044-b424-db363231fd0c"
+IWBEMSERVICES = "9556dc99-828c-11cf-a37e-00aa003240c7"
+
+
+def tls_sized_session(cap, src, dst, t, sni, up, down):
+    """TLS 1.2 핸드셰이크 뒤 앱 데이터 up/down 바이트(레코드 하나씩)."""
+    s = Tcp(cap, src, dst, 443)
+    t = s.handshake(t)
+    t = s.client_send(client_hello(sni), t)
+    t = s.server_send(server_hello(), t + 0.02)
+    t = s.client_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.client_send(tls_record(23, rand_bytes(up)), t + 0.01)
+    t = s.server_send(tls_record(23, rand_bytes(down)), t + 0.05)
+    return s.close(t + 0.01)
+
+
+def gen_detect_gap(out):
+    """TLS 비커닝: .200 30초마다 같은 크기 14회(탐지), .201 30초마다지만 응답 크기가 매번 크게 다름(미탐),
+    .202 크기는 같지만 간격이 불규칙(미탐).
+    원격 실행: .210 -> .211 svcctl CreateServiceW(서비스), .212 -> .213 atsvc NetrJobAdd(예약 작업),
+    .214 -> .215 ITaskSchedulerService SchRpcRegisterTask(예약 작업), .216 -> .217 IWbemServices ExecMethod(WMI) 탐지 /
+    .218 -> .219 svcctl OpenSCManagerW 와 IWbemServices ExecQuery(조회만) 미탐.
+    머신 계정: .190 NTLM PC01$·PC02$ + Kerberos pc03$(탐지), .191 PC05$ 만 5회(미탐), .192 사용자 계정 3개(미탐)."""
+    cap = Capture()
+    t0 = T0 + 1
+    for i in range(14):
+        tls_sized_session(cap, "10.0.0.200", "93.184.215.160", t0 + 30 * i, "api.sync-check.net", 300, 1200)
+    sizes = [400, 9000, 1500, 30000, 800, 12000, 2500, 45000, 600, 7000, 20000, 1100, 16000, 3000]
+    for i, sz in enumerate(sizes):
+        tls_sized_session(cap, "10.0.0.201", "93.184.215.161", t0 + 2 + 30 * i, "app.example.com", 300, sz)
+    gaps = [5, 47, 13, 90, 22, 61, 8, 120, 35, 17, 75, 40, 9]
+    t = t0 + 4
+    tls_sized_session(cap, "10.0.0.202", "93.184.215.162", t, "news.example.org", 300, 1200)
+    for g in gaps:
+        t += g
+        tls_sized_session(cap, "10.0.0.202", "93.184.215.162", t, "news.example.org", 300, 1200)
+    t = T0 + 600
+    t = dcom_call(cap, "10.0.0.210", "10.0.0.211", SVCCTL, 0x0c, t + 1, dport=49670)
+    t = dcom_call(cap, "10.0.0.212", "10.0.0.213", ATSVC, 0x00, t + 1, dport=49671)
+    t = dcom_call(cap, "10.0.0.214", "10.0.0.215", ITASKSCHED, 0x01, t + 1, dport=49672)
+    t = dcom_call(cap, "10.0.0.216", "10.0.0.217", IWBEMSERVICES, 0x18, t + 1, dport=49673)
+    t = dcom_call(cap, "10.0.0.218", "10.0.0.219", SVCCTL, 0x0f, t + 1, dport=49674)
+    t = dcom_call(cap, "10.0.0.218", "10.0.0.219", IWBEMSERVICES, 0x14, t + 1, dport=49675)
+    t = T0 + 640
+    t = ntlm_smb_login(cap, "10.0.0.190", "10.0.0.5", "CORP", "PC01$", True, t + 1)
+    t = ntlm_smb_login(cap, "10.0.0.190", "10.0.0.5", "CORP", "PC02$", True, t + 1)
+    t = krb_logon_ok(cap, "10.0.0.190", "pc03$", t + 1)
+    for i in range(5):
+        t = ntlm_smb_login(cap, "10.0.0.191", "10.0.0.5", "CORP", "PC05$", True, t + 1)
+    for u in ("alice", "bob", "carol"):
+        t = ntlm_smb_login(cap, "10.0.0.192", "10.0.0.5", "CORP", u, True, t + 1)
+    cap.tick(T0 + 1900)
+    cap.write(os.path.join(out, "detect_gap.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1859,7 +1920,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
-              gen_killchain_story, gen_heartbleed_long]
+              gen_killchain_story, gen_heartbleed_long,
+              gen_detect_gap]
 
 
 def main():

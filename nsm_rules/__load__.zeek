@@ -34,6 +34,9 @@
 @load ./detections/27_heartbleed           # TLS Heartbleed
 @load ./detections/28_xss                  # 크로스 사이트 스크립팅
 @load ./detections/29_http_bruteforce      # 웹 로그인 무차별 대입
+@load ./detections/30_tls_beaconing        # TLS(HTTPS) 비커닝
+@load ./detections/31_remote_exec          # 단일 대상 원격 실행(서비스·예약 작업·WMI)
+@load ./detections/32_machine_account      # 남의 머신 계정 사용(NTLM 릴레이)
 @load ./detections/14_large_transfer_exfil
 @load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 

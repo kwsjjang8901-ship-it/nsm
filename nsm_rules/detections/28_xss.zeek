@@ -63,6 +63,7 @@ function xss_report(c: connection, where: string, method: string, raw: string)
             $sub=sub_bytes(raw, 1, 256),
             $identifier=nid,
             $suppress_for=10min,
+            $lm_targets=set(c$id$resp_h),   # 침투 대상: 상관에서 다음 단계의 출발지
             $evidence_id=eid]);
     }
 
