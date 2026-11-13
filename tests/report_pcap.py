@@ -265,6 +265,13 @@ def build_stories(detections, midx, label):
                         if not v.get("ext") and v["ip"] not in reached:
                             reached[v["ip"]] = t(i)
                             changed = True
+        # 닿은 host 가 공격자인 확정 체인도 이 스토리의 확정 단계다(초기 침투한 서버가 이후 체인을 만든 경우).
+        conf = set()
+        chains = []
+        for h in reached:
+            conf |= confirmed.get(h, set())
+            chains += chain_ids.get(h, [])
+        steps |= conf
         order = sorted(steps, key=t)
         hosts = list(dict.fromkeys([seed] + [h for h in sorted(reached, key=lambda h: (reached[h] is not None, reached[h] or 0))]))
         others = []
@@ -274,7 +281,7 @@ def build_stories(detections, midx, label):
                     others.append(v["ip"])
         lanes = hosts + [o for o in others if not next(v for i in order for v in detections[i]["victims"] if v["ip"] == o).get("ext")] \
             + [o for o in others if next(v for i in order for v in detections[i]["victims"] if v["ip"] == o).get("ext")]
-        stories.append({"seed": seed, "steps": order, "confirmed": sorted(confirmed.get(seed, ())), "chains": chain_ids.get(seed, []),
+        stories.append({"seed": seed, "steps": order, "confirmed": sorted(conf), "chains": list(dict.fromkeys(chains)),
                         "lanes": [label(h, t(order[0]) if order else None) for h in lanes]})
     # 다른 스토리에 그대로 들어 있는 작은 스토리는 뺀다(확산 대상이 뒤에 공격자로 나온 경우 등)
     stories.sort(key=lambda s: (-len(s["confirmed"]), -len(s["steps"])))
