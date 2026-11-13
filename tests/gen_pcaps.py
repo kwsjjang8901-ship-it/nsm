@@ -1990,6 +1990,22 @@ def gen_tls_beacon_long(out):
     cap.write(os.path.join(out, "tls_beacon_long.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 01 포트 스캔: 캡처 손실로 남은 응답만
+
+def gen_scan_reverse(out):
+    """.230 의 SYN 스캔에서 SYN 이 캡처되지 않고 피해 host .231 의 RST/ACK 응답만 30개 남은 경우
+    (피해 host 의 닫힌 포트 -> 스캐너의 임시 포트). 피해 host 를 스캐너로 보면 안 된다."""
+    cap = Capture()
+    t = T0 + 1
+    for p in range(20, 50):
+        cap.add(cap.l3("10.0.1.231", "10.0.1.230") / TCP(sport=p, dport=RNG.randint(30000, 60000), flags="RA",
+                                                          seq=0, ack=RNG.randint(1, 2**31)), t)
+        t += 0.05
+    cap.tick(T0 + 700)
+    cap.write(os.path.join(out, "scan_reverse.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2000,7 +2016,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto,
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
-              gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long]
+              gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
+              gen_scan_reverse]
 
 
 def main():

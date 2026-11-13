@@ -191,7 +191,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | --- | --- |
 | 응답 없는 시도 | `connection_attempt` (SYN에 응답 없음) |
 | 거부된 시도 | `connection_rejected` (RST) |
-| SYN 없는 TCP 탐침 | `connection_state_remove`에서 출발지 SYN이 없고(`history`에 `S` 없음) 출발지 패킷 2개 이하, 양쪽 페이로드 0인 TCP 연결. nmap FIN·NULL·Xmas·ACK·Window 스캔(`-sF`·`-sN`·`-sX`·`-sA`·`-sW`). 캡처 시작 전부터 이어진 연결은 페이로드가 있어 빠짐 |
+| SYN 없는 TCP 탐침 | `connection_state_remove`에서 출발지 SYN이 없고(`history`에 `S` 없음) 출발지 RST도 없으며(`R` 없음, 방향을 뒤집은 `^` 없음) 출발지 패킷 2개 이하, 양쪽 페이로드 0인 TCP 연결. 출발지 RST 제외는 캡처 손실로 스캐너의 SYN이 빠져 피해 host의 RST 응답만 남은 연결을 피해 host의 탐침으로 세지 않기 위함(CIC-IDS2017 Friday 오탐). nmap FIN·NULL·Xmas·ACK·Window 스캔(`-sF`·`-sN`·`-sX`·`-sA`·`-sW`). 캡처 시작 전부터 이어진 연결은 페이로드가 있어 빠짐 |
 | UDP 스캔 | `connection_state_remove`에서 응답 패킷이 없고(닫힌 포트는 ICMP 도달 불가, 막힌 포트는 무응답) 출발지 패킷 2개 이하인 UDP 연결(`-sU`). traceroute 포트(33434\~33534)는 제외 |
 | 열린 포트 | `connection_established`. 기본은 세지 않음(`port_scan_count_established = F`) |
 
