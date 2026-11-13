@@ -82,6 +82,7 @@ docs/
 | 22_name_poisoning | LLMNR / NBT-NS / mDNS 포이즈닝 (Responder 류) | T1557.001 | 활성 |
 | 23_dcsync | DCSync (DC 가 아닌 host 의 디렉터리 복제 요청) | T1003.006 | 활성 |
 | 24_nonstd_port | 외부향 비표준 포트 프로토콜 / 장기 외부 연결 | T1571 / T1572 | 활성 |
+| 25_unknown_protocol | 식별 안 된 프로토콜의 외부 통신(역방향 셸 등) | T1095 | 활성 |
 
 ## 사용
 

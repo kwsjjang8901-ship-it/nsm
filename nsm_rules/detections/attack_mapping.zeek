@@ -24,6 +24,7 @@ export {
         [DCSync]               = "T1003.006",
         [Nonstandard_Port]     = "T1571",
         [Long_Connection]      = "T1572",
+        [Unknown_Protocol]     = "T1095",
         [SMB_Admin_Share]      = "T1021.002",    
         [RDP_Lateral]          = "T1021.001",    
         [SSH_Lateral]          = "T1021.004",    

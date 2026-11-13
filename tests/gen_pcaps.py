@@ -1548,6 +1548,45 @@ def gen_ptr_classless(out):
     cap.write(os.path.join(out, "ptr_classless.pcap"))
 
 
+
+# --------------------------------------------------------------------------- 25 식별 안 된 프로토콜의 외부 통신
+
+def gen_unknown_proto(out):
+    """역방향 셸 같은 미식별 TCP. 테스트 설정(임계 100KB·2분·10KB) 기준:
+    .110 444 대량 송신(탐지, 연결 중 임계), .116 캡처 손실로 데이터 대부분이 빠진 대량 송신(탐지, 종료 때 판정),
+    .114 대화형 2분 30초(탐지), .111 소량(미탐), .112 443 포트(미탐), .113 HTTP 로 식별(미탐), .115 내부 -> 내부(미탐)."""
+    cap = Capture()
+    t = T0 + 1
+    for src, dst, port, size in (("10.0.0.110", "93.184.215.190", 444, 120000),
+                                 ("10.0.0.111", "93.184.215.191", 444, 5000),
+                                 ("10.0.0.112", "93.184.215.192", 443, 120000),
+                                 ("10.0.0.115", "10.0.50.5", 444, 120000)):
+        s_ = Tcp(cap, src, dst, port)
+        t = s_.handshake(t + 1)
+        t = s_.client_send(b"\x00\x01" + rand_bytes(size), t)
+        t = s_.server_send(rand_bytes(300), t + 0.01)
+        t = s_.close(t + 0.01)
+    s_ = Tcp(cap, "10.0.0.113", "93.184.215.193", 8081)        # HTTP 로 식별되는 대량 업로드
+    t = s_.handshake(t + 1)
+    body = rand_bytes(120000)
+    t = s_.client_send(b"POST /upload HTTP/1.1\r\nHost: up.example-odd.net:8081\r\nContent-Length: %d\r\n\r\n" % len(body) + body, t)
+    t = s_.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", t + 0.01)
+    t = s_.close(t + 0.01)
+    s_ = Tcp(cap, "10.0.0.116", "93.184.215.196", 444)         # 캡처 손실: 보이는 데이터 2KB, 시퀀스는 150KB 진행
+    t = s_.handshake(t + 1)
+    t = s_.client_send(b"\x00\x02" + rand_bytes(2000), t, skip=150000)
+    t = s_.server_send(rand_bytes(200), t + 0.01)
+    t = s_.close(t + 0.01)
+    s_ = Tcp(cap, "10.0.0.114", "93.184.215.194", 5555)        # 대화형: 10초마다 명령·응답, 2분 30초
+    t0 = s_.handshake(t + 1)
+    for i in range(16):
+        tt = s_.client_send(b"\x00\x03" + rand_bytes(400), t0 + i * 10)
+        s_.server_send(rand_bytes(600), tt + 0.05)
+    t = s_.close(t0 + 155)
+    cap.tick(t + 120)
+    cap.write(os.path.join(out, "unknown_proto.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -1555,7 +1594,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_name_poisoning, gen_dcsync,
               gen_nonstd_port, gen_chain_full,
               gen_chain_ext, gen_meta_export, gen_meta_summary, gen_meta_dedup,
-              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless]
+              gen_meta_dns_qtypes, gen_lateral_auth, gen_quic, gen_service_ports, gen_ptr_classless, gen_unknown_proto]
 
 
 def main():
