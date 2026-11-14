@@ -114,6 +114,7 @@ event zeek_init()
             {
             return result["nsm.krb_spray"]$unique + 0.0;
             },
+        $epoch_result=sumstats_epoch_noop,   # epoch 마다 임계 판정을 초기화(main.zeek 설명)
         $threshold_crossed(key: SumStats::Key, result: SumStats::Result) =
             {
             local n   = result["nsm.krb_spray"]$unique;
@@ -151,6 +152,7 @@ event zeek_init()
             {
             return result["nsm.krb_brute"]$sum;
             },
+        $epoch_result=sumstats_epoch_noop,   # epoch 마다 임계 판정을 초기화(main.zeek 설명)
         $threshold_crossed(key: SumStats::Key, result: SumStats::Result) =
             {
             local n   = double_to_count(result["nsm.krb_brute"]$sum);

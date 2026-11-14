@@ -11,6 +11,7 @@ module NSM;
 
 @load base/frameworks/notice
 @load base/utils/site
+@load base/frameworks/sumstats
 
 export {
     ## 집계형(SumStats) 탐지에서 근거로 남길 표본 개수.
@@ -274,6 +275,13 @@ export {
     ##  버킷이 바뀌면(다른 시간대) 다른 evidence_id 가 되어 evidence.log 조인 시 시간대가 섞이지 않는다.
     global time_bucket: function(win: interval): string;
 
+    ## 임계(threshold)만 쓰는 SumStats 에 붙이는 빈 epoch_result.
+    ##  standalone(비클러스터)에서는 epoch_result 가 없으면 Zeek 가 epoch 를 끝내지 않는다
+    ##  (base/frameworks/sumstats/non-cluster.zeek 의 do_finish_epoch 가 바로 반환). 그러면 임계 판정이
+    ##  키마다 실행 내내 한 번만 되고(같은 스캐너의 다음 회차를 놓침) 집계 상태가 비워지지 않는다.
+    ##  클러스터 매니저는 epoch_result 없이도 epoch 를 끝낸다.
+    global sumstats_epoch_noop: function(ts: time, key: SumStats::Key, result: SumStats::Result);
+
     ## 도메인 부분매칭 예외 판정.
     ##  name(관측된 host/SNI)이 allow 집합의 어느 항목과 매칭되면 T.
     ##  매칭 규칙(부분매칭): allow 항목 d 에 대해
@@ -414,6 +422,10 @@ function domain_matches(name: string, allow: set[string]): bool
             return T;
         }
     return F;
+    }
+
+function sumstats_epoch_noop(ts: time, key: SumStats::Key, result: SumStats::Result)
+    {
     }
 
 function time_bucket(win: interval): string

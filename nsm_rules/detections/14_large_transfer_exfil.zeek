@@ -67,6 +67,7 @@ event zeek_init()
             return result["nsm.exfil"]$sum;
         },
 
+        $epoch_result=sumstats_epoch_noop,   # epoch 마다 임계 판정을 초기화(main.zeek 설명)
         $threshold_crossed(key: SumStats::Key, result: SumStats::Result) =
         {
             local total = result["nsm.exfil"]$sum;
