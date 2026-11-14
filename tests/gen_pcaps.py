@@ -2070,6 +2070,77 @@ def gen_scan_rounds(out):
     cap.write(os.path.join(out, "scan_rounds.pcap"))
 
 
+EFSRPC2 = "c681d488-d850-11d0-8c52-00c04fd90f7e"
+NETDFS = "4fc742e0-4a10-11cf-8273-00aa004ae673"
+SPOOLSS = "12345678-1234-abcd-ef00-0123456789ab"
+FSRVP = "a8e0653c-2744-4389-a61d-7373df8b2292"
+WINREG = "338cd001-2244-31f1-aaaa-900038001003"
+NETLOGON = "12345678-1234-abcd-ef00-01234567cffb"
+SRVSVC = "4b324fc8-1670-01d3-1278-5a47bf6ee188"
+SAMR = "12345778-1234-abcd-ef00-0123456789ac"
+
+
+def dce_calls(cap, src, dst, iface, opnums, t, dport):
+    """한 TCP 연결에서 바인드 후 opnums 를 차례로 요청·응답."""
+    s = Tcp(cap, src, dst, dport)
+    t = s.handshake(t)
+    t = s.client_send(dce_bind(iface), t)
+    t = s.server_send(dce_bind_ack(), t + 0.002)
+    for i, op in enumerate(opnums):
+        t = s.client_send(dce_request(op, rand_bytes(80), call_id=2 + i), t + 0.002)
+        t = s.server_send(dce_response(rand_bytes(40), call_id=2 + i), t + 0.005)
+    return s.close(t + 0.01)
+
+
+def gen_ad_attacks(out):
+    """34 AD 공격(DCE-RPC). DC = KDC(10.0.0.10, Kerberos 응답으로 학습), 파일 서버 .50, 프린트 서버 .51, 서버 .52.
+    강제 인증: .10 efsrpc2 EfsRpcOpenFileRaw -> DC, .11 netdfs NetrDfsAddStdRoot -> .50, .12 spoolss
+    RpcRemoteFindFirstPrinterChangeNotificationEx -> DC, .14 FileServerVssAgent IsPathShadowCopied -> .50 (탐지) /
+    .13 spoolss 같은 호출 -> 프린트 서버 .51(DC 아님), .15 netdfs NetrDfsManagerGetVersion -> .50 (미탐).
+    하이브 저장: .20 winreg BaseRegSaveKey -> .52 (탐지) / .21 BaseRegQueryValue(미탐), .22 백업 에이전트(예외) BaseRegSaveKey(미탐).
+    Zerologon: .30 netlogon NetrServerAuthenticate3 30회(연결 5개 x 6) -> DC (탐지), 이어서 DRSGetNCChanges(DCSync, 상관) /
+    .31 2회(미탐).
+    AD 정보 수집: .40 이 12대에 srvsvc NetrSessionEnum + samr SamrGetMembersInAlias (탐지), 이어서 .1 에 svcctl
+    CreateServiceW(원격 서비스 생성, 상관) /
+    .41 5대(미탐), .42 12대에 srvsvc NetrShareEnum(미탐)."""
+    cap = Capture()
+    t = T0 + 1
+    t = krb_as_ok_to(cap, "10.0.5.99", KDC, "user01", t)
+    p = 49700
+    for src, dst, iface, ops in [
+            ("10.0.5.10", KDC, EFSRPC2, [0x00]),
+            ("10.0.5.11", "10.0.5.50", NETDFS, [0x0c]),
+            ("10.0.5.12", KDC, SPOOLSS, [0x41]),
+            ("10.0.5.13", "10.0.5.51", SPOOLSS, [0x41]),
+            ("10.0.5.14", "10.0.5.50", FSRVP, [0x09]),
+            ("10.0.5.15", "10.0.5.50", NETDFS, [0x00]),
+            ("10.0.5.20", "10.0.5.52", WINREG, [0x14]),
+            ("10.0.5.21", "10.0.5.52", WINREG, [0x11]),
+            ("10.0.5.22", "10.0.5.52", WINREG, [0x14])]:
+        p += 1
+        t = dce_calls(cap, src, dst, iface, ops, t + 1, p)
+    t = T0 + 120
+    for _ in range(5):
+        p += 1
+        t = dce_calls(cap, "10.0.5.30", KDC, NETLOGON, [0x1a] * 6, t + 0.5, p)
+    p += 1
+    t = dce_calls(cap, "10.0.5.31", KDC, NETLOGON, [0x1a, 0x1a], t + 1, p)
+    p += 1
+    t = dce_calls(cap, "10.0.5.30", KDC, DRSUAPI, [3], t + 5, p)          # Zerologon 뒤 DCSync(상관)
+    t = T0 + 200
+    hosts = ["10.0.6.%d" % i for i in range(1, 13)]
+    for h in hosts:
+        t = dce_calls(cap, "10.0.5.40", h, SRVSVC, [0x0c], t + 1, 49800)
+        t = dce_calls(cap, "10.0.5.40", h, SAMR, [0x21], t + 0.5, 49801)
+    t = dce_calls(cap, "10.0.5.40", hosts[0], SVCCTL, [0x0c], t + 5, 49802)  # 수집 뒤 원격 서비스 생성(상관)
+    for h in hosts[:5]:
+        t = dce_calls(cap, "10.0.5.41", h, SRVSVC, [0x0c], t + 1, 49800)
+    for h in hosts:
+        t = dce_calls(cap, "10.0.5.42", h, SRVSVC, [0x0f], t + 1, 49800)
+    cap.tick(T0 + 900)
+    cap.write(os.path.join(out, "ad_attacks.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2081,7 +2152,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
-              gen_scan_reverse, gen_ai_threats, gen_scan_rounds]
+              gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks]
 
 
 def main():

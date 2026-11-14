@@ -114,11 +114,12 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
 - 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
-- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~33).
+- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~34).
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 정찰 | 기존 | 01_port_scan | Port_Scan | T1046 | 내부 출발지가 한 목적지에 5분 안 고유 포트 25개 이상(응답 없거나 거부된 SYN, SYN 없는 TCP 탐침, 응답 없는 UDP) | 예외 출발지, 제외 포트 |
+| 정찰 | 신규 | 34_ad_attacks | AD_Enumeration | T1087.002 | 한 출발지가 5분 안 서로 다른 host 10대 이상에 세션·로컬 그룹 조회(srvsvc NetrSessionEnum, wkssvc NetrWkstaUserEnum, samr SamrGetMembersInAlias) | DC 한 대에 대한 계정 조회·공유 목록 조회 제외, 인벤토리 도구 예외 |
 | 정찰 | 기존 | 02_host_scan | Host_Scan | T1018 | 내부 출발지가 같은 포트로 5분 안 고유 호스트 25개 이상 | 80·443·53 포트 기본 제외 |
 | 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
 | 초기 침투 | 신규 | 27_heartbleed | TLS_Heartbleed | T1190 | 평문 하트비트 요청의 선언 페이로드 길이가 실제 레코드보다 큼(시도)·응답이 요청보다 큼(성공), 암호화된 하트비트는 응답 레코드가 요청보다 32바이트 넘게 큼(성공)·응답 없는 요청 4개 이상(시도). 성공은 첫 유출 즉시 | 서버가 하트비트 확장을 수락한 연결만 핸드셰이크 뒤까지 분석, 출발지 예외 |
@@ -137,6 +138,9 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | 자격증명 접근 | 신규 | 22_name_poisoning | Name_Poisoning | T1557.001 | 한 응답자가 10분 안 LLMNR·NBT-NS·mDNS로 고유 이름 5개 이상에 긍정 응답 | mDNS 서비스 광고(PTR 등) 제외, WINS 예외 |
 | 자격증명 접근 | 신규 | 32_machine_account | Machine_Account_Misuse | T1557.001 | 한 출발지가 10분 안 서로 다른 머신 계정(`host$`) 2개 이상으로 인증(NTLM·Kerberos AS-REQ) | NAT·장애 조치 클러스터 출발지 예외 |
 | 자격증명 접근 | 신규 | 23_dcsync | DCSync | T1003.006 | DC가 아닌 호스트의 DRSUAPI DRSGetNCChanges 요청(1건) | DC 목록+자동 학습, Azure AD Connect 예외 |
+| 자격증명 접근 | 신규 | 34_ad_attacks | Coerced_Authentication | T1187 | 강제 인증 호출 1건: efsrpc·efsrpc2 모든 호출, spoolss 알림 등록(대상이 DC), netdfs NetrDfsAddStdRoot·RemoveStdRoot, FileServerVssAgent IsPathShadowCopied·IsPathSupported | 프린트 서버 대상 spoolss 제외, 관리 서버 예외 |
+| 자격증명 접근 | 신규 | 34_ad_attacks | Remote_Registry_Dump | T1003.002 | winreg BaseRegSaveKey[Ex]로 레지스트리 하이브 원격 저장(1건) | 조회 호출 제외, 백업 에이전트 예외 |
+| 자격증명 접근 | 신규 | 34_ad_attacks | Zerologon_Attempt | T1210 | 한 (출발지, 대상)에서 1분 안 netlogon NetrServerAuthenticate* 20회 이상 | 정상 보안 채널 수립은 1\~2회 |
 | 확산 | 기존 | 06_smb_admin_share | SMB_Admin_Share | T1021.002 | 1분 안 관리 공유(`ADMIN$`·`C$` 등)에 접근한 고유 피해 호스트 2대 이상 | `IPC$`·`PRINT$` 제외, 관리 서버 예외 |
 | 확산 | 기존 | 15_rdp_lateral | RDP_Lateral | T1021.001 | 1분 안 내부 RDP 고유 목적지 3대 이상 | 점프 서버 예외 |
 | 확산 | 기존 | 16_ssh_lateral | SSH_Lateral | T1021.004 | 1분 안 SSH 인증 성공 고유 목적지 3대 이상 | 즉시 끊긴 연결 제외 |
@@ -168,14 +172,14 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 | 방식 | 룰 | 동작 |
 | --- | --- | --- |
-| 단건 | 03, 04, 09, 10, 12, 19, 23, 24 | 조건에 맞는 연결 하나가 보이면 바로 탐지. 같은 대상은 일정 시간 억제 |
-| 임계 집계 | 01, 02, 05, 14, 17, 18, 21, 22, 33(업로드) | 창 안에서 개수·바이트를 세다가 임계를 넘는 순간 탐지(창당 1건). 창이 끝나면 다시 세므로 같은 출발지의 다음 회차도 탐지(억제 시간이 지난 뒤). standalone에서도 창이 끝나도록 빈 창 종료 함수(`NSM::sumstats_epoch_noop`)를 붙인다 |
+| 단건 | 03, 04, 09, 10, 12, 19, 23, 24, 34(강제 인증·하이브 저장) | 조건에 맞는 연결 하나가 보이면 바로 탐지. 같은 대상은 일정 시간 억제 |
+| 임계 집계 | 01, 02, 05, 14, 17, 18, 21, 22, 33(업로드), 34(Zerologon·AD 정보 수집) | 창 안에서 개수·바이트를 세다가 임계를 넘는 순간 탐지(창당 1건). 창이 끝나면 다시 세므로 같은 출발지의 다음 회차도 탐지(억제 시간이 지난 뒤). standalone에서도 창이 끝나도록 빈 창 종료 함수(`NSM::sumstats_epoch_noop`)를 붙인다 |
 | 창 종료 판정 | 06, 08, 13, 15, 16, 20 | 창이 끝날 때 한 번 판정. 최대 창 길이만큼 늦게 나오지만 창당 1건으로 깔끔 |
 | 상태 추적 | 07 | 목적지별 주기를 추적(클러스터에서는 한 노드에 모음) |
 
 ### 4.3 룰별 탐지 상세
 
-탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~33)에 있습니다.
+탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~34)에 있습니다.
 
 각 항목의 목록은 다음 순서로 씁니다.
 
@@ -216,6 +220,20 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 - 집계·억제: (출발지, 목적지 포트)별 고유 목적지 host 수. 임계 즉시 탐지, (스캐너, 포트) 단위 5분 억제.
 - 제외·오탐 통제: 80·443·53(TCP·UDP)과 7680/tcp는 기본 제외(`host_scan_exclude_ports`). 웹·DNS는 정상적으로 많은 목적지로 가고, 7680은 Windows 배달 최적화(업데이트를 내부 PC끼리 나눠 받음)가 같은 대역 여러 대에 연결하는 포트입니다. 예외 출발지 `host_scan_allowlist`. 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 탐지 시점 요약 1행.
+
+##### AD 정보 수집 (`AD_Enumeration`, T1087.002) · 34_ad_attacks
+
+BloodHound/SharpHound는 공격 경로를 찾으려고 도메인의 PC를 하나씩 돌며 로그온 세션(누가 어디에 로그온했는지)과 로컬 관리자 그룹을 수집합니다. 정상 단말이 짧은 시간에 여러 PC의 세션·로컬 그룹을 조회하는 일은 드뭅니다. **한 출발지가 5분 안에 서로 다른 host 10대 이상에 세션·로컬 그룹 조회 호출**을 하면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 호출 | 31과 같이 `dce_rpc_response`(priority 0)에서 `c$dce_rpc$endpoint`·`operation`: `srvsvc` `NetrSessionEnum`, `wkssvc` `NetrWkstaUserEnum`, `samr` `SamrGetMembersInAlias`(로컬 Administrators 구성원) |
+| 대상 수 | SumStats 출발지 키, 대상 host UNIQUE, 표본(대상·호출·uid·계정) SAMPLE |
+
+- 주체: `src` = 수집한 host, `dst` = 표본 대상.
+- 집계·억제: 5분 창, 임계 즉시 탐지, 출발지 단위 5분 억제(창마다 다시 판정).
+- 제외·오탐 통제: DC 한 대에 대한 계정·그룹 조회(`net user /domain`)는 정상 관리에서도 흔해 보지 않습니다. 공유 목록 조회(`NetrShareEnum`)는 파일 탐색에서 흔해 넣지 않았습니다. Windows LDAP는 보통 서명·암호화돼 검색 필터가 보이지 않으므로 LDAP는 쓰지 않습니다. 자산·인벤토리 도구는 예외 엔진(5.4절, `exception_drop_agg`)으로 출발지 축 예외를 등록합니다.
+- 근거: 대상 host마다 1행(호출, uid, 계정). 킬체인 묶음은 정찰이며, 같은 출발지의 도메인 장악·확산으로 이어집니다.
 
 #### 4.3.2 초기 침투
 
@@ -481,6 +499,50 @@ DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터�
 - 집계·억제: 단건. (출발지, DC) 단위 1시간 억제.
 - 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 예외로 뺍니다(기존 `dcsync_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). DC 목록(`dcsync_domain_controllers`)은 예외가 아니라 탐지 조건이라 그대로 설정에 둡니다. 클러스터에서는 DC 학습이 워커별이라 DC 목록을 설정에 적는 것을 권장합니다.
 - 근거: 포트, 대상이 알려진 DC인지, 스텁 길이, uid, 계정(같은 연결의 NTLM 인증, 없으면 인증 맥락의 drsuapi·ldap 티켓 계정. 5.6절).
+
+##### 강제 인증 (`Coerced_Authentication`, T1187) · 34_ad_attacks
+
+PetitPotam·PrinterBug·DFSCoerce·ShadowCoerce는 서버(주로 DC)에 원격 호출을 보내, 서버가 공격자가 지정한 경로로 머신 계정 인증을 보내게 만듭니다. 공격자는 이 인증을 AD 인증서 서비스나 다른 서버로 릴레이합니다(NTLM 릴레이의 앞단). 이 호출들은 정상 업무에서 PC가 서버에 보내는 일이 드뭅니다. **내부 서버로 가는 강제 인증 호출을 1건으로** 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 호출 | 31과 같이 `dce_rpc_response`(priority 0)에서 `c$dce_rpc$endpoint`·`operation` |
+| PetitPotam | `efsrpc`(`\efsrpc` 파이프)·`efsrpc2`(`\lsarpc` 파이프로 바인드하는 UUID)의 모든 호출(원격 EFS) |
+| PrinterBug | `spoolss` `RpcRemoteFindFirstPrinterChangeNotification`·`…Ex`. 기본은 대상이 DC(23의 DC 목록·학습)일 때만 |
+| DFSCoerce | `netdfs` `NetrDfsAddStdRoot`·`NetrDfsRemoveStdRoot`·`NetrDfsAddStdRootForced` |
+| ShadowCoerce | `FileServerVssAgent` `IsPathShadowCopied`·`IsPathSupported` |
+
+- 주체: `src` = 호출한 host, `dst` = 인증을 강요당한 서버.
+- 집계·억제: 단건. (출발지, 대상, 종류) 단위 1시간 억제.
+- 제외·오탐 통제: 클라이언트가 프린트 서버에 보내는 spoolss 알림 등록은 정상이라, 대상이 DC가 아니면 보지 않습니다(`coerce_spoolss_dc_only`). DC 학습이 꺼져 있고 DC 목록도 없으면 spoolss 경로는 탐지되지 않습니다. 원격 EFS·DFS 관리를 실제로 쓰는 관리 서버는 예외 엔진(5.4절, `exception_drop`)으로 뺍니다. 호출 인자(공격자가 지정한 경로)는 보지 않습니다.
+- 근거: 인터페이스·호출 이름, 포트, 명명된 파이프, 대상이 DC인지, uid, 계정. 킬체인 묶음은 자격증명이며, 같은 출발지의 머신 계정 남용(32)·DCSync·확산으로 이어집니다.
+
+##### 원격 레지스트리 하이브 저장 (`Remote_Registry_Dump`, T1003.002) · 34_ad_attacks
+
+impacket secretsdump와 `reg save \\host\HKLM\SAM`은 원격 레지스트리 서비스로 SAM·SECURITY·SYSTEM 하이브를 파일로 저장한 뒤 가져가 로컬 계정 해시와 캐시된 도메인 자격증명을 꺼냅니다. 원격 관리에서 하이브를 파일로 저장하는 일은 드뭅니다. **winreg `BaseRegSaveKey`·`BaseRegSaveKeyEx` 호출을 1건으로** 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 호출 | `dce_rpc_response`에서 `endpoint` = `winreg`, `operation` = `BaseRegSaveKey`·`BaseRegSaveKeyEx`. 어떤 키를 저장했는지는 인자라 보지 않음 |
+
+- 주체: `src` = 호출한 host, `dst` = 하이브를 빼앗긴 host.
+- 집계·억제: 단건. (출발지, 대상) 1시간 억제.
+- 제외·오탐 통제: 레지스트리 조회·설정 호출은 보지 않습니다. 레지스트리를 원격 백업하는 에이전트는 예외 엔진(`exception_drop`)으로 출발지 축 예외를 등록합니다.
+- 근거: 31과 같음. 킬체인 묶음은 자격증명.
+
+##### Zerologon (`Zerologon_Attempt`, T1210) · 34_ad_attacks
+
+Zerologon(CVE-2020-1472)은 netlogon 인증의 암호 결함을 이용해, 클라이언트 자격증명을 0으로 채운 인증을 성공할 때까지(평균 256회, 최대 수천 회) 반복해 DC 계정을 장악합니다. 정상 보안 채널 수립은 한 번에 1\~2회 인증 호출이면 끝납니다. **한 (출발지, 대상)에서 1분 안에 netlogon 인증 호출이 20회 이상**이면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 호출 | `dce_rpc_response`에서 `endpoint` = `netlogon`, `operation` = `NetrServerAuthenticate`·`2`·`3`. 실패 여부는 응답 스텁이라 보지 않고 횟수로 판정 |
+| 횟수 | SumStats (출발지, 대상) 키 SUM, 표본 uid |
+
+- 주체: `src` = 시도한 host, `dst` = 대상 DC.
+- 집계·억제: 1분 창, 임계 즉시 탐지, (출발지, 대상) 1시간 억제.
+- 제외·오탐 통제: 패치된 DC도 시도 자체는 받으므로 탐지는 시도 기준입니다. NAT 뒤 여러 PC가 한 주소로 보이는 구간은 예외 엔진(`exception_drop_agg`)으로 뺍니다.
+- 근거: 인증 호출 수, 대상이 DC인지, 표본 uid. 킬체인 묶음은 도메인 장악(DCSync와 같음)이며, 같은 출발지의 DCSync로 이어집니다.
 
 #### 4.3.4 확산
 
@@ -857,11 +919,11 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 
 | 묶음 | 설정 이름 | 포함 탐지 |
 | --- | --- | --- |
-| 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
+| 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan, AD_Enumeration |
 | 초기 침투 | `corr_initial_notes` | SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed, AI_Service_Exploit |
 | C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing, AI_API_From_Server |
-| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse |
-| 도메인 장악 | `corr_domain_notes` | DCSync |
+| 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse, Coerced_Authentication, Remote_Registry_Dump |
+| 도메인 장악 | `corr_domain_notes` | DCSync, Zerologon_Attempt |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral, Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution |
 | 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB, AI_Service_Upload |
 | 영향 | `corr_impact_notes` | SMB_Ransomware |
@@ -870,7 +932,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | --- | --- | --- | --- |
 | 정찰 | 초기 침투 | 같은 출발지 | 1시간 |
 | 초기 침투 | C2, 자격증명, 도메인 장악, 확산 | 침투 대상 host가 다음 탐지의 출발지 | 2시간 |
-| 정찰 | C2, 자격증명 | 같은 출발지 | 1시간 |
+| 정찰 | C2, 자격증명, 도메인 장악, 확산 | 같은 출발지 | 1시간 |
 | C2 | 자격증명, 도메인 장악 | 같은 출발지 | 1시간 |
 | C2 | 확산 | 같은 출발지 | 30분 |
 | 자격증명 | 도메인 장악, 확산 | 같은 출발지 | 1시간 |
@@ -880,6 +942,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 확산 | 자격증명, 도메인 장악 | 확산 대상 host가 출발지 | 1시간 |
 | 유출 | 영향 | 같은 출발지 | 1시간 |
 | NTLM 인증 유출 | C2 | 같은 출발지 | 1시간 |
+| Zerologon | DCSync | 같은 출발지 | 1시간 |
 
 - 체인의 기법 ID 표시는 상관 전용 표(`stage_attack`)에 없으면 탐지 공통 표(`attack_map`)를 씁니다. 그래서 8단계 체인도 `T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486`처럼 끝까지 기법 ID로 나옵니다.
 - 묶음에 탐지를 넣거나 빼려면 해당 `corr_*_notes`를 redef 하고 `chain_group_rules`도 함께 다시 정의해야 합니다(묶음 내용은 규칙을 정의할 때 복사되기 때문).
@@ -1212,7 +1275,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~33)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~34)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1375,6 +1438,18 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detect_ai_upload` / `ai_upload_epoch` / `ai_upload_bytes` | T / 1hr / 10000000 | AI 서비스 업로드 탐지, 창, 바이트 임계 | 승인 서비스는 예외 파일로 |
 | `detect_ai_api_from_server` / `ai_server_ports` / `ai_server_nets` / `ai_server_learn_expire` | T / DNS·Kerberos·LDAP·DB·메일 포트 / 비어 있음 / 24hr | 서버 학습 포트, 서버 대역, 학습 기억 시간 | 클러스터는 `ai_server_nets`에 서버 대역 지정 권장 |
 | `detect_ai_service_exploit` / `ai_service_sigs` | T / Ray·Ollama·TorchServe·Jupyter·MLflow 6개 | AI 인프라 관리·실행 API 서명 | 사내 AI 플랫폼의 관리 API를 서명으로 추가 |
+
+#### 34 AD 공격(DCE-RPC)
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_coerced_auth` / `detect_remote_registry_dump` / `detect_zerologon` / `detect_ad_enumeration` | T | 탐지별 켜기 |  |
+| `coerce_ops` | spoolss 2개, netdfs 3개, FileServerVssAgent 2개 | 강제 인증 (인터페이스, 호출) |  |
+| `coerce_any_op_endpoints` | efsrpc, efsrpc2 | 모든 호출을 강제 인증으로 볼 인터페이스 |  |
+| `coerce_spoolss_dc_only` | T | spoolss는 대상이 DC일 때만 | DC는 23의 `dcsync_domain_controllers`·학습 |
+| `registry_dump_ops` | BaseRegSaveKey, BaseRegSaveKeyEx | winreg 호출 |  |
+| `zerologon_ops` / `zerologon_epoch` / `zerologon_threshold` | NetrServerAuthenticate·2·3 / 1min / 20 | netlogon 인증 호출, 창, 횟수 |  |
+| `ad_enum_ops` / `ad_enum_epoch` / `ad_enum_threshold` / `ad_enum_num_samples` | srvsvc NetrSessionEnum, wkssvc NetrWkstaUserEnum, samr SamrGetMembersInAlias / 5min / 10 / 10 | 조회 호출, 창, 고유 host 수, 근거 표본 | 규모가 작은 도메인은 임계를 낮춤 |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 

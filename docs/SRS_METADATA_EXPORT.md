@@ -131,7 +131,8 @@ flowchart LR
 | IWbemLevel1Login, IWbemServices | 원격 WMI |
 | samr, lsarpc | 계정·그룹 열거 |
 | netlogon | Zerologon 등 |
-| efsrpc | PetitPotam 강제 인증 |
+| efsrpc, efsrpc2 | PetitPotam 강제 인증(efsrpc2는 `\lsarpc` 파이프로 바인드하는 UUID) |
+| netdfs, FileServerVssAgent | DFSCoerce·ShadowCoerce 강제 인증 |
 
 ## 5. 출력(로그) 명세
 

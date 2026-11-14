@@ -192,6 +192,15 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # 승인한 AI 서비스·부서, 사내 챗봇 백엔드, ML 팀 대역은 예외 파일(도메인·출발지 축)로 뺀다.
 
 # =============================================================================
+# [34] Coerced_Authentication (T1187) / Remote_Registry_Dump (T1003.002) / Zerologon_Attempt (T1210)
+#      / AD_Enumeration (T1087.002) — AD 공격(DCE-RPC)
+# =============================================================================
+# redef NSM::coerce_spoolss_dc_only       = T;     # spoolss 알림 등록은 대상이 DC 일 때만(DC 는 [23] 목록·학습)
+# redef NSM::zerologon_threshold          = 20;    # 1분 안 netlogon 인증 호출 수
+# redef NSM::ad_enum_threshold            = 10;    # 5분 안 세션·로컬 그룹 조회를 받은 고유 host 수
+# 백업 에이전트(winreg 하이브 저장), 자산·인벤토리 도구(세션 조회)는 예외 파일(출발지 축)로 뺀다.
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

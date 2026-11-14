@@ -79,7 +79,7 @@ export {
         window: interval;
     };
 
-    const corr_recon_notes: set[Notice::Type] = { Port_Scan, Host_Scan } &redef;
+    const corr_recon_notes: set[Notice::Type] = { Port_Scan, Host_Scan, AD_Enumeration } &redef;
     ## 초기 침투(대상 = 침투당한 서버, notice 의 lm_targets). 이후 단계는 그 서버가 출발지가 된다.
     const corr_initial_notes: set[Notice::Type] = {
         SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed, AI_Service_Exploit,
@@ -92,9 +92,10 @@ export {
     const corr_cred_notes: set[Notice::Type] = {
         NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning,
         SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse,
+        Coerced_Authentication, Remote_Registry_Dump,
     } &redef;
     ## 도메인 장악(자격증명 단계의 끝)
-    const corr_domain_notes: set[Notice::Type] = { DCSync } &redef;
+    const corr_domain_notes: set[Notice::Type] = { DCSync, Zerologon_Attempt } &redef;
     const corr_lateral_notes: set[Notice::Type] = {
         SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral,
         Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution,
@@ -115,6 +116,9 @@ export {
         # 정찰 -> C2 / 자격증명 탈취 (같은 host)
         [$from=corr_recon_notes,   $to=corr_c2_notes,      $pivot=SRC_TO_SRC, $window=1hr],
         [$from=corr_recon_notes,   $to=corr_cred_notes,    $pivot=SRC_TO_SRC, $window=1hr],
+        # 정찰(AD 정보 수집 등) -> 도메인 장악·확산 (같은 host: BloodHound 로 경로를 찾은 뒤 이동)
+        [$from=corr_recon_notes,   $to=corr_domain_notes,  $pivot=SRC_TO_SRC, $window=1hr],
+        [$from=corr_recon_notes,   $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=1hr],
         # C2 -> 자격증명 탈취·도메인 장악·확산 (같은 host)
         [$from=corr_c2_notes,      $to=corr_cred_notes,    $pivot=SRC_TO_SRC, $window=1hr],
         [$from=corr_c2_notes,      $to=corr_domain_notes,  $pivot=SRC_TO_SRC, $window=1hr],
@@ -123,6 +127,8 @@ export {
         [$from=corr_cred_notes,    $to=corr_domain_notes,  $pivot=SRC_TO_SRC, $window=1hr],
         [$from=corr_cred_notes,    $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=1hr],
         [$from=corr_domain_notes,  $to=corr_lateral_notes, $pivot=SRC_TO_SRC, $window=1hr],
+        # Zerologon 으로 DC 계정을 장악한 뒤 DCSync
+        [$from=set(Zerologon_Attempt), $to=set(DCSync),    $pivot=SRC_TO_SRC, $window=1hr],
         # 확산 -> 피해 host 에서 유출·영향·추가 자격증명 탈취 (피해 host 피벗)
         [$from=corr_lateral_notes, $to=corr_exfil_notes,   $pivot=DST_TO_SRC, $window=10min],
         [$from=corr_lateral_notes, $to=corr_impact_notes,  $pivot=DST_TO_SRC, $window=30min],
@@ -332,6 +338,10 @@ const stage_tag_map: table[Notice::Type] of string = {
     [AI_Service_Upload]      = "Exfil",
     [AI_API_From_Server]     = "C2",
     [AI_Service_Exploit]     = "InitialAccess",
+    [Coerced_Authentication] = "CredentialAccess",
+    [Remote_Registry_Dump]   = "CredentialAccess",
+    [Zerologon_Attempt]      = "CredentialAccess",
+    [AD_Enumeration]         = "Recon",
     [HTTP_Beaconing]         = "C2",
     [DNS_Tunneling]          = "C2",
     [Encrypted_C2]           = "C2",

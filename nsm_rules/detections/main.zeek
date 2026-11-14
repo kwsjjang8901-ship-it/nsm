@@ -84,6 +84,11 @@ export {
         AI_Service_Upload,
         AI_API_From_Server,
         AI_Service_Exploit,
+        ## 34. AD 공격(DCE-RPC: 강제 인증, 원격 레지스트리 하이브 저장, Zerologon, AD 정보 수집)
+        Coerced_Authentication,
+        Remote_Registry_Dump,
+        Zerologon_Attempt,
+        AD_Enumeration,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -330,6 +335,10 @@ export {
         [AI_Service_Upload]      = "Exfiltration",
         [AI_API_From_Server]     = "Command and Control",
         [AI_Service_Exploit]     = "Initial Access",
+        [Coerced_Authentication] = "Credential Access",
+        [Remote_Registry_Dump]   = "Credential Access",
+        [Zerologon_Attempt]      = "Credential Access",
+        [AD_Enumeration]         = "Recon",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",
