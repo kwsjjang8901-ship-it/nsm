@@ -1,5 +1,8 @@
 # NSM 메타데이터 선별 전송 PoC 결과 보고
 
+> **2026-11-11 시점 기록입니다. 최신 결과는 통합 보고 [POC_RESULT.md](POC_RESULT.md)에 있습니다.**
+> 이후 바뀐 것: CIC-IDS2017 5일 하루 평균 21.7MB(Manager 전송 합계 21\~24MB), 1,000명 규모 하루 1\~3GB(압축 전) 추정, `dce_rpc` 인터페이스에 강제 인증용 `efsrpc2`·`netdfs`·`FileServerVssAgent` 추가.
+
 작성일: 2026-11-11 · 기준: main `239b91c`(PR #27~#33 반영). 6.4절·부록 A의 추가 운영 캡처와 #36(`sample_uid` 정리)은 같은 날 덧붙임
 상세 근거: 요구사항 명세 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) · 설계·계획·측정 기록 [METADATA_EXPORT_PLAN.md](METADATA_EXPORT_PLAN.md)
 

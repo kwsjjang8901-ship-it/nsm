@@ -1,5 +1,7 @@
 # NSM 자산 식별(Zeek) PoC 결과 보고
 
+> 자산 식별·탐지·메타데이터를 함께 정리한 최신 통합 보고는 [POC_RESULT.md](../POC_RESULT.md)에 있습니다(CIC-IDS2017 5일의 자산 신호·탐지 리포트 연동 포함).
+
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
 작성일: 2026-11-06 · 대상: NSM 1.0.0 원페이저 "자산식별 기능(Zeek) POC 개발" · 브랜치 `ccr-b1a8277a-waypwe`

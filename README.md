@@ -48,8 +48,9 @@ docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
-  DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고
-  METADATA_EXPORT_POC_RESULT.md # 메타데이터 선별 전송 PoC 결과 보고
+  POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)
+  DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고(2026-11-11 시점)
+  METADATA_EXPORT_POC_RESULT.md # 메타데이터 선별 전송 PoC 결과 보고(2026-11-11 시점)
   asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (claudtest2 에서 가져옴)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
