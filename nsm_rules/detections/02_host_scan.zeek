@@ -50,6 +50,7 @@ event zeek_init()
             {
                 return result["nsm.host_scan"]$unique + 0.0;
             },
+        $epoch_result=sumstats_epoch_noop,   # epoch 마다 임계 판정을 초기화(main.zeek 설명)
         $threshold_crossed(key: SumStats::Key, result: SumStats::Result) =
             {
             local res = result["nsm.host_scan"];

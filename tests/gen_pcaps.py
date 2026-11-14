@@ -2055,6 +2055,21 @@ def gen_ai_threats(out):
     cap.write(os.path.join(out, "ai_threats.pcap"))
 
 
+def gen_scan_rounds(out):
+    """같은 스캐너의 여러 회차(CIC-IDS2017 Friday nmap 회차 재현): .90 -> .91 포트 30개를 20분 간격 3회(탐지 3),
+    .92 의 445 호스트 스윕 30대를 20분 간격 2회(탐지 2). 임계만 쓰는 SumStats 가 epoch 마다 초기화돼야 회차마다 탐지한다."""
+    cap = Capture()
+    hosts = ["10.0.3.%d" % i for i in range(1, 31)]
+    for k in range(3):
+        t = T0 + 10 + k * 1200
+        port_scan(cap, "10.0.2.90", "10.0.2.91", range(1000, 1030), t)
+        if k < 2:
+            host_scan(cap, "10.0.2.92", hosts, 445, t + 5)
+        cap.tick(t + 600)
+    cap.tick(T0 + 3000)
+    cap.write(os.path.join(out, "scan_rounds.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2066,7 +2081,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
-              gen_scan_reverse, gen_ai_threats]
+              gen_scan_reverse, gen_ai_threats, gen_scan_rounds]
 
 
 def main():

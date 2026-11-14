@@ -113,6 +113,7 @@ event zeek_init()
         $name="nsm-detect-ai-upload", $epoch=ai_upload_epoch, $reducers=set(r1, r2),
         $threshold=ai_upload_bytes + 0.0,
         $threshold_val(key: SumStats::Key, result: SumStats::Result) = { return result["nsm.ai_upload"]$sum; },
+        $epoch_result=sumstats_epoch_noop,   # epoch 마다 임계 판정을 초기화(main.zeek 설명)
         $threshold_crossed(key: SumStats::Key, result: SumStats::Result) =
             {
             local src = key$host;
