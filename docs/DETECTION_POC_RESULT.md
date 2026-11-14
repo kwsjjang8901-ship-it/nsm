@@ -1,5 +1,8 @@
 # NSM 탐지 룰 PoC 결과 보고
 
+> **2026-11-11 시점 기록입니다. 최신 결과는 통합 보고 [POC_RESULT.md](POC_RESULT.md)에 있습니다.**
+> 이후 바뀐 것: 룰 파일 33개·탐지 유형 47개(TLS 비커닝, 무차별 대입, Heartbleed, XSS, 원격 실행, 머신 계정 사용, AI 관련 위협, AD 공격 추가), 운영 트래픽 대신 공개 데이터셋 CIC-IDS2017 5일 검증(범위 안 공격 9종 모두 탐지, 공격과 무관한 탐지 5일 19건), 탐지 요약의 사건 묶기, btest 103개.
+
 작성일: 2026-11-11 · 기준: main `6ab4cd2`(탐지 관련 PR #1~#26)
 상세 근거: 요구사항 명세 [SRS.md](SRS.md) · 검토 결과와 작업 계획 [NSM_RULES_REVIEW.md](NSM_RULES_REVIEW.md) · 메타데이터 선별 전송은 별도 보고 [METADATA_EXPORT_POC_RESULT.md](METADATA_EXPORT_POC_RESULT.md)
 
