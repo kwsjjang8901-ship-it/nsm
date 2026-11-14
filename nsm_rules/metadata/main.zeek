@@ -12,7 +12,7 @@
 ##!   판정은 Log::write 를 부르는 노드(클러스터에서는 워커)에서 일어난다.
 ##!
 ##!   원본 스트림 처리
-##!     - keep_log_streams 에 있는 스트림: default 필터(원본)를 그대로 둔다.
+##!     - keep_log_streams 에 있는 스트림(또는 keep_all_log_streams = T): default 필터(원본)를 그대로 둔다.
 ##!     - 없는 스트림: filter_log 가 끈 스트림을 다시 켜고 default 필터를 지운다.
 ##!       meta_keep_raw_local = T 면 default 필터를 지우지 않고 meta_raw_path_prefix + Zeek 기본 이름(conn, dns …)으로 보낸다(T2).
 ##!
@@ -388,7 +388,7 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
 
 # ---------------------------------------------------------------- 요약
 
-# 원본 conn·dns 로그가 남는지(T2 이거나 keep_log_streams 에 있음). 남을 때만 요약에 sample_uid 를 붙인다.
+# 원본 conn·dns 로그가 남는지(T2, keep_all_log_streams 이거나 keep_log_streams 에 있음). 남을 때만 요약에 sample_uid 를 붙인다.
 global meta_flow_raw = F;
 global meta_dns_raw = F;
 
@@ -727,8 +727,8 @@ event zeek_init() &priority=-2
     change_log_path(META_UA_LOG, meta_path_prefix + "http_ua_summary");
     local want_flow = F;
     local want_dns = F;
-    meta_flow_raw = meta_keep_raw_local || Conn::LOG in keep_log_streams;
-    meta_dns_raw = meta_keep_raw_local || DNS::LOG in keep_log_streams;
+    meta_flow_raw = meta_keep_raw_local || keep_all_log_streams || Conn::LOG in keep_log_streams;
+    meta_dns_raw = meta_keep_raw_local || keep_all_log_streams || DNS::LOG in keep_log_streams;
 
     if ( create_log_dirs )
         {
@@ -748,7 +748,7 @@ event zeek_init() &priority=-2
         if ( id !in keep_enabled_streams )
             next;   # 로드되지 않은 스트림
 
-        if ( id !in keep_log_streams )
+        if ( id !in keep_log_streams && ! keep_all_log_streams )
             {
             # 원래 꺼질 스트림: 원본(default) 출력은 지우거나 T2 경로로 보낸다.
             # 원본은 Zeek 기본 이름(conn, dns …)으로 쓴다. 선별 로그 이름(flow_summary 등)을 쓰면

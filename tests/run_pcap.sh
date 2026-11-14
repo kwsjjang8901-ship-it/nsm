@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pcap 하나를 운영과 같은 설정으로 한 번 돌려 탐지·자산 식별·메타데이터 선별 전송 결과를 한 화면에 요약한다.
 #
-#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] <pcap | 디렉터리> ...
+#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-k] <pcap | 디렉터리> ...
 #
 #     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
 #       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
@@ -14,21 +14,24 @@
 #     -r DIR    자산 식별 PoC(claudtest2) 경로. 주면 asset_signal.log 로 리졸버를 돌려 DIR 출력에
 #               자산 리포트(report.html·report.txt·assets.csv)를 만든다(리졸버는 이 저장소에 없다).
 #     -z ARGS   zeek 에 넘길 추가 인자. 예) -z "AssetID::suppress_interval=30min"
+#     -k        Zeek 원본 로그를 모두 남긴다(conn·dns·http·ssl·files·weird 등, DIR/zeek/ 에 기본 이름으로).
+#               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
 #   화면 요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
 #   출력 디렉터리의 report.html(통합 리포트: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,21p' "$0"; exit 2; }
-OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; PASS=()
-while getopts "o:n:x:r:z:h" opt; do
+usage() { sed -n '2,22p' "$0"; exit 2; }
+OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=()
+while getopts "o:n:x:r:z:kh" opt; do
     case $opt in
         o) OUT=$OPTARG ;;
         n) NETS=$OPTARG; PASS+=(-n "$OPTARG") ;;
         x) EXC=$OPTARG; PASS+=(-x "$(realpath "$OPTARG")") ;;
         r) RESOLVER_DIR=$OPTARG; PASS+=(-r "$(realpath "$OPTARG")") ;;
         z) ZARGS=$OPTARG; PASS+=(-z "$OPTARG") ;;
+        k) KEEP_RAW=1; PASS+=(-k) ;;
         *) usage ;;
     esac
 done
@@ -111,6 +114,7 @@ ZEEK_IMAGE="${ZEEK_IMAGE:-zeek/zeek:9.0.1}"
     echo 'redef NSM::meta_path_prefix = "meta/";'
     [ -n "$NETS" ] && echo "redef Site::local_nets += { ${NETS//,/, } };"
     [ -n "$EXC" ] && echo "redef NSM::exception_file = \"exceptions.tsv\";"
+    [ -n "$KEEP_RAW" ] && echo 'redef NSM::keep_all_log_streams = T;'
 } > "$ZDIR/run_local.zeek"
 [ -n "$EXC" ] && cp "$EXC" "$ZDIR/exceptions.tsv"
 
@@ -162,9 +166,14 @@ logs = {f[:-4]: os.path.join(z, f) for f in os.listdir(z) if f.endswith(".log")}
 meta_dir = os.path.join(z, "meta")
 meta = {f[:-4]: os.path.join(meta_dir, f) for f in os.listdir(meta_dir) if f.endswith(".log")} if os.path.isdir(meta_dir) else {}
 
+# -k 로 남긴 원본 로그(운영에서는 남지 않음). 크기만 보고 내용은 읽지 않는다.
+MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal")
+SENSOR_LOCAL = ("notice", "capture_loss", "loaded_scripts", "stats", "reporter")
+raw = {k: p for k, p in logs.items() if k not in MGR and k not in SENSOR_LOCAL}
+
 # 캡처 구간: 로그에 남은 ts 의 처음·끝
 # (예외 적재 행처럼 패킷 처리 전에 쓴 행은 ts 가 0 이라 빼고, reporter 는 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 뺀다)
-ts = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" for r in rows(p)
+ts = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" and k not in raw for r in rows(p)
       if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
 span = (max(ts) - min(ts)) if len(ts) >= 2 else 0
 print(f"캡처 구간 약 {span/60:.1f}분, 처리 {elapsed}초")
@@ -219,9 +228,11 @@ print()
 det_b = sum(size(logs.get(k, "")) for k in ("nsm_detection", "evidence", "nsm_exception"))
 asset_b = size(logs.get("asset_signal", ""))
 total = mt + asset_b + det_b
-local_b = sum(size(p) for k, p in logs.items() if k not in ("nsm_detection", "evidence", "nsm_exception", "asset_signal"))
+local_b = sum(size(p) for k, p in logs.items() if k in SENSOR_LOCAL)
 print(f"[전송량] Manager 로 가는 로그 {total:,} 바이트 = 선별 전송 {mt:,} + 자산 신호 {asset_b:,} + 탐지 로그 {det_b:,}")
 print(f"         센서 로컬 로그(notice·stats 등) {local_b:,} 바이트")
+if raw:
+    print(f"         원본 로그(-k, 운영에서는 남기지 않음) {sum(size(p) for p in raw.values()):,} 바이트, {len(raw)}개: {', '.join(sorted(raw))}")
 if span >= 600:
     day = total * 86400 / span
     unit = f"{day/1e9:,.2f} GB" if day >= 1e9 else f"{day/1e6:,.1f} MB" if day >= 1e6 else f"{day/1e3:,.1f} KB"
@@ -248,3 +259,4 @@ echo "결과: $OUT"
 echo "  - report.html    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
+if [ -n "$KEEP_RAW" ]; then echo "  - zeek/*.log     Zeek 원본 로그(-k: conn·dns·http·ssl 등)"; fi
