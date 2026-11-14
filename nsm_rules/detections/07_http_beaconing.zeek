@@ -27,6 +27,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./ai_common
 
 module NSM;
 
@@ -207,14 +208,16 @@ event beacon_obs(obs: BeaconObs)
             $dst=resp,
             $operation="http_beacon",
             $uid=obs$uid,
-            $detail=fmt("interval=%.1fs consecutive=%d total=%d host=%s",
-                        ival_s, st$consecutive, st$total, hoststr)]);
+            $detail=fmt("interval=%.1fs consecutive=%d total=%d host=%s%s",
+                        ival_s, st$consecutive, st$total, hoststr,
+                        ai_service_match(split_string1(hoststr, /:/)[0]) != "" ? " ai_service=T" : "")]);
 
         NOTICE([$note=HTTP_Beaconing,
                 $src=orig,
                 $msg=fmt("HTTP beaconing: %s -> %s ~%.1fs interval x%d hits",
                          orig, resp, ival_s, st$consecutive),
-                $sub=fmt("interval=%.1fs hits=%d host=%s", ival_s, st$consecutive, hoststr),
+                $sub=fmt("interval=%.1fs hits=%d host=%s%s", ival_s, st$consecutive, hoststr,
+                         ai_service_match(split_string1(hoststr, /:/)[0]) != "" ? " ai_service=T" : ""),
                 $identifier=eid_base,
                 $suppress_for=beacon_expire,
                 $evidence_id=eid]);

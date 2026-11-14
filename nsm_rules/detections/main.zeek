@@ -79,6 +79,10 @@ export {
         Remote_WMI_Execution,
         ## 32. 남의 머신 계정 사용 (한 IP 가 머신 계정 여러 개로 인증: NTLM 릴레이·해시 전달)
         Machine_Account_Misuse,
+        ## 33. AI 관련 위협 (AI 서비스 대량 업로드, 서버의 AI API 호출, 사내 AI 인프라 관리 API 공격)
+        AI_Service_Upload,
+        AI_API_From_Server,
+        AI_Service_Exploit,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -315,6 +319,9 @@ export {
         [Remote_Task_Creation]   = "Lateral Movement",
         [Remote_WMI_Execution]   = "Lateral Movement",
         [Machine_Account_Misuse] = "Credential Access",
+        [AI_Service_Upload]      = "Exfiltration",
+        [AI_API_From_Server]     = "Command and Control",
+        [AI_Service_Exploit]     = "Initial Access",
         [SMB_Admin_Share]        = "Lateral Movement",
         [RDP_Lateral]            = "Lateral Movement",
         [SSH_Lateral]            = "Lateral Movement",

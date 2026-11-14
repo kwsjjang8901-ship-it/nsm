@@ -114,7 +114,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 - 기존: 이번 정비 전부터 켜져 있던 룰(01·02·06·07·09·10·12·13·14·15·16). 정비 중 오탐·성능 개선이 들어간 룰도 있습니다(예: 13 무작위형 라벨 판정, 14 1MB 단위 집계, 07 클러스터 상태 모으기).
 - 기존(재작성): 원래 있던 룰이지만 오탐 때문에 꺼져 있다가 판정 로직을 새로 쓰고 다시 켠 룰(03·04·05·08). 08은 이전 11번(DNS 유출)을 합쳐서 11번 파일은 없습니다.
-- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~32).
+- 신규: 2026-11 4단계 이후 새로 추가한 룰(17\~33).
 
 | 단계 | 구분 | 룰 파일 | 탐지 유형(notice) | ATT&CK | 판정 조건 (기본값) | 주요 오탐 통제 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -123,6 +123,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | 초기 침투 | 기존(재작성) | 03_sqli | SQL_Injection | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 SQL 구문 구조(UNION SELECT, ' or 1=1, sleep( 등) | URL 2회 디코딩 후 검사, 검색어에 흔한 `#`·`select..from` 단독은 무시 |
 | 초기 침투 | 신규 | 27_heartbleed | TLS_Heartbleed | T1190 | 평문 하트비트 요청의 선언 페이로드 길이가 실제 레코드보다 큼(시도)·응답이 요청보다 큼(성공), 암호화된 하트비트는 응답 레코드가 요청보다 32바이트 넘게 큼(성공)·응답 없는 요청 4개 이상(시도). 성공은 첫 유출 즉시 | 서버가 하트비트 확장을 수락한 연결만 핸드셰이크 뒤까지 분석, 출발지 예외 |
 | 초기 침투 | 신규 | 28_xss | Cross_Site_Scripting | T1190 | 내부 웹서버로 들어오는 URI·POST/PUT 본문에 스크립트가 실행되는 구조(`<script>`, 태그 안 `onerror=` 등, `javascript:` 호출, `document.cookie`) | URL 2회 디코딩 후 검사, 태그·`alert(` 단독은 무시 |
+| 초기 침투 | 신규 | 33_ai_threats | AI_Service_Exploit | T1190 | 내부 AI 인프라 관리·실행 API 호출(Ray 작업 제출, Ollama 모델 pull·push·create·delete, TorchServe URL 모델 등록, Jupyter 터미널 생성, MLflow 경로 조작)(1건) | ML 팀·관리 대역은 출발지 예외 |
 | 초기 침투 | 기존(재작성) | 04_webshell | Webshell_Access | T1505.003 | 웹쉘 파일명+스크립트 확장자, 명령 파라미터 값이 실제 명령(`cmd=whoami`), China Chopper류 본문 | 파라미터 이름만으로는 탐지하지 않음 |
 | 자격증명 접근 | 기존(재작성) | 05_ntlm_spray | NTLM_Spray | T1110.003 | 한 출발지에서 10분 안 **인증 실패** 고유 계정 10개 이상(SMB 상태코드·SPNEGO reject) | 성공은 세지 않음, 대소문자 정규화 |
 | 자격증명 접근 | 신규 | 17_kerberos_spray | Kerberos_Spray | T1110.003 | 10분 안 AS 사전인증 실패(코드 24·6·18·23) 고유 계정 10개 이상 | 정상 로그온 첫 단계(코드 25) 제외 |
@@ -150,12 +151,14 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | C2 | 기존 | 13_dga | DGA_Domain | T1568.002 | 10분 안 NXDOMAIN 50개 이상 + NXDOMAIN 비율 0.8 이상 + 무작위형 라벨 비율 0.5 이상 | 역방향 조회 제외 |
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
+| C2 | 신규 | 33_ai_threats | AI_API_From_Server | T1102 | 서버(서버 포트에서 응답한 내부 host 또는 `ai_server_nets`)가 생성형 AI 서비스·LLM API에 TLS 접속(1건) | 출발지 예외 |
 | C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 + 그 연속 구간이 30분 이상 | 2분 넘는 연결 제외, SNI·목적지 예외 |
 | C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
 | 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
 | 유출 | 기존 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 클라우드 저장소(지정 호스트 패턴)로 50MB 이상 업로드 | 출발지 예외 |
 | 유출 | 기존 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | T1041 | 한 호스트의 외부향 업로드 합계가 1분 안 50MB 이상(1MB 단위 실시간 집계) | 5분 억제 |
+| 유출 | 신규 | 33_ai_threats | AI_Service_Upload | T1567 | 한 출발지가 한 AI 서비스로 1시간 안 10MB 이상 업로드 | 출발지·도메인 예외 |
 | 유출 | 신규 | 19_outbound_smb | Outbound_SMB | T1048 | 내부 → 외부 445·139 TCP 연결 성립(1건) | 경계에서 막힌 시도는 제외 |
 | 영향 | 신규 | 21_smb_ransomware | SMB_Ransomware | T1486 | 1분 안 확장자가 바뀐 이름 변경 30개 이상, 또는 랜섬 노트 생성 폴더 5개 이상 | Office 임시 파일 제외, 백업 서버 예외 |
 
@@ -172,7 +175,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ### 4.3 룰별 탐지 상세
 
-탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~32)에 있습니다.
+탐지 유형(notice)마다 공격이 어떻게 동작하고 정상과 무엇이 다른지, 그 차이를 Zeek의 어떤 이벤트·필드로 보는지, 무엇을 빼는지를 정리합니다. 숫자는 4.1절과 같은 현재 운영 기본값이고, 파라미터 이름과 조정 방법은 7.4절(01\~16)·7.5절(17\~33)에 있습니다.
 
 각 항목의 목록은 다음 순서로 씁니다.
 
@@ -279,6 +282,22 @@ XSS는 웹 파라미터에 스크립트를 넣어 다른 사용자의 브라우�
 - 제외·오탐 통제: 내부 웹서버로 들어오는 요청만(`web_attack_local_servers_only`). 서식 있는 글(`<b>`·`<p>`)과 `alert(` 단어 단독은 보지 않습니다. 관리자가 분석 스크립트 같은 `<script>` 조각을 CMS에 정상으로 올리는 서버는 예외 엔진(5.4절, `exception_drop`)으로 출발지·목적지 축 예외를 등록합니다. 취약점 스캐너는 03과 같이 출발지 예외(기존 `web_attack_allowlist`도 이 룰에 적용).
 - 근거: 매칭 위치(uri·body), 메서드, 원문 앞부분, uid. 탐지 요약 진단명 `NSM.WebAttack.Xss`. 킬체인 묶음에는 넣지 않았습니다(초기 침투 묶음 없음).
 - 검증: CIC-IDS2017 Thursday "Web Attack – XSS"(DVWA `xss_r`·`xss_s`)를 놓쳤던 것을 보완합니다.
+
+##### 사내 AI 인프라 관리 API 공격 (`AI_Service_Exploit`, T1190) · 33_ai_threats
+
+외부 AI 서비스와의 통신은 HTTPS라 프롬프트·응답 내용은 보지 않습니다. AI 관련 탐지 셋은 누가·어디로·얼마나·어떤 호출을 했는지(SNI·바이트·평문 HTTP 요청)로 판정합니다. AI 서비스 목록은 `ai_common.zeek`의 `ai_service_domains`(ChatGPT·OpenAI, Claude·Anthropic, Gemini, Copilot, DeepSeek, Mistral, Perplexity, Grok, Hugging Face, Groq, OpenRouter 등, 하위 도메인 포함)이고, 07·30 비커닝 근거에도 목적지가 AI 서비스면 `ai_service=T`를 붙입니다.
+
+사내 AI 서버(학습·추론·실험 관리)는 관리·실행 API를 인증 없이 열어 두는 경우가 많고, 평문 HTTP라 요청이 보입니다. Ray 대시보드의 작업 제출 API는 인증 없이 원격 코드 실행이 되어 실제로 악용됐습니다(ShadowRay, CVE-2023-48022). TorchServe는 URL로 모델을 등록하는 관리 API가 원격 코드 실행으로 이어졌습니다(ShellTorch). **내부 AI 서버로 들어오는 관리·실행 API 호출을 1건으로 탐지**합니다(Ray 작업 제출, Ollama 모델 pull·push·create·delete, TorchServe URL 모델 등록, Jupyter 터미널 생성, MLflow 경로 조작). 추론 호출(Ollama `/api/generate` 등)과 조회(GET)는 보지 않습니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 요청 | `http_request`의 메서드와 `original_URI`. 경로는 URL 디코딩 2회·소문자, 쿼리도 같은 정규화 |
+| 서명 | `ai_service_sigs`(이름, 포트, 메서드, 경로 패턴, 쿼리 패턴). Ray `POST /api/jobs/`(8265), Ollama `POST /api/pull`·`push`·`create`·`delete`·`copy`(11434), TorchServe `POST /models?url=`, Jupyter `POST /api/terminals`, MLflow `get-artifact`·`mlflow` 경로 + 쿼리의 `../` |
+
+- 주체: `src` = 호출한 host, `dst`·`lm_targets` = AI 서버(초기 침투 묶음, 그 서버가 다음 탐지의 출발지가 되면 이어짐). 근거에 `source=internal`·`external`.
+- 집계·억제: 단건. (출발지, 서버, 서명) 단위 1시간 억제.
+- 제외·오탐 통제: 정상 운영자도 쓰는 API라 ML 팀·배포 서버는 예외 엔진(5.4절, `exception_drop`)으로 출발지 축 예외를 등록합니다. HTTPS로 감싼 AI 서버는 보이지 않습니다.
+- 근거: 서명 이름, 메서드, URI 앞부분, 포트, 출발지 구분, uid. 탐지 요약 진단명 `NSM.WebAttack.AiServiceExploit`.
 
 #### 4.3.3 자격증명 접근
 
@@ -666,6 +685,20 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 지속 시간 조건(`tls_beacon_min_span`): 열어 둔 웹 페이지의 광고·분석·채팅 스크립트도 몇 초\~몇 분 주기로 같은 크기 요청을 보내지만, 탭을 닫으면 멈춥니다. CIC-IDS2017 5일에서 이 조건 없이 오탐 101건이 났고 대부분 연속 구간이 2\~12분이었습니다(30초 미만 주기 71건). 상주 C2는 몇 시간씩 이어지므로 30분 이상 이어진 패턴만 탐지합니다. 대신 60초 주기 C2는 12분이 아니라 30분 뒤에 탐지됩니다.
 - 근거: 주기, 연속 수, 연속 구간 길이(`span`), 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2.
 
+##### 서버의 AI 서비스 접속 (`AI_API_From_Server`, T1102) · 33_ai_threats
+
+서버에는 사람이 앉아 AI 서비스를 쓰지 않습니다. 서버가 LLM API에 접속하면 LLM으로 명령을 만들거나 C2로 쓰는 악성코드(예: LameHug)나 승인되지 않은 AI 연동을 의심합니다. **서버로 학습된 내부 host 또는 `ai_server_nets` 대역이 AI 서비스·LLM API 도메인에 TLS로 접속**하면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 서버 학습 | 내부 host가 `ai_server_ports`(DNS 53, Kerberos 88, LDAP 389·636·3268, DB 1433·1521·3306·5432·27017·6379·9200, 메일 25·587)에서 응답: TCP는 `connection_established`, DNS는 `dns_message`(응답), Kerberos는 `krb_as_response`·`krb_tgs_response`·`krb_error`, 그 밖의 UDP는 종료 때 응답 유무. 마지막 응답 후 24시간 기억. PC도 여는 445·139·3389는 넣지 않음 |
+| AI 접속 | `ssl_established`의 `c$ssl$server_name`이 `ai_service_domains`에 맞음 |
+
+- 주체: `src` = 서버, `dst` = AI 서비스 주소.
+- 집계·억제: 단건. (서버, AI 서비스) 단위 24시간 억제.
+- 제외·오탐 통제: 승인된 AI 연동 서버(사내 챗봇 백엔드 등)는 예외 엔진(5.4절, `exception_drop`)으로 출발지·도메인 축 예외를 등록합니다. 서버 학습은 워커별 상태라 클러스터에서는 `ai_server_nets`에 서버 대역을 적는 것을 권장합니다.
+- 근거: AI 서비스, SNI, 서버로 본 이유(`learned_server_port=…` 또는 `server_net`), uid. 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.AiApiFromServer`.
+
 ##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
 
 Metasploit 역방향 셸이나 자체 프로토콜 RAT는 HTTP·TLS·SSH가 아닌 일반 TCP로 공격자 서버에 붙습니다. 비표준 포트 룰(24)은 프로토콜이 식별돼야 보고, 암호화 C2(09)·비콘(07)은 TLS·HTTP만 보므로 이런 채널은 지금까지 보이지 않았습니다. **내부 → 외부 TCP 연결에서 Zeek가 프로토콜을 식별하지 못했고 표준 포트가 아닌데, 한 방향으로 1MB 이상 보냈거나 30분 이상 이어지며 양방향 합계가 10KB 이상**이면 탐지합니다.
@@ -756,6 +789,20 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 - 제외·오탐 통제: SYN만 나가고 막힌 시도는 세지 않습니다(연결 성립 기준). 허용 목적지·예외 출발지는 NTLM 인증 유출과 같은 예외를 씁니다. 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
 - 근거: 포트, uid.
 
+##### AI 서비스 대량 업로드 (`AI_Service_Upload`, T1567) · 33_ai_threats
+
+직원이 사내 문서·데이터를 생성형 AI 서비스에 올리는 섀도 AI 유출입니다. 대화 입력은 수 KB라, 문서·데이터 파일을 첨부해야 MB 단위가 됩니다. 클라우드 업로드 유출(12)은 50MB 단일 연결 기준이라 이 규모에 맞지 않습니다. **한 출발지가 한 AI 서비스(도메인 기준)로 1시간 안에 10MB 이상 업로드**하면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| 서비스 | `connection_state_remove`에서 SNI(없으면 HTTP Host)가 `ai_service_domains`에 맞는 내부 → 외부 연결 |
+| 업로드 | `c$orig$size`(페이로드)를 SumStats SUM으로 (출발지, AI 서비스)별 합산, 임계를 넘는 순간 탐지 |
+
+- 주체: `src` = 올린 host, `dst` = 표본 연결의 AI 서비스 주소.
+- 집계·억제: (출발지, AI 서비스) 1시간 창, 창당 1건.
+- 제외·오탐 통제: 업무용으로 승인한 AI 서비스·부서는 예외 엔진(5.4절, `exception_drop_agg`)으로 도메인·출발지 축 예외를 등록합니다. 승인 여부는 정책 문제라, 탐지는 "누가 어느 AI 서비스로 얼마나 올렸는지"를 남기는 데 목적이 있습니다.
+- 근거: 서비스, 연결별 업로드·합계·연결 수, uid(표본 5개). 킬체인 묶음은 유출. 탐지 요약 진단명 `NSM.Exfiltration.AiServiceUpload`.
+
 #### 4.3.7 영향
 
 ##### 랜섬웨어성 SMB 파일 변경 (`SMB_Ransomware`, T1486) · 21_smb_ransomware
@@ -811,12 +858,12 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 묶음 | 설정 이름 | 포함 탐지 |
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan |
-| 초기 침투 | `corr_initial_notes` | SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed |
-| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing |
+| 초기 침투 | `corr_initial_notes` | SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed, AI_Service_Exploit |
+| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing, AI_API_From_Server |
 | 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse |
 | 도메인 장악 | `corr_domain_notes` | DCSync |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral, Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution |
-| 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB |
+| 유출 | `corr_exfil_notes` | Exfil_Large_Transfer, Exfil_Volume_Aggregate, Exfil_DNS, Exfil_Web_Upload, Outbound_SMB, AI_Service_Upload |
 | 영향 | `corr_impact_notes` | SMB_Ransomware |
 
 | 앞 단계 | 다음 단계 | 연결 방식 | 시간 창 |
@@ -1165,7 +1212,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~32)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~33)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1319,6 +1366,15 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detect_machine_account_misuse` | T | 룰 켜기 |  |
 | `machine_acct_epoch` / `machine_acct_threshold` | 10min / 2 | 집계 창 / 서로 다른 머신 계정 수 |  |
 | `machine_acct_num_samples` | 10 | 근거 표본 수 |  |
+
+#### 33 AI 관련 위협
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `ai_service_domains` | ChatGPT·OpenAI·Claude·Gemini·Copilot·DeepSeek·Mistral·Perplexity·Grok·Hugging Face 등 27개 | AI 서비스·LLM API 도메인(하위 도메인 포함). 07·30 근거의 `ai_service` 표시에도 씀 | 고객이 쓰는 국내·사내 AI 서비스를 `+=` |
+| `detect_ai_upload` / `ai_upload_epoch` / `ai_upload_bytes` | T / 1hr / 10000000 | AI 서비스 업로드 탐지, 창, 바이트 임계 | 승인 서비스는 예외 파일로 |
+| `detect_ai_api_from_server` / `ai_server_ports` / `ai_server_nets` / `ai_server_learn_expire` | T / DNS·Kerberos·LDAP·DB·메일 포트 / 비어 있음 / 24hr | 서버 학습 포트, 서버 대역, 학습 기억 시간 | 클러스터는 `ai_server_nets`에 서버 대역 지정 권장 |
+| `detect_ai_service_exploit` / `ai_service_sigs` | T / Ray·Ollama·TorchServe·Jupyter·MLflow 6개 | AI 인프라 관리·실행 API 서명 | 사내 AI 플랫폼의 관리 API를 서명으로 추가 |
 
 #### 공통 모듈 (근거·상관·중복 묶기)
 

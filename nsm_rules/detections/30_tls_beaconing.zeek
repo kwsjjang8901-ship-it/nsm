@@ -24,6 +24,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./ai_common
 
 module NSM;
 
@@ -180,14 +181,16 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             $dst=resp,
             $operation="tls_beacon",
             $uid=obs$uid,
-            $detail=fmt("interval=%.1fs consecutive=%d span=%s total=%d bytes~%d sni=%s",
-                        ival_s, st$consecutive, span, st$total, st$ref_bytes, obs$sni)]);
+            $detail=fmt("interval=%.1fs consecutive=%d span=%s total=%d bytes~%d sni=%s%s",
+                        ival_s, st$consecutive, span, st$total, st$ref_bytes, obs$sni,
+                        ai_service_match(obs$sni) != "" ? " ai_service=T" : "")]);
         NOTICE([$note=TLS_Beaconing,
                 $src=orig,
                 $dst=resp,
                 $msg=fmt("TLS beaconing: %s -> %s ~%.1fs interval x%d, ~%d bytes each", orig, resp,
                          ival_s, st$consecutive, st$ref_bytes),
-                $sub=fmt("interval=%.1fs hits=%d bytes~%d sni=%s", ival_s, st$consecutive, st$ref_bytes, obs$sni),
+                $sub=fmt("interval=%.1fs hits=%d bytes~%d sni=%s%s", ival_s, st$consecutive, st$ref_bytes, obs$sni,
+                         ai_service_match(obs$sni) != "" ? " ai_service=T" : ""),
                 $identifier=eid_base,
                 $suppress_for=beacon_expire,
                 $evidence_id=eid]);
