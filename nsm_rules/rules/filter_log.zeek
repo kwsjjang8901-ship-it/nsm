@@ -42,6 +42,11 @@ export {
         Reporter::LOG,
     } &redef;
 
+    ## T 면 어떤 스트림도 끄지 않는다(conn·dns·files·weird 등 Zeek 원본 로그를 모두 남김).
+    ##   pcap 점검용(tests/run_pcap.sh -k). 운영에서는 디스크 사용이 크게 늘어 쓰지 않는다.
+    ##   메타데이터 선별 전송 대상 스트림도 원본(default 필터)을 Zeek 기본 경로에 그대로 쓴다.
+    const keep_all_log_streams = F &redef;
+
     ## 스트림별 출력 경로(확장자 제외). 지정하지 않은 스트림은 Zeek 기본 경로를 쓴다.
     const log_paths: table[Log::ID] of string = {
         [NSM::DETECTION_LOG]  = "/log/zeek/nsm_detection",
@@ -127,9 +132,10 @@ function filter_log()
     for ( id in Log::active_streams )
         add ids[id];
 
-    for ( id in ids )
-        if ( id !in keep_log_streams && id !in keep_enabled_streams )
-            Log::disable_stream(id);
+    if ( ! keep_all_log_streams )
+        for ( id in ids )
+            if ( id !in keep_log_streams && id !in keep_enabled_streams )
+                Log::disable_stream(id);
 
     if ( create_log_dirs )
         {

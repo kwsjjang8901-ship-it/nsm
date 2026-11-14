@@ -1398,6 +1398,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `NSM::keep_log_streams` | nsm_detection, evidence, notice, capture_loss, loadedscripts, stats, reporter | 남길 로그. 나머지는 기동 시 꺼짐 | conn·dns 등을 남기려면 `+=`로 추가 |
+| `NSM::keep_all_log_streams` | F | T면 어떤 로그도 끄지 않음. conn·dns·http·ssl·files·weird 등 Zeek 원본이 모두 기본 경로에 남고, 선별 전송 대상 스트림의 원본도 남음(흐름·DNS 요약에 `sample_uid`) | pcap 점검용(`tests/run_pcap.sh -k`). 운영에서는 디스크 사용이 크게 늘어 쓰지 않음 |
 | `NSM::log_paths` | 5.2절 표 | 로그별 출력 경로(확장자 제외) | 추가한 로그는 경로도 함께 지정 |
 | `NSM::create_log_dirs` | T | 기동 시 로그 디렉터리를 상위부터 생성 | 배포 스크립트가 만들면 F |
 | `Log::default_rotation_interval` | 4hr | 로그 회전 주기 |  |

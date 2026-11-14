@@ -23,6 +23,8 @@ import re
 import sys
 
 MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal")
+# 운영에서도 센서에 남는 로그. 나머지(conn·dns 등)는 run_pcap.sh -k 로 남긴 원본이다(운영 전송량·구간 계산에서 뺀다).
+SENSOR_LOCAL = ("notice", "capture_loss", "loaded_scripts", "stats", "reporter")
 
 
 def rows(path):
@@ -508,9 +510,12 @@ def collect(z, assets_path, args):
     meta_rows = [{"name": k, "bytes": size(p), "rows": nlines(p)} for k, p in meta.items()]
     meta_rows.sort(key=lambda r: -r["bytes"])
     mgr = {k: size(logs.get(k)) for k in MGR}
-    local = {k: size(p) for k, p in logs.items() if k not in MGR}
-    # reporter 는 오프라인 실행에서 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 캡처 구간에서 뺀다
-    ts_all = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" for r in rows(p)
+    local = {k: size(p) for k, p in logs.items() if k in SENSOR_LOCAL}
+    raw = {k: size(p) for k, p in logs.items() if k not in MGR and k not in SENSOR_LOCAL}
+    # reporter 는 오프라인 실행에서 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 캡처 구간에서 뺀다.
+    # -k 원본 로그는 크고 운영 형상이 아니라 읽지 않는다.
+    ts_all = [r["ts"] for k, p in list(logs.items()) + list(meta.items())
+              if k != "reporter" and k not in raw for r in rows(p)
               if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
     span = (max(ts_all) - min(ts_all)) if len(ts_all) >= 2 else 0
 
@@ -531,7 +536,7 @@ def collect(z, assets_path, args):
         "asset_report": args.asset_report or "",
         "signal_counts": collections.Counter(s.get("signal") for s in sig).most_common(),
         "signal_rows": len(sig), "signal_ips": len({s.get("ip") for s in sig}),
-        "meta": meta_rows, "mgr": mgr, "local": local,
+        "meta": meta_rows, "mgr": mgr, "local": local, "raw": raw,
         "sensor": {"capture_loss_max": max((c.get("percent_lost", 0) for c in cl), default=0),
                    "other_notices": other_notes.most_common(), "warnings": warn},
     }
@@ -787,7 +792,8 @@ document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="n
  <tr><td>선별 전송(/log/zeek/meta)</td><td class="num">${fmtB(mt)}</td><td></td></tr>
  <tr><td>자산 신호(asset_signal)</td><td class="num">${fmtB(D.mgr.asset_signal)}</td><td></td></tr>
  <tr><td>탐지 로그(탐지·근거·예외)</td><td class="num">${fmtB(D.mgr.nsm_detection+D.mgr.evidence+D.mgr.nsm_exception)}</td><td></td></tr>
- <tr><td class="mut">센서 로컬 로그(notice·stats 등, 전송 안 함)</td><td class="num mut">${fmtB(Object.values(D.local).reduce((a,b)=>a+b,0))}</td><td></td></tr></table>
+ <tr><td class="mut">센서 로컬 로그(notice·stats 등, 전송 안 함)</td><td class="num mut">${fmtB(Object.values(D.local).reduce((a,b)=>a+b,0))}</td><td></td></tr>${Object.keys(D.raw||{}).length?`
+ <tr><td class="mut">원본 로그(run_pcap.sh -k, 운영에서는 남기지 않음)</td><td class="num mut">${fmtB(Object.values(D.raw).reduce((a,b)=>a+b,0))}</td><td class="mut">${Object.keys(D.raw).length}개: ${esc(Object.keys(D.raw).sort().join(', '))}</td></tr>`:''}</table>
  <h2 style="margin-top:14px">선별 전송 로그별</h2><table><tr><th>로그</th><th class="num">바이트</th><th class="num">행</th><th></th></tr>`+
  D.meta.map(m=>`<tr><td>${esc(m.name)}</td><td class="num">${fmtB(m.bytes)}</td><td class="num">${m.rows.toLocaleString()}</td><td style="width:40%"><div class="bar" style="width:${100*m.bytes/mm}%"></div></td></tr>`).join('')+'</table>'+
  '<div class="note">전체 Zeek 로그 대비 비율과 처리 부하는 tests/measure_meta_export.sh 로 잽니다.</div>';
