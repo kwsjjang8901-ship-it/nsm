@@ -100,7 +100,8 @@ export {
         "iwbemlevel1login", "iwbemservices",        # 원격 WMI
         "samr", "lsarpc",                           # 계정·그룹 열거
         "netlogon",                                 # Zerologon 등
-        "efsrpc",                                   # PetitPotam 강제 인증
+        "efsrpc", "efsrpc2",                        # PetitPotam 강제 인증(efsrpc2 = \lsarpc 파이프로 바인드)
+        "netdfs", "fileservervssagent",             # DFSCoerce·ShadowCoerce 강제 인증
     } &redef;
 
     ## ssl·http(SNI·Host)·dns(질의)에서 뺄 도메인(접미사 일치). 업데이트·CDN·텔레메트리 등.
