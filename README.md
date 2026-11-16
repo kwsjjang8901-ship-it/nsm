@@ -133,8 +133,8 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 
 ## 검토 결과와 작업 계획
 
-[docs/NSM_RULES_REVIEW.md](docs/NSM_RULES_REVIEW.md) 참고 — 우선 수정 항목(Critical/High), 비활성 룰 재활성화 조건,
-신규 룰 후보(P1/P2), 자산 식별 PoC 머지 이슈, 작업 순서를 정리했습니다.
+[docs/NSM_RULES_REVIEW.md](docs/NSM_RULES_REVIEW.md) 참고 — 1차 검토 지적의 처리 결과, 룰별 검증 상태(합성 pcap·CIC-IDS2017 실측),
+남은 위험, 확대 후보(P1/P2), 작업 순서를 정리했습니다.
 
 [docs/EXCEPTION_ENGINE_REVIEW.md](docs/EXCEPTION_ENGINE_REVIEW.md) — 룰별 예외를 공통 예외 엔진(데이터·동적 로딩·사유/만료 필수)으로 옮기는 구조의 개발 검토와 단계별 계획.
 
