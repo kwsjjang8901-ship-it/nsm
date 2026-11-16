@@ -318,9 +318,16 @@ def build_stories(detections, midx, label):
 #   2) 관측된 내부 이동: 스토리 host 가 탐지 밖에서 다른 내부 host 로 한 관리 접속·인증
 INFRA_STAGES = {"Command and Control", "Exfiltration"}
 INFRA_WINDOW = 86400          # 스토리 기간 앞뒤로 같은 인프라를 찾는 시간
-INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 보고 목록을 내지 않음
+INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 본다
+INFRA_POPULAR_MIN = 5         # 또는 이 수 이상이면서
+INFRA_POPULAR_RATIO = 0.5     # 활동 중인 내부 host(리졸버 뺌)의 이 비율 이상이 붙으면 흔한 서비스(작은 망 대응)
+RESOLVER_MIN_DOMAINS = 5      # 다른 host 들의 조회 도메인이 이 수 이상일 때만 리졸버를 가린다
+RESOLVER_COVER = 0.5          # 다른 host 들이 조회한 도메인의 이 비율 이상을 자기도 조회하면 내부 리졸버로 본다
 OBS_AFTER = 3600              # 스토리 마지막 탐지 뒤 관측 이동을 보는 시간
 OBS_MAX = 40
+OBS_COMMON = 3                # 스토리 밖 내부 host 가 이 수 이상 같은 대상에 같은 접속을 하면 평소 통신으로 뺀다
+OBS_RISKY_RPC = {"svcctl", "atsvc", "itaskschedulerservice", "iwbemservices", "iwbemlevel1login",
+                 "iremotescmactivator", "winreg"}   # 원격 실행·레지스트리: 여러 host 가 해도 빼지 않는다
 OBS_SKIP_PORTS = {53, 88, 123, 389, 636, 3268, 3269}   # 디렉터리·인증·이름 해석: 일상 통신
 OBS_RPC = {"svcctl", "atsvc", "itaskschedulerservice", "winreg", "iwbemservices", "iwbemlevel1login",
            "iremotescmactivator", "drsuapi", "samr", "lsarpc", "netlogon", "efsrpc", "efsrpc2", "netdfs",
@@ -349,6 +356,35 @@ def infra_keys(d):
     return keys
 
 
+def obs_sig(k, r, to_kdc):
+    """관측 이동 행 하나를 (접속 종류, 표시 문구, 강한 신호, 원격 실행류) 로. 일상 통신이면 None."""
+    if k == "smb_mapping":
+        path = str(r.get("path") or "")
+        share = path.upper().rstrip("\\").split("\\")[-1]
+        admin = share in ("ADMIN$", "C$")
+        if to_kdc and not admin:
+            return None
+        return f"smb:{share}", f"공유 {path}", admin, admin
+    if k == "dce_rpc":
+        ep = str(r.get("endpoint") or "").lower()
+        if ep not in OBS_RPC:
+            return None
+        return f"rpc:{ep}", f"RPC {r.get('endpoint')}::{r.get('operation')}", True, ep in OBS_RISKY_RPC
+    if k == "rdp":
+        return "rdp", f"RDP {r.get('cookie') or ''}".strip(), True, False
+    if k == "ssh":
+        return "ssh", f"SSH {'성공' if r.get('auth_success') else '시도'}", True, False
+    if k == "ntlm":
+        if to_kdc:
+            return None
+        return "ntlm", f"NTLM {r.get('domainname') + chr(92) if r.get('domainname') else ''}{r.get('username') or ''}", False, False
+    if k == "flow_summary":
+        if to_kdc or r.get("resp_p") in OBS_SKIP_PORTS:
+            return None
+        return f"flow:{r.get('resp_p')}/{r.get('proto', '')}", f"{r.get('resp_p')}/{r.get('proto', '')} {r.get('conns', 0)}회", False, False
+    return None
+
+
 def meta_observe(stories, detections, midx, internal, label):
     """스토리마다 infra(같은 인프라에 붙은 내부 host)와 observed(관측된 내부 이동)를 붙인다."""
     dindex = collections.defaultdict(list)     # 목적지 키 -> [(시각, 출발지, 로그)]
@@ -371,6 +407,33 @@ def meta_observe(stories, detections, midx, internal, label):
                 ks.add(_norm_host(r["domain"]))
             for key in ks:
                 dindex[key].append((t, src, k))
+    # 내부 리졸버: 다른 host 들이 조회한 도메인 대부분을 자기도 조회하는 host(대신 조회하는 DNS 서버). 같은 인프라 목록에서 뺀다
+    doms = collections.defaultdict(set)
+    for src, lst in midx.items():
+        if internal(src):
+            for t, k, r in lst:
+                if k == "dns_summary" and r.get("domain"):
+                    doms[src].add(r["domain"])
+    resolvers = set()
+    for src, ds in doms.items():
+        rest = set().union(*(v for o, v in doms.items() if o != src))
+        if len(rest) >= RESOLVER_MIN_DOMAINS and len(ds & rest) >= RESOLVER_COVER * len(rest):
+            resolvers.add(src)
+    active = sum(1 for src in midx if internal(src) and src not in resolvers)
+    # 관측 이동의 평소 통신 판정: (출발, 대상, 접속 종류)의 처음 시각, (대상, 접속 종류)별 출발 host
+    pair_first, sig_srcs = {}, collections.defaultdict(set)
+    for src, lst in midx.items():
+        if not internal(src):
+            continue
+        for t, k, r in lst:
+            dst = r.get("id.resp_h") or r.get("resp_h")
+            if not dst or dst == src or not internal(dst):
+                continue
+            c = obs_sig(k, r, dst in kdc)
+            if c:
+                key = (src, dst, c[0])
+                pair_first[key] = min(pair_first.get(key, t), t)
+                sig_srcs[(dst, c[0])].add(src)
     c2_actors = {d["attacker"]["ip"] for d in detections
                  if d.get("attacker") and d.get("category") != "Correlated" and d.get("stages") in INFRA_STAGES}
     tt = lambda d: d.get("first") or d["ts"] or 0
@@ -394,7 +457,7 @@ def meta_observe(stories, detections, midx, internal, label):
                 hosts = {}
                 for ck in cand:
                     for t, src, k in dindex.get(ck, []):
-                        if not (t0 - INFRA_WINDOW <= t <= t1 + INFRA_WINDOW):
+                        if src in resolvers or not (t0 - INFRA_WINDOW <= t <= t1 + INFRA_WINDOW):
                             continue
                         h = hosts.setdefault(src, {"first": t, "last": t, "n": 0, "logs": set()})
                         h["first"], h["last"] = min(h["first"], t), max(h["last"], t)
@@ -402,12 +465,16 @@ def meta_observe(stories, detections, midx, internal, label):
                         h["logs"].add(k)
                 if len(hosts) <= 1:
                     continue
-                item = {"key": key, "total": len(hosts), "popular": len(hosts) > INFRA_POPULAR, "hosts": []}
-                if not item["popular"]:
-                    for ip, h in sorted(hosts.items(), key=lambda x: x[1]["first"]):
-                        status = "story" if ip in actors else "other" if ip in c2_actors else "obs"
-                        item["hosts"].append({"who": label(ip, h["first"]), "first": h["first"], "last": h["last"],
-                                              "n": h["n"], "logs": sorted(h["logs"]), "status": status})
+                n = len(hosts)
+                popular = n > INFRA_POPULAR or (n >= INFRA_POPULAR_MIN and n >= INFRA_POPULAR_RATIO * active)
+                item = {"key": key, "total": n, "popular": popular, "omitted": 0, "hosts": []}
+                for ip, h in sorted(hosts.items(), key=lambda x: x[1]["first"]):
+                    status = "story" if ip in actors else "other" if ip in c2_actors else "obs"
+                    if popular and status == "obs":
+                        item["omitted"] += 1        # 흔한 목적지: 탐지된 host 만 남기고 관측만 host 는 수만 센다
+                        continue
+                    item["hosts"].append({"who": label(ip, h["first"]), "first": h["first"], "last": h["last"],
+                                          "n": h["n"], "logs": sorted(h["logs"]), "status": status})
                 infra.append(item)
         s["infra"] = infra
         # 2) 관측된 내부 이동
@@ -427,7 +494,9 @@ def meta_observe(stories, detections, midx, internal, label):
                         t = first_contact(a, v["ip"], tt(d)) if a else tt(d)
                         reach[v["ip"]] = min(reach.get(v["ip"], t), t)
         pairs = {(d["attacker"]["ip"], v["ip"]) for d in steps if d.get("attacker") for v in d["victims"]}
+        story_hosts = set(reach) | actors
         edges = {}
+        skipped = {"prior": set(), "common": set()}
         for h, since in reach.items():
             for t, k, r in midx.get(h, ()):
                 if not (since - 600 <= t <= t1 + OBS_AFTER):
@@ -435,32 +504,16 @@ def meta_observe(stories, detections, midx, internal, label):
                 dst = r.get("id.resp_h") or r.get("resp_h")
                 if not dst or dst == h or not internal(dst) or (h, dst) in pairs:
                     continue
-                what = None
-                strong = False
-                if k == "smb_mapping":
-                    path = str(r.get("path") or "")
-                    admin = path.upper().rstrip("\\").endswith(("ADMIN$", "C$"))
-                    if dst in kdc and not admin:
-                        continue
-                    what, strong = f"공유 {path}", admin
-                elif k == "dce_rpc":
-                    ep = str(r.get("endpoint") or "")
-                    if ep.lower() not in OBS_RPC:
-                        continue
-                    what, strong = f"RPC {ep}::{r.get('operation')}", True
-                elif k == "rdp":
-                    what, strong = f"RDP {r.get('cookie') or ''}".strip(), True
-                elif k == "ssh":
-                    what, strong = f"SSH {'성공' if r.get('auth_success') else '시도'}", True
-                elif k == "ntlm":
-                    if dst in kdc:
-                        continue
-                    what = f"NTLM {r.get('domainname') + chr(92) if r.get('domainname') else ''}{r.get('username') or ''}"
-                elif k == "flow_summary":
-                    if dst in kdc or r.get("resp_p") in OBS_SKIP_PORTS:
-                        continue
-                    what = f"{r.get('resp_p')}/{r.get('proto', '')} {r.get('conns', 0)}회"
-                else:
+                c = obs_sig(k, r, dst in kdc)
+                if not c:
+                    continue
+                sig, what, strong, risky = c
+                # 평소 통신: 스토리에 들어오기 전부터 같은 대상에 같은 접속을 했거나, 스토리 밖 여러 host 가 같은 접속을 한다
+                if pair_first.get((h, dst, sig), t) < since - 600:
+                    skipped["prior"].add((h, dst))
+                    continue
+                if not risky and len(sig_srcs.get((dst, sig), set()) - story_hosts) >= OBS_COMMON:
+                    skipped["common"].add((h, dst))
                     continue
                 e = edges.setdefault((h, dst), {"first": t, "last": t, "what": [], "logs": set(), "strong": False})
                 e["first"], e["last"] = min(e["first"], t), max(e["last"], t)
@@ -468,6 +521,7 @@ def meta_observe(stories, detections, midx, internal, label):
                 e["logs"].add(k)
                 if what not in e["what"]:
                     e["what"].append(what)
+        s["observed_skip"] = {k: len(v) for k, v in skipped.items()}
         obs = sorted(edges.items(), key=lambda x: (not x[1]["strong"], x[1]["first"]))[:OBS_MAX]
         s["observed"] = [{"a": a, "b": b, "who": label(b, e["first"]), "first": e["first"], "last": e["last"],
                           "what": e["what"][:4], "logs": sorted(e["logs"]), "strong": e["strong"]}
@@ -697,7 +751,7 @@ def collect(z, assets_path, args):
             if any(w in l.lower() for w in ("warning", "error", "fatal"))][:20] if os.path.exists(stderr) else []
 
     return {
-        "pcap": args.pcap or "", "elapsed": args.elapsed, "tz": args.tz, "span": span,
+        "pcap": args.pcap or "", "elapsed": args.elapsed, "tz": args.tz, "obs_common": OBS_COMMON, "span": span,
         "start": min(ts_all) if ts_all else None, "end": max(ts_all) if ts_all else None,
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "detections": detections, "stories": stories, "stage_order": STAGES, "coverage": coverage,
@@ -933,13 +987,17 @@ function drawMeta(s){
  const inf=(s.infra||[]),ob=(s.observed||[]);let h='';
  h+=`<h3 class="sub3">같은 공격 인프라에 붙은 내부 host <span class="ob">관측</span></h3>`;
  if(!inf.length)h+='<div class="note">C2·유출 탐지의 외부 목적지에 접속한 다른 내부 host가 없습니다.</div>';
- else h+='<table><thead><tr><th>외부 목적지</th><th>내부 host</th><th>처음 ~ 마지막</th><th>기록</th><th>상태</th></tr></thead><tbody>'+inf.map(x=>x.popular?
-   `<tr><td><code>${esc(x.key)}</code></td><td colspan="4" class="mut">내부 host ${x.total}대가 접속하는 흔한 목적지라 목록을 생략했습니다</td></tr>`:
-   x.hosts.map((y,i)=>`<tr>${i?'<td></td>':`<td><code>${esc(x.key)}</code><div class="mut">${x.total}대</div></td>`}<td>${who(y.who)}</td><td class="tt2">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`).join('')).join('')+'</tbody></table>';
+ else h+='<table><thead><tr><th>외부 목적지</th><th>내부 host</th><th>처음 ~ 마지막</th><th>기록</th><th>상태</th></tr></thead><tbody>'+inf.map(x=>{
+   const head=`<td><code>${esc(x.key)}</code><div class="mut">${x.total}대${x.popular?' · 흔한 목적지':''}</div></td>`;
+   const rows=x.hosts.map((y,i)=>`<tr>${i?'<td></td>':head}<td>${who(y.who)}</td><td class="tt2">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`);
+   if(x.omitted)rows.push(`<tr>${rows.length?'<td></td>':head}<td colspan="4" class="mut">관측만 host ${x.omitted}대는 생략(내부 host 상당수가 접속하는 흔한 목적지)</td></tr>`);
+   return rows.join('')}).join('')+'</tbody></table>';
  h+=`<h3 class="sub3">탐지 밖에서 관측된 내부 이동 <span class="ob">관측</span></h3>`;
+ const sk=s.observed_skip||{},skn=(sk.prior||0)+(sk.common||0);
  if(!ob.length)h+='<div class="note">스토리 host가 탐지 밖에서 다른 내부 host로 한 관리 접속·인증이 없습니다(디렉터리·인증 서버로 가는 일상 통신은 뺌).</div>';
  else h+='<table><thead><tr><th>출발</th><th>대상</th><th>처음 ~ 마지막</th><th>관측 내용</th></tr></thead><tbody>'+ob.map(o=>{const a=(s.lanes.find(l=>l.ip===o.a))||{ip:o.a};
    return `<tr><td>${who(a)}</td><td>${who(o.who)}</td><td class="tt2">${fmtT(o.first).slice(11,16)} ~ ${fmtT(o.last).slice(11,16)}</td><td>${esc(o.what.join(' · '))}${o.strong?'':' <span class="mut">(연결·인증만)</span>'}</td></tr>`}).join('')+'</tbody></table>';
+ if(skn)h+=`<div class="note">평소 통신으로 보고 뺀 출발·대상 ${skn}쌍: 스토리에 들어오기 전부터 같은 대상에 같은 접속을 하던 ${sk.prior||0}쌍, 스토리 밖 host ${D.obs_common}대 이상이 같은 대상에 같은 접속을 하는 ${sk.common||0}쌍(원격 실행·관리 공유는 빼지 않음).</div>`;
  h+='<div class="note">관측은 uid가 아니라 출발지·대상·시간으로 맞춘 추정입니다. 같은 인프라는 스토리 기간 앞뒤 24시간, 내부 이동은 host가 스토리에 들어온 뒤부터 마지막 탐지 1시간 뒤까지 봅니다.</div>';
  el.innerHTML=h;
 }

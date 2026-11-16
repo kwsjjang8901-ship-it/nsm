@@ -2163,6 +2163,38 @@ def gen_story_meta(out):
     cap.write(os.path.join(out, "story_meta.pcap"))
 
 
+def gen_story_meta_base(out):
+    """공격 스토리 관측의 평소 통신 제외. .10 이 C2(93.184.215.190, cdn.patch-sync.net)로 비콘(탐지).
+    .10 -> .31 SSH 는 비콘 전부터 하던 접속(뺌), .10 -> .30 SSH 는 스토리 밖 .41~.43 도 하는 접속(뺌),
+    .10 -> .32 ADMIN$ 은 처음 보는 접속(남김), .10 -> .33 svcctl 은 .41~.43 도 하지만 원격 실행류라 남김.
+    .11·.41~.43 도 C2 에 1회씩 접속해 내부 host 다수가 붙는 목적지(관측만 host 는 수만). .53 은 다른 host 가
+    조회한 도메인을 대신 조회하는 내부 리졸버(같은 인프라 목록에서 뺌)."""
+    cap = Capture()
+    c2, host = "93.184.215.190", "cdn.patch-sync.net"
+    t = ssh_session(cap, "10.0.8.10", "10.0.8.31", T0 + 5)
+    for i, src in enumerate(("10.0.8.41", "10.0.8.42", "10.0.8.43")):
+        t = ssh_session(cap, src, "10.0.8.30", T0 + 20 + i * 10)
+        t = dce_calls(cap, src, "10.0.8.33", SVCCTL, [0x0f], T0 + 60 + i * 10, 49910 + i)
+    doms = {"10.0.8.41": ["news.daily-a.org", "mail.post-b.org"], "10.0.8.42": ["video.tube-c.net", "img.pic-d.net"],
+            "10.0.8.43": ["shop.buy-e.com", "pay.card-f.com"], "10.0.8.10": [host, "news.daily-a.org"],
+            "10.0.8.11": ["mail.post-b.org"]}
+    t = T0 + 100
+    for src, names in doms.items():
+        for q in names:
+            dns_exchange(cap, src, q, 0, t, "93.184.215.10")
+            dns_exchange(cap, "10.0.8.53", q, 0, t + 0.01, "93.184.215.10")
+            t += 3
+    beacon(cap, "10.0.8.10", c2, host, T0 + 1200, [30] * 13)
+    for i, src in enumerate(("10.0.8.11", "10.0.8.41", "10.0.8.42", "10.0.8.43")):
+        http_get(cap, src, c2, host, T0 + 1215 + i * 20)
+    t = ssh_session(cap, "10.0.8.10", "10.0.8.31", T0 + 1700)
+    t = ssh_session(cap, "10.0.8.10", "10.0.8.30", t + 10)
+    t = Smb2Session(cap, "10.0.8.10", "10.0.8.32", "ADMIN$", t + 30).close()
+    t = dce_calls(cap, "10.0.8.10", "10.0.8.33", SVCCTL, [0x0f], t + 30, 49920)
+    cap.tick(T0 + 2400)
+    cap.write(os.path.join(out, "story_meta_base.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2174,7 +2206,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
-              gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta]
+              gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
+              gen_story_meta_base]
 
 
 def main():
