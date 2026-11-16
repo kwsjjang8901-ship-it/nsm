@@ -313,6 +313,167 @@ def build_stories(detections, midx, label):
     return kept
 
 
+# 메타데이터 관측: 탐지 밖에서 스토리를 넓히는 두 가지(추정 조인, uid 아님)
+#   1) 같은 공격 인프라: C2·유출 탐지의 외부 목적지(IP·SNI·Host)에 접속한 다른 내부 host
+#   2) 관측된 내부 이동: 스토리 host 가 탐지 밖에서 다른 내부 host 로 한 관리 접속·인증
+INFRA_STAGES = {"Command and Control", "Exfiltration"}
+INFRA_WINDOW = 86400          # 스토리 기간 앞뒤로 같은 인프라를 찾는 시간
+INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 보고 목록을 내지 않음
+OBS_AFTER = 3600              # 스토리 마지막 탐지 뒤 관측 이동을 보는 시간
+OBS_MAX = 40
+OBS_SKIP_PORTS = {53, 88, 123, 389, 636, 3268, 3269}   # 디렉터리·인증·이름 해석: 일상 통신
+OBS_RPC = {"svcctl", "atsvc", "itaskschedulerservice", "winreg", "iwbemservices", "iwbemlevel1login",
+           "iremotescmactivator", "drsuapi", "samr", "lsarpc", "netlogon", "efsrpc", "efsrpc2", "netdfs",
+           "fileservervssagent", "srvsvc", "wkssvc", "spoolss"}
+_HOSTKEY = re.compile(r"(?:host|sni)=([^ ,]+)")
+
+
+def _norm_host(h):
+    h = str(h or "").strip().lower().rstrip(".")
+    if h.startswith("[") or h.count(":") > 1:
+        return h
+    return h.rsplit(":", 1)[0] if ":" in h else h
+
+
+def infra_keys(d):
+    """C2·유출 탐지의 외부 목적지 키(IP, 이름)."""
+    keys = set()
+    for v in d["victims"]:
+        if v.get("ext"):
+            keys.add(v["ip"])
+    for e in d.get("evidence", []):
+        for m in _HOSTKEY.findall(str(e.get("detail") or "")):
+            h = _norm_host(m)
+            if h and h != "-":
+                keys.add(h)
+    return keys
+
+
+def meta_observe(stories, detections, midx, internal, label):
+    """스토리마다 infra(같은 인프라에 붙은 내부 host)와 observed(관측된 내부 이동)를 붙인다."""
+    dindex = collections.defaultdict(list)     # 목적지 키 -> [(시각, 출발지, 로그)]
+    kdc = set()
+    for src, lst in midx.items():
+        if not internal(src):
+            continue
+        for t, k, r in lst:
+            dst = r.get("id.resp_h") or r.get("resp_h")
+            if k == "kerberos" and dst:
+                kdc.add(dst)
+            ks = set()
+            if dst and not internal(dst):
+                ks.add(dst)
+            if k == "ssl" and r.get("server_name"):
+                ks.add(_norm_host(r["server_name"]))
+            if k == "http" and r.get("host") and dst and not internal(dst):
+                ks.add(_norm_host(r["host"]))
+            if k == "dns_summary" and r.get("domain"):
+                ks.add(_norm_host(r["domain"]))
+            for key in ks:
+                dindex[key].append((t, src, k))
+    c2_actors = {d["attacker"]["ip"] for d in detections
+                 if d.get("attacker") and d.get("category") != "Correlated" and d.get("stages") in INFRA_STAGES}
+    tt = lambda d: d.get("first") or d["ts"] or 0
+    for s in stories:
+        steps = [detections[i] for i in s["steps"]]
+        t0 = min(tt(d) for d in steps) if steps else 0
+        t1 = max((d.get("last") or d["ts"] or 0) for d in steps) if steps else 0
+        actors = {d["attacker"]["ip"] for d in steps if d.get("attacker")}
+        # 1) 같은 공격 인프라
+        infra = []
+        for i in s["steps"]:
+            d = detections[i]
+            if d.get("stages") not in INFRA_STAGES or not d.get("attacker"):
+                continue
+            for key in sorted(infra_keys(d)):
+                if any(x["key"] == key for x in infra):
+                    continue
+                cand = [key]
+                if not re.match(r"^[0-9.]+$", key) and key.count(".") >= 2:
+                    cand.append(".".join(key.split(".")[-2:]))      # 등록 도메인(DNS 요약 키)
+                hosts = {}
+                for ck in cand:
+                    for t, src, k in dindex.get(ck, []):
+                        if not (t0 - INFRA_WINDOW <= t <= t1 + INFRA_WINDOW):
+                            continue
+                        h = hosts.setdefault(src, {"first": t, "last": t, "n": 0, "logs": set()})
+                        h["first"], h["last"] = min(h["first"], t), max(h["last"], t)
+                        h["n"] += 1
+                        h["logs"].add(k)
+                if len(hosts) <= 1:
+                    continue
+                item = {"key": key, "total": len(hosts), "popular": len(hosts) > INFRA_POPULAR, "hosts": []}
+                if not item["popular"]:
+                    for ip, h in sorted(hosts.items(), key=lambda x: x[1]["first"]):
+                        status = "story" if ip in actors else "other" if ip in c2_actors else "obs"
+                        item["hosts"].append({"who": label(ip, h["first"]), "first": h["first"], "last": h["last"],
+                                              "n": h["n"], "logs": sorted(h["logs"]), "status": status})
+                infra.append(item)
+        s["infra"] = infra
+        # 2) 관측된 내부 이동
+        # host 가 스토리에 들어온 시각. 집계형 확산 탐지는 창이 끝날 때 나오므로, 공격자 -> 대상의 첫 메타데이터 행이
+        # 탐지 1시간 안쪽에 있으면 그 시각을 쓴다.
+        def first_contact(a, v, td):
+            ts = [t for t, k, r in midx.get(a, ()) if (r.get("id.resp_h") or r.get("resp_h")) == v and td - 3600 <= t <= td + 60]
+            return min(ts) if ts else td
+        reach = {}
+        for d in sorted(steps, key=tt):
+            a = d["attacker"]["ip"] if d.get("attacker") else None
+            if a and internal(a) and a not in reach:
+                reach[a] = tt(d)
+            if d.get("stages") in PIVOT_STAGES:
+                for v in d["victims"]:
+                    if not v.get("ext"):
+                        t = first_contact(a, v["ip"], tt(d)) if a else tt(d)
+                        reach[v["ip"]] = min(reach.get(v["ip"], t), t)
+        pairs = {(d["attacker"]["ip"], v["ip"]) for d in steps if d.get("attacker") for v in d["victims"]}
+        edges = {}
+        for h, since in reach.items():
+            for t, k, r in midx.get(h, ()):
+                if not (since - 600 <= t <= t1 + OBS_AFTER):
+                    continue
+                dst = r.get("id.resp_h") or r.get("resp_h")
+                if not dst or dst == h or not internal(dst) or (h, dst) in pairs:
+                    continue
+                what = None
+                strong = False
+                if k == "smb_mapping":
+                    path = str(r.get("path") or "")
+                    admin = path.upper().rstrip("\\").endswith(("ADMIN$", "C$"))
+                    if dst in kdc and not admin:
+                        continue
+                    what, strong = f"공유 {path}", admin
+                elif k == "dce_rpc":
+                    ep = str(r.get("endpoint") or "")
+                    if ep.lower() not in OBS_RPC:
+                        continue
+                    what, strong = f"RPC {ep}::{r.get('operation')}", True
+                elif k == "rdp":
+                    what, strong = f"RDP {r.get('cookie') or ''}".strip(), True
+                elif k == "ssh":
+                    what, strong = f"SSH {'성공' if r.get('auth_success') else '시도'}", True
+                elif k == "ntlm":
+                    if dst in kdc:
+                        continue
+                    what = f"NTLM {r.get('domainname') + chr(92) if r.get('domainname') else ''}{r.get('username') or ''}"
+                elif k == "flow_summary":
+                    if dst in kdc or r.get("resp_p") in OBS_SKIP_PORTS:
+                        continue
+                    what = f"{r.get('resp_p')}/{r.get('proto', '')} {r.get('conns', 0)}회"
+                else:
+                    continue
+                e = edges.setdefault((h, dst), {"first": t, "last": t, "what": [], "logs": set(), "strong": False})
+                e["first"], e["last"] = min(e["first"], t), max(e["last"], t)
+                e["strong"] |= strong
+                e["logs"].add(k)
+                if what not in e["what"]:
+                    e["what"].append(what)
+        obs = sorted(edges.items(), key=lambda x: (not x[1]["strong"], x[1]["first"]))[:OBS_MAX]
+        s["observed"] = [{"a": a, "b": b, "who": label(b, e["first"]), "first": e["first"], "last": e["last"],
+                          "what": e["what"][:4], "logs": sorted(e["logs"]), "strong": e["strong"]}
+                         for (a, b), e in sorted(obs, key=lambda x: x[1]["first"])]
+
+
 def story_coverage(detections, ev):
     """빈틈 검토용: 탐지 종류별로 스토리 단계에 무엇이 붙었는지 센다(주소 원문 없이 숫자만)."""
     ev_uid = collections.defaultdict(lambda: [0, 0])
@@ -481,6 +642,7 @@ def collect(z, assets_path, args):
             tail = str(d.get("diagnosis") or "").split(".")[-1]
             d["ko"] = NOTE_KO.get(tail, tail)
     stories = build_stories(detections, midx, label)
+    meta_observe(stories, detections, midx, internal, label)
     coverage = story_coverage(detections, ev)
     for d in detections:
         d.pop("eids", None)
@@ -573,8 +735,10 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 .sus{color:var(--bad);font-weight:600}.sup{color:var(--warn)}.mut{color:var(--mut)}.num{text-align:right;font-variant-numeric:tabular-nums}
 .bar{height:8px;background:var(--acc);border-radius:4px;min-width:2px}.filter{margin:0 0 8px;padding:6px 10px;width:100%;max-width:360px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
 .note{color:var(--mut);font-size:12px;margin-top:6px}code{font-size:12px}
-:root{--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--surf:#fff}
-@media (prefers-color-scheme: dark){:root{--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--surf:#1c2027}}
+:root{--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--surf:#fff;--obs:#7a5af5;--obs-bg:#f1edff}
+@media (prefers-color-scheme: dark){:root{--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--surf:#1c2027;--obs:#a996ff;--obs-bg:#231d3d}}
+svg .lo{stroke:var(--obs);stroke-width:1.8;fill:none;stroke-dasharray:3 4}svg .lo.strong{stroke-width:2.4}svg .node.obs{fill:var(--obs-bg);stroke:var(--obs);stroke-dasharray:5 4}
+.sw.obs{background:var(--obs-bg);border:2px dashed var(--obs);width:8px;height:8px}.ob{color:var(--obs);font-weight:600}.tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;border:1px solid var(--line);white-space:nowrap}.tag.obs{color:var(--obs);border:1px dashed var(--obs);background:var(--obs-bg)}
 .st0{--c:var(--s0)}.st1{--c:var(--s1)}.st2{--c:var(--s2)}.st3{--c:var(--s3)}.st4{--c:var(--s4)}.st5{--c:var(--s5)}.st6{--c:var(--s6)}.stn{--c:var(--mut)}
 svg text{fill:var(--fg);font-size:13px}svg .mt{fill:var(--mut);font-size:12px}svg .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
 svg .node{fill:var(--card);stroke:var(--line);stroke-width:1.5}svg .node.seed{stroke:var(--fg);stroke-width:2}svg .node.ext{fill:var(--chip);stroke-dasharray:4 3}svg .node.grp{fill:var(--bg);stroke-dasharray:2 3}
@@ -613,10 +777,11 @@ svg .nb.cand circle{fill:var(--surf)}svg .nb.cand text{fill:var(--c)}
 <main>
 <section id="sum"><h2>요약</h2><div class="cards" id="cards"></div></section>
 <section id="story"><h2>공격 스토리</h2><div class="box">
- <select id="storysel"></select> <label class="note"><input type="checkbox" id="storycand" checked> 체인 밖 탐지도 보기(같은 공격자·확산 대상에서 나온 후보)</label>
+ <select id="storysel"></select> <label class="note"><input type="checkbox" id="storycand" checked> 체인 밖 탐지도 보기(같은 공격자·확산 대상에서 나온 후보)</label> <label class="note"><input type="checkbox" id="storyobs" checked> 메타데이터 관측 보기(점선)</label>
  <div class="lead" id="storylead"></div><div class="legend" id="storyleg"></div>
  <h3 class="sub3">어느 단계까지 왔나</h3><div id="storyprog" style="overflow-x:auto"></div>
  <h3 class="sub3">어디서 어디로 퍼졌나</h3><div id="storygraph" style="overflow-x:auto"></div>
+ <div id="storymeta"></div>
  <h3 class="sub3">무슨 일이 있었나</h3><ol class="nar" id="storylist"></ol>
  <details style="margin-top:8px"><summary class="note">근거 연결률(탐지 종류별, 빈틈 검토용)</summary><div id="storycov"></div></details>
  <div class="note">번호는 탐지 순서이고 세 그림에서 같습니다(그림의 번호·카드를 누르면 아래 설명으로 이동). 확산 경로의 열은 시작 공격자에서 몇 번 건너갔는지이며, 대상이 5대를 넘는 탐지는 4대만 그리고 나머지는 "외 N대"로 묶습니다. 채운 표시는 상관 규칙이 이은 확정 체인, 빈 표시·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값입니다.</div></div></section>
@@ -724,6 +889,9 @@ function drawGraph(s,steps){
    show=show.concat(rest.slice(0,Math.max(0,4-show.length)));grp=vs.filter(v=>!show.includes(v))}
   show.forEach(v=>{if(!(v.ip in depth)){depth[v.ip]=depth[a]+1;node[v.ip]=L[v.ip]||v}edges.push({x,a,b:v.ip})});
   if(grp.length){const id='grp:'+x.k;depth[id]=depth[a]+1;node[id]={ip:id,grp:grp.length,ext:grp.every(v=>v.ext)};edges.push({x,a,b:id})}});
+ const oedges=[];
+ if(document.getElementById('storyobs').checked)(s.observed||[]).forEach(o=>{if(!(o.a in depth))return;
+  if(!(o.b in depth)){depth[o.b]=depth[o.a]+1;node[o.b]=Object.assign({},o.who,{obs:true})}oedges.push(o)});
  const NW=200,NH=56,CG=130,RG=16,P=6,cols={};
  Object.keys(depth).forEach(ip=>{(cols[depth[ip]]=cols[depth[ip]]||[]).push(ip)});
  const ci=Object.keys(cols).map(Number).sort((a,b)=>a-b);
@@ -740,11 +908,15 @@ function drawGraph(s,steps){
   if(B.x>A.x){const x1=A.x+NW,y1=A.y+NH/2+off,x2=B.x,y2=B.y+NH/2+off,mx=(x1+x2)/2;d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2-5},${y2}`;lx=x2-20-(n-1)*20;ly=y2}
   else{const x1=A.x+NW/2+off,y1=B.y>A.y?A.y+A.h:A.y,x2=B.x+NW/2+off,y2=B.y>A.y?B.y:B.y+B.h,dy=B.y>A.y?28:-28;d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2-Math.sign(dy)*5}`;lx=(x1+x2)/2;ly=(y1+y2)/2}
   g.push(`<path class="ln ${cls}${cand}" d="${d}"/>`);nb.push({x:e.x,lx,ly})});
- Object.keys(pos).forEach(ip=>{const p=pos[ip],n=node[ip]||{ip},cls=ip===seed?' seed':n.grp?' grp':n.ext?' ext':'';
+ oedges.forEach(o=>{const A=pos[o.a],B=pos[o.b],key=o.a+'>'+o.b,n=pairN[key]=(pairN[key]||0)+1,off=(n-1)*14-7;let d;
+  if(B.x>A.x){const x1=A.x+NW,y1=A.y+NH/2+off,x2=B.x,y2=B.y+NH/2+off,mx=(x1+x2)/2;d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2-5},${y2}`}
+  else{const x1=A.x+NW/2+off,y1=B.y>A.y?A.y+A.h:A.y,x2=B.x+NW/2+off,y2=B.y>A.y?B.y:B.y+B.h,dy=B.y>A.y?28:-28;d=`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2-Math.sign(dy)*5}`}
+  g.push(`<path class="lo${o.strong?' strong':''}" d="${d}"><title>관측(추정) ${fmtT(o.first).slice(11,16)}~${fmtT(o.last).slice(11,16)} · ${o.what.join(', ')}</title></path>`)});
+ Object.keys(pos).forEach(ip=>{const p=pos[ip],n=node[ip]||{ip},cls=ip===seed?' seed':n.grp?' grp':n.obs?' obs':n.ext?' ext':'';
   g.push(`<rect class="node${cls}" x="${p.x}" y="${p.y}" width="${NW}" height="${p.h}" rx="8"/>`);
   if(n.grp)g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">외 ${n.grp}대</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${n.ext?'외부':'내부'} 대상(번호의 탐지 참고)</text>`);
   else{const l=L[ip]||n,nm=l.ext?ip:(l.name||l.asset||ip);
-   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,30))}</text>`)}
+   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',n.obs?'관측만':(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,30))}</text>`)}
   if(ip===seed)g.push(`<text class="mt" x="${p.x}" y="${p.y-6}">시작</text>`);
   const lc=local[ip]||[],shown=lc.length>BMAX?lc.slice(0,BMAX-1):lc;
   shown.forEach((x,i)=>nb.push({x,lx:p.x+21+(i%BPR)*22,ly:p.y+NH+8+Math.floor(i/BPR)*24}));
@@ -752,6 +924,24 @@ function drawGraph(s,steps){
  nb.forEach(o=>g.push(`<g class="nb st${stIdx(o.x.d.stages)}${o.x.c?'':' cand'}" data-k="${o.x.k}"><circle cx="${o.lx}" cy="${o.ly}" r="9"/><text x="${o.lx}" y="${o.ly+3.6}" text-anchor="middle">${o.x.k}</text></g>`));
  const el=document.getElementById('storygraph');el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="확산 경로">${g.join('')}</svg>`;
  el.querySelectorAll('g.nb').forEach(c=>{const x=steps.find(y=>y.k===+c.dataset.k);c.onclick=()=>jump(x.k);c.onmousemove=e=>showTip(e,tipHtml(x));c.onmouseleave=hideTip});
+}
+// 메타데이터 관측 패널: 같은 공격 인프라에 붙은 내부 host, 탐지 밖 내부 이동
+function drawMeta(s){
+ const el=document.getElementById('storymeta');
+ if(!document.getElementById('storyobs').checked){el.innerHTML='';return}
+ const ST2={story:'<span class="tag">이 스토리 탐지</span>',other:'<span class="tag">다른 탐지</span>',obs:'<span class="tag obs">관측만</span>'};
+ const inf=(s.infra||[]),ob=(s.observed||[]);let h='';
+ h+=`<h3 class="sub3">같은 공격 인프라에 붙은 내부 host <span class="ob">관측</span></h3>`;
+ if(!inf.length)h+='<div class="note">C2·유출 탐지의 외부 목적지에 접속한 다른 내부 host가 없습니다.</div>';
+ else h+='<table><thead><tr><th>외부 목적지</th><th>내부 host</th><th>처음 ~ 마지막</th><th>기록</th><th>상태</th></tr></thead><tbody>'+inf.map(x=>x.popular?
+   `<tr><td><code>${esc(x.key)}</code></td><td colspan="4" class="mut">내부 host ${x.total}대가 접속하는 흔한 목적지라 목록을 생략했습니다</td></tr>`:
+   x.hosts.map((y,i)=>`<tr>${i?'<td></td>':`<td><code>${esc(x.key)}</code><div class="mut">${x.total}대</div></td>`}<td>${who(y.who)}</td><td class="num">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`).join('')).join('')+'</tbody></table>';
+ h+=`<h3 class="sub3">탐지 밖에서 관측된 내부 이동 <span class="ob">관측</span></h3>`;
+ if(!ob.length)h+='<div class="note">스토리 host가 탐지 밖에서 다른 내부 host로 한 관리 접속·인증이 없습니다(디렉터리·인증 서버로 가는 일상 통신은 뺌).</div>';
+ else h+='<table><thead><tr><th>출발</th><th>대상</th><th>처음 ~ 마지막</th><th>관측 내용</th></tr></thead><tbody>'+ob.map(o=>{const a=(s.lanes.find(l=>l.ip===o.a))||{ip:o.a};
+   return `<tr><td>${who(a)}</td><td>${who(o.who)}</td><td class="num">${fmtT(o.first).slice(11,16)} ~ ${fmtT(o.last).slice(11,16)}</td><td>${esc(o.what.join(' · '))}${o.strong?'':' <span class="mut">(연결·인증만)</span>'}</td></tr>`}).join('')+'</tbody></table>';
+ h+='<div class="note">관측은 uid가 아니라 출발지·대상·시간으로 맞춘 추정입니다. 같은 인프라는 스토리 기간 앞뒤 24시간, 내부 이동은 host가 스토리에 들어온 뒤부터 마지막 탐지 1시간 뒤까지 봅니다.</div>';
+ el.innerHTML=h;
 }
 // 내러티브: 번호·시각·문장·근거, 10분 넘는 공백 표시
 function drawNarr(steps){
@@ -771,20 +961,23 @@ function drawStory(){
  const s=ST[+sel.value||0],conf=new Set(s.confirmed),showC=document.getElementById('storycand').checked;
  const steps=s.steps.filter(j=>showC||!conf.size||conf.has(j)).map((j,i)=>({j,k:i+1,d:D.detections[j],c:conf.has(j)}));
  const stUsed=[...new Set(steps.map(x=>x.d.stages))].sort((a,b)=>stIdx(a)-stIdx(b));
- leg.innerHTML=stUsed.map(x=>`<span class="st${stIdx(x)}"><span class="sw"></span>${esc(STK[x]||x)}</span>`).join('')+'<span class="stn" style="margin-left:8px"><span class="sw"></span>확정 체인</span><span class="stn"><span class="sw cand"></span>체인 밖(후보)</span>';
+ leg.innerHTML=stUsed.map(x=>`<span class="st${stIdx(x)}"><span class="sw"></span>${esc(STK[x]||x)}</span>`).join('')+'<span class="stn" style="margin-left:8px"><span class="sw"></span>확정 체인</span><span class="stn"><span class="sw cand"></span>체인 밖(후보)</span>'+(document.getElementById('storyobs').checked?'<span><span class="sw obs"></span>메타데이터 관측(추정)</span>':'');
  const t0=steps.length?(steps[0].d.first||steps[0].d.ts):0,t1=steps.length?Math.max(...steps.map(x=>x.d.last||x.d.ts)):0;
  const used=new Set();steps.forEach(x=>{if(x.d.attacker)used.add(x.d.attacker.ip);x.d.victims.forEach(v=>used.add(v.ip))});
  const lanes=s.lanes.filter(l=>used.has(l.ip)),intH=lanes.filter(l=>!l.ext).length,extH=lanes.filter(l=>l.ext).length;
  lead.innerHTML=`<b>${esc(whoTxt(s.lanes[0]))}</b>에서 시작해 ${fmtT(t0)}부터 약 ${dur(Math.max(0,t1-t0))} 동안 ${stUsed.map(x=>STK[x]||x).join(' → ')} (탐지 ${steps.length}건, 관련 내부 host ${intH}대, 외부 ${extH}곳).`+
   (s.chains.length?` <span class="mut">상관 체인 ${s.chains.length}개: <code>${esc(s.chains.slice(-1)[0])}</code>${s.chains.length>1?' 등':''}</span>`:' <span class="mut">상관 규칙이 이은 체인은 없습니다.</span>');
- drawProg(steps);drawGraph(s,steps);drawNarr(steps);
+ if(document.getElementById('storyobs').checked){const ob=s.observed||[],only=new Set(ob.map(o=>o.b).filter(b=>!used.has(b))),inf=new Set();
+  (s.infra||[]).forEach(x=>(x.hosts||[]).forEach(y=>{if(y.status!=='story')inf.add(y.who.ip)}));
+  if(ob.length||inf.size)lead.innerHTML+=` <span class="ob">관측: 탐지 밖 내부 이동 ${ob.length}건(관측으로만 드러난 host ${only.size}대), 같은 인프라에 붙은 다른 host ${inf.size}대.</span>`}
+ drawProg(steps);drawGraph(s,steps);drawMeta(s);drawNarr(steps);
 }
 table('storycov',[['단계',r=>esc(STK[r.stage]||r.stage),r=>stIdx(r.stage)],['탐지',r=>esc(r.ko),r=>r.ko],['건수',r=>r.n,r=>r.n,'num'],
  ['근거 내용',r=>`${r.facts}/${r.n}`,r=>r.facts/r.n,'num'],['근거 계정',r=>`${r.eacct}/${r.n}`,r=>r.eacct/r.n,'num'],
  ['추정 근거',r=>`${r.how}/${r.n}`,r=>r.how/r.n,'num'],['추정 계정',r=>`${r.acct}/${r.n}`,r=>r.acct/r.n,'num'],
  ['외부 대상 이름(SNI·Host)',r=>r.ext?`${r.ext_named}/${r.ext}`:'-',r=>r.ext?r.ext_named/r.ext:-1,'num'],
  ['근거 행 uid',r=>r.ev?`${r.ev_uid}/${r.ev}`:'-',r=>r.ev?r.ev_uid/r.ev:-1,'num']],D.coverage);
-sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;drawStory();
+sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;document.getElementById('storyobs').onchange=drawStory;drawStory();
 // 자산
 const roleChips=a=>a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join('');
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
