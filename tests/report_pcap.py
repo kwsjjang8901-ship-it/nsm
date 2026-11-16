@@ -845,9 +845,9 @@ svg .nb.cand circle{fill:var(--surf)}svg .nb.cand text{fill:var(--c)}
 .nar .tt{font-weight:600}.nar .k{font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-weight:400;margin-left:4px}
 .nar .how{font-size:12px;color:var(--mut);overflow-wrap:anywhere}.nar .how b{color:var(--fg);font-weight:600}
 .nar li.ob .tt{color:var(--obs);font-weight:500}.nar .od{position:relative;z-index:1;margin-top:5px;width:9px;height:9px;border-radius:50%;background:var(--obs-bg);border:2px dashed var(--obs);box-shadow:0 0 0 3px var(--card)}
-.ssum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 4px}
-.ssum div{background:var(--card);padding:8px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}.ssum b{font-size:17px;font-variant-numeric:tabular-nums;line-height:1.3;overflow-wrap:anywhere}
-.ssum span{font-size:12px;color:var(--mut)}.ssum div:first-child{grid-column:span 2}.ssum .o b{color:var(--obs)}
+.ssum{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 4px}
+.ssum div{flex:1 1 140px;background:var(--card);padding:8px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}.ssum b{font-size:17px;font-variant-numeric:tabular-nums;line-height:1.3;overflow-wrap:anywhere}
+.ssum span{font-size:12px;color:var(--mut)}.ssum div:first-child{flex:2 1 260px}.ssum .o b{color:var(--obs)}
 .nar li.gapr{display:grid;font-size:12px;color:var(--mut);font-style:italic}.nar li.gapr .sp::before{background:none;border-left:2px dotted var(--line)}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;max-width:420px;box-shadow:0 4px 14px rgba(0,0,0,.15);display:none}
 </style></head><body>
