@@ -423,10 +423,16 @@ def meta_observe(stories, detections, midx, internal, label, sig=()):
         rest = set().union(*(v for o, v in doms.items() if o != src)) - {"(other)"}
         if len(rest) >= RESOLVER_MIN_DOMAINS and len(ds & rest) >= RESOLVER_COVER * len(rest):
             resolvers.add(src)
-    # 흔한 목적지 비율의 분모: 외부 주소로 접속한 내부 host(이름 조회만 하는 IPv6 링크 로컬 등은 세지 않음)
+    # 흔한 목적지 비율의 분모: 외부 유니캐스트 주소로 접속한 내부 host. 멀티캐스트·브로드캐스트(mDNS·SSDP·LLMNR 등)는
+    # 사설 대역이 아니어서 외부로 보이지만 접속이 아니다(IPv6 링크 로컬 주소가 이것만 보내 분모가 두 배가 됨)
+    def ext_unicast(ip):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        return not (internal(ip) or a.is_multicast or a.is_unspecified or a.is_reserved or a.is_link_local)
     active = len({src for src, lst in midx.items() if internal(src)
-                  and any((r.get("id.resp_h") or r.get("resp_h")) and not internal(r.get("id.resp_h") or r.get("resp_h"))
-                          for t, k, r in lst)})
+                  and any(ext_unicast(r.get("id.resp_h") or r.get("resp_h") or "") for t, k, r in lst)})
     # 관측 이동의 평소 통신 판정: (출발, 대상, 접속 종류)의 처음 시각, (대상, 접속 종류)별 출발 host
     pair_first, sig_srcs = {}, collections.defaultdict(set)
     for src, lst in midx.items():
