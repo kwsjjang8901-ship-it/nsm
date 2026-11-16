@@ -2242,6 +2242,30 @@ def gen_story_meta_active(out):
     cap.write(os.path.join(out, "story_meta_active.pcap"))
 
 
+def gen_report_assets(out):
+    """통합 리포트 자산 표(자산 신호 모드)의 MAC·OS·서비스. .10 은 Windows 브라우저 User-Agent 로 외부 HTTP(OS 힌트),
+    .20 은 445/tcp 에 응답(서비스), 라우터 .1 과 그 뒤의 10.0.12.5 는 같은 MAC(라우터 추정으로 표시)."""
+    router_mac = "02:00:0a:00:0b:01"
+
+    class MacCapture(Capture):
+        def l3(self, src, dst):
+            m = {"10.0.12.5": router_mac}
+            return Ether(src=m.get(src, mac_of(src)), dst=m.get(dst, mac_of(dst))) / IP(src=src, dst=dst)
+
+    cap = MacCapture()
+    s = Tcp(cap, "10.0.11.10", "93.184.215.40", 80)
+    t = s.handshake(T0 + 10)
+    t = s.client_send(b"GET / HTTP/1.1\r\nHost: www.plain-news.org\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      b"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36\r\n\r\n", t)
+    t = s.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: text/plain\r\n\r\nok", t + 0.05)
+    t = s.close(t + 0.01)
+    t = tcp_established(cap, "10.0.11.10", "10.0.11.20", 445, t + 5)
+    t = tcp_established(cap, "10.0.12.5", "10.0.11.20", 445, t + 5)
+    t = tcp_established(cap, "10.0.11.10", "10.0.11.1", 22, t + 5)
+    cap.tick(T0 + 300)
+    cap.write(os.path.join(out, "report_assets.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2255,7 +2279,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
-              gen_story_meta_active]
+              gen_story_meta_active, gen_report_assets]
 
 
 def main():
