@@ -320,7 +320,7 @@ INFRA_STAGES = {"Command and Control", "Exfiltration"}
 INFRA_WINDOW = 86400          # 스토리 기간 앞뒤로 같은 인프라를 찾는 시간
 INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 본다
 INFRA_POPULAR_MIN = 5         # 또는 이 수 이상이면서
-INFRA_POPULAR_RATIO = 0.5     # 활동 중인 내부 host(리졸버 뺌)의 이 비율 이상이 붙으면 흔한 서비스(작은 망 대응)
+INFRA_POPULAR_RATIO = 0.5     # 외부로 접속한 내부 host 의 이 비율 이상이 붙으면 흔한 서비스(작은 망 대응)
 RESOLVER_MIN_DOMAINS = 5      # 다른 host 들의 조회 도메인이 이 수 이상일 때만 리졸버를 가린다
 RESOLVER_COVER = 0.5          # 다른 host 들이 조회한 도메인의 이 비율 이상을 자기도 조회하면 내부 리졸버로 본다
 OBS_AFTER = 3600              # 스토리 마지막 탐지 뒤 관측 이동을 보는 시간
@@ -385,7 +385,7 @@ def obs_sig(k, r, to_kdc):
     return None
 
 
-def meta_observe(stories, detections, midx, internal, label):
+def meta_observe(stories, detections, midx, internal, label, sig=()):
     """스토리마다 infra(같은 인프라에 붙은 내부 host)와 observed(관측된 내부 이동)를 붙인다."""
     dindex = collections.defaultdict(list)     # 목적지 키 -> [(시각, 출발지, 로그)]
     kdc = set()
@@ -414,12 +414,19 @@ def meta_observe(stories, detections, midx, internal, label):
             for t, k, r in lst:
                 if k == "dns_summary" and r.get("domain"):
                     doms[src].add(r["domain"])
-    resolvers = set()
+    # 자산 신호에서 DNS 를 제공한 IP(service udp/53·tcp/53)는 그대로 내부 DNS 서버로 본다. 도메인 기준은
+    # 메타데이터의 출발지당 시간당 도메인 상한(meta_dns_max_domains_per_src)에 잘리는 큰 리졸버를 놓칠 수 있다
+    resolvers = {x.get("ip") for x in sig if x.get("signal") == "service"
+                 and re.match(r"^(udp|tcp)/53(/|$)", str(x.get("value") or ""))}
     for src, ds in doms.items():
-        rest = set().union(*(v for o, v in doms.items() if o != src))
+        ds = ds - {"(other)"}
+        rest = set().union(*(v for o, v in doms.items() if o != src)) - {"(other)"}
         if len(rest) >= RESOLVER_MIN_DOMAINS and len(ds & rest) >= RESOLVER_COVER * len(rest):
             resolvers.add(src)
-    active = sum(1 for src in midx if internal(src) and src not in resolvers)
+    # 흔한 목적지 비율의 분모: 외부 주소로 접속한 내부 host(이름 조회만 하는 IPv6 링크 로컬 등은 세지 않음)
+    active = len({src for src, lst in midx.items() if internal(src)
+                  and any((r.get("id.resp_h") or r.get("resp_h")) and not internal(r.get("id.resp_h") or r.get("resp_h"))
+                          for t, k, r in lst)})
     # 관측 이동의 평소 통신 판정: (출발, 대상, 접속 종류)의 처음 시각, (대상, 접속 종류)별 출발 host
     pair_first, sig_srcs = {}, collections.defaultdict(set)
     for src, lst in midx.items():
@@ -457,7 +464,7 @@ def meta_observe(stories, detections, midx, internal, label):
                 hosts = {}
                 for ck in cand:
                     for t, src, k in dindex.get(ck, []):
-                        if src in resolvers or not (t0 - INFRA_WINDOW <= t <= t1 + INFRA_WINDOW):
+                        if (src in resolvers and k == "dns_summary") or not (t0 - INFRA_WINDOW <= t <= t1 + INFRA_WINDOW):
                             continue
                         h = hosts.setdefault(src, {"first": t, "last": t, "n": 0, "logs": set()})
                         h["first"], h["last"] = min(h["first"], t), max(h["last"], t)
@@ -704,7 +711,7 @@ def collect(z, assets_path, args):
             tail = str(d.get("diagnosis") or "").split(".")[-1]
             d["ko"] = NOTE_KO.get(tail, tail)
     stories = build_stories(detections, midx, label)
-    meta_observe(stories, detections, midx, internal, label)
+    meta_observe(stories, detections, midx, internal, label, sig)
     coverage = story_coverage(detections, ev)
     for d in detections:
         d.pop("eids", None)
