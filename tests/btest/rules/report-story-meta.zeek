@@ -14,6 +14,13 @@ obs = {(o["a"], o["b"]): o for o in s["observed"]}
 assert set(obs) == {("10.0.7.10", "10.0.7.24"), ("10.0.7.21", "10.0.7.25")}, list(obs)
 assert any("ADMIN$" in w for w in obs[("10.0.7.10", "10.0.7.24")]["what"]), obs
 assert obs[("10.0.7.21", "10.0.7.25")]["what"] == ["RPC svcctl::OpenSCManagerW"], obs
+# 요약 칸·내러티브용: C2 이름이 외부 대상 키에 있고, WinRM 확산(집계 창 끝에 탐지)은 첫 접속 추정 시각이 탐지보다 이르다
+assert "cdn.update-check.net" in s["ext_keys"], s["ext_keys"]
+winrm = [i for i in s["steps"] if d["detections"][i]["stages"] == "Lateral Movement"]
+assert len(winrm) == 1 and str(winrm[0]) in s["est_first"], s["est_first"]
+w = d["detections"][winrm[0]]
+assert s["est_first"][str(winrm[0])] < (w.get("first") or w["ts"]), (s["est_first"], w.get("first"), w["ts"])
+assert s["est_first"][str(winrm[0])] < min(o["first"] for o in s["observed"])
 # 탐지로 이미 이어진 확산(.10 -> .21~.23)은 관측으로 다시 내지 않는다
 assert not any(a == "10.0.7.10" and b in ("10.0.7.21", "10.0.7.22", "10.0.7.23") for a, b in obs)
 print("ok")
