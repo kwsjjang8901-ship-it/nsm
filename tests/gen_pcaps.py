@@ -2195,6 +2195,31 @@ def gen_story_meta_base(out):
     cap.write(os.path.join(out, "story_meta_base.pcap"))
 
 
+def gen_story_meta_resolver(out):
+    """공격 스토리 같은 인프라의 내부 DNS 서버 제외(자산 신호 service udp/53). .10 이 C2(93.184.215.191,
+    cdn.relay-node.net)로 비콘(탐지), .11 은 C2 에 1회 접속(관측만). DNS_SERVER 는 .10·.11·.41~.43 의 질의에
+    응답하고(서비스 신호) C2 이름 하나만 상위(10.0.9.1)에 대신 조회해, 도메인 기준(다른 host 조회의 절반 이상)으로는
+    리졸버로 보이지 않는다. 그 이름 조회 기록만 빼고, 같은 서버가 C2 에 직접 한 HTTP 접속은 남긴다."""
+    cap = Capture()
+    c2, host = "93.184.215.191", "cdn.relay-node.net"
+    t = T0 + 10
+    names = {"10.0.9.41": ["a.blue-one.org", "b.green-two.org"], "10.0.9.42": ["c.red-three.net", "d.gold-four.net"],
+             "10.0.9.43": ["e.gray-five.com", "f.pink-six.com"], "10.0.9.10": [host], "10.0.9.11": [host]}
+    for src, qs in names.items():
+        for q in qs:
+            dns_exchange(cap, src, q, 0, t, c2 if q == host else "93.184.215.20")
+            t += 3
+    qid = RNG.randint(1, 65535)
+    cap.add(cap.l3(DNS_SERVER, "10.0.9.1") / UDP(sport=40053, dport=53) / DNS(id=qid, rd=1, qd=DNSQR(qname=host)), t)
+    cap.add(cap.l3("10.0.9.1", DNS_SERVER) / UDP(sport=53, dport=40053) / DNS(
+        id=qid, qr=1, rd=1, ra=1, qd=DNSQR(qname=host), an=DNSRR(rrname=host, type="A", ttl=60, rdata=c2)), t + 0.002)
+    beacon(cap, "10.0.9.10", c2, host, T0 + 300, [30] * 13)
+    http_get(cap, "10.0.9.11", c2, host, T0 + 320)
+    http_get(cap, DNS_SERVER, c2, host, T0 + 340)
+    cap.tick(T0 + 1200)
+    cap.write(os.path.join(out, "story_meta_resolver.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2207,7 +2232,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
-              gen_story_meta_base]
+              gen_story_meta_base, gen_story_meta_resolver]
 
 
 def main():
