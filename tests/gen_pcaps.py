@@ -2141,6 +2141,28 @@ def gen_ad_attacks(out):
     cap.write(os.path.join(out, "ad_attacks.pcap"))
 
 
+def gen_story_meta(out):
+    """공격 스토리 메타데이터 관측. .10 이 C2(93.184.215.181, cdn.update-check.net)로 30초 주기 비콘(탐지)·WinRM 3대
+    확산(탐지, .21~.23) 뒤 .24 의 ADMIN$ 1대만 접근(확산 임계 미만, 관측). 확산 대상 .21 이 .25 에 svcctl
+    OpenSCManagerW(조회, 탐지 아님, 관측). .11 은 같은 C2 에 3회만 접속(비콘 미탐, 같은 인프라 관측).
+    .12·.13 은 흔한 사이트 www.example.com 접속(비교용, C2 와 무관)."""
+    cap = Capture()
+    c2, host = "93.184.215.181", "cdn.update-check.net"
+    beacon(cap, "10.0.7.10", c2, host, T0 + 10, [30] * 13)
+    t = T0 + 40
+    for _ in range(3):
+        t = http_get(cap, "10.0.7.11", c2, host, t + 37)
+    t = T0 + 500
+    for dst in ("10.0.7.21", "10.0.7.22", "10.0.7.23"):
+        t = winrm_session(cap, "10.0.7.10", dst, t + 2)
+    t = Smb2Session(cap, "10.0.7.10", "10.0.7.24", "ADMIN$", t + 30).close()
+    t = dce_calls(cap, "10.0.7.21", "10.0.7.25", SVCCTL, [0x0f], t + 30, 49900)
+    for src in ("10.0.7.12", "10.0.7.13"):
+        t = http_get(cap, src, "93.184.215.182", "www.example.com", t + 5)
+    cap.tick(T0 + 1500)
+    cap.write(os.path.join(out, "story_meta.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2152,7 +2174,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_bruteforce, gen_heartbleed, gen_dns_elb, gen_web_xss_bf,
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
-              gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks]
+              gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta]
 
 
 def main():
