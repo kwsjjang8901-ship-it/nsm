@@ -317,6 +317,7 @@ def build_stories(detections, midx, label):
 #   1) 같은 공격 인프라: C2·유출 탐지의 외부 목적지(IP·SNI·Host)에 접속한 다른 내부 host
 #   2) 관측된 내부 이동: 스토리 host 가 탐지 밖에서 다른 내부 host 로 한 관리 접속·인증
 INFRA_STAGES = {"Command and Control", "Exfiltration"}
+SHARED_MAC_IPS = 2            # 자산 신호 모드: 이 수 이상의 IPv4 가 같은 MAC 이면 라우터(뒤 주소 포함)로 표시. IPv6 링크 로컬은 같은 host 라 세지 않음
 INFRA_WINDOW = 86400          # 스토리 기간 앞뒤로 같은 인프라를 찾는 시간
 INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 본다
 INFRA_POPULAR_MIN = 5         # 또는 이 수 이상이면서
@@ -734,21 +735,40 @@ def collect(z, assets_path, args):
             })
         asset_rows.sort(key=lambda r: (-r["detections"], -r["signals"]))
     else:
-        per = collections.defaultdict(lambda: {"signals": collections.Counter(), "names": set()})
+        # 리졸버 없이 신호 값을 그대로 참고값으로: MAC(여러 IP 가 같은 MAC 이면 게이트웨이로 표시), OS 힌트(신뢰도·횟수 순
+        # 첫 값), 역할 대신 응답한 서비스(service 신호). 역할 판정은 리졸버가 서비스 조합으로 한다.
+        per = collections.defaultdict(lambda: {"signals": collections.Counter(), "names": set(), "macs": collections.Counter(),
+                                               "os": collections.Counter(), "svc": collections.Counter()})
+        mac_ips = collections.defaultdict(set)
         for s in sig:
             p = per[s.get("ip")]
-            p["signals"][s.get("signal")] += 1
-            if s.get("signal") in ("hostname", "machine_account", "fqdn"):
-                p["names"].add(str(s.get("value")))
+            k, v = s.get("signal"), s.get("value")
+            p["signals"][k] += 1
+            if k in ("hostname", "machine_account", "fqdn"):
+                p["names"].add(str(v))
+            elif k == "mac" and v:
+                p["macs"][str(v)] += 1
+                if ":" not in str(s.get("ip")):
+                    mac_ips[str(v)].add(s.get("ip"))
+            elif k == "os_hint" and v:
+                p["os"][(int(s.get("confidence") or 0), str(v))] += 1
+            elif k == "service" and v:
+                p["svc"][str(v)] += 1
+        def mac_text(m):
+            n = len(mac_ips[m])
+            return f"{m} (IPv4 {n}개 공유, 라우터 추정)" if n >= SHARED_MAC_IPS else m
+        def best_os(c):
+            return max(c.items(), key=lambda x: (x[0][0], x[1]))[0][1] if c else ""
         det_ips = collections.Counter()
         for d in detections:
             for who in [d["attacker"]] + d["victims"]:
                 if who:
                     det_ips[who["ip"]] += 1
         for ip, p in per.items():
-            asset_rows.append({"id": "", "name": ", ".join(sorted(p["names"]))[:80], "key": "", "ips": [ip], "macs": [],
-                               "os": "", "roles": [], "users": [], "signals": sum(p["signals"].values()),
-                               "detections": det_ips.get(ip, 0)})
+            asset_rows.append({"id": "", "name": ", ".join(sorted(p["names"]))[:80], "key": "", "ips": [ip],
+                               "macs": [mac_text(m) for m, _ in p["macs"].most_common(2)], "os": best_os(p["os"]),
+                               "roles": [], "services": sorted(p["svc"], key=lambda x: (-p["svc"][x], x))[:6], "users": [],
+                               "signals": sum(p["signals"].values()), "detections": det_ips.get(ip, 0)})
         asset_rows.sort(key=lambda r: (-r["detections"], -r["signals"]))
 
     # 전송량
@@ -1097,13 +1117,13 @@ table('storycov',[['단계',r=>esc(STK[r.stage]||r.stage),r=>stIdx(r.stage)],['�
  ['근거 행 uid',r=>r.ev?`${r.ev_uid}/${r.ev}`:'-',r=>r.ev?r.ev_uid/r.ev:-1,'num']],D.coverage);
 sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;document.getElementById('storyobs').onchange=drawStory;drawStory();
 // 자산
-const roleChips=a=>a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join('');
+const roleChips=a=>a.roles.length?a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join(''):(a.services||[]).map(r=>`<span class="chip guess" title="응답한 서비스(역할 판정 전)">${esc(r)}</span>`).join('');
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
  ['식별 키',a=>esc(a.key),a=>a.key],['IP',a=>a.ips.map(esc).join('<br>'),a=>a.ips.join()],['MAC',a=>a.macs.map(esc).join('<br>'),a=>a.macs.join()],
- ['OS',a=>esc(a.os),a=>a.os],['역할',roleChips,a=>a.roles.join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
+ ['OS',a=>esc(a.os),a=>a.os],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
 document.getElementById('asnote').innerHTML=D.asset_mode==='resolver'
  ?`자산 판정은 claudtest2 리졸버 결과입니다. 근거 신호 타임라인·식별 품질은 ${D.asset_report?`<a href="${esc(D.asset_report)}">자산 리포트</a>`:'자산 리포트'}를 보세요.`
- :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶습니다). 신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('');
+ :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 응답한 서비스(기울임)를 보입니다. 여러 IPv4가 같은 MAC이면 라우터(또는 라우터 뒤 주소)로 표시합니다. 신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('');
 // 전송량
 const mm=Math.max(1,...D.meta.map(m=>m.bytes));const mt=D.meta.reduce((a,b)=>a+b.bytes,0);
 document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="num">바이트</th><th></th></tr>
