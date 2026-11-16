@@ -2220,6 +2220,28 @@ def gen_story_meta_resolver(out):
     cap.write(os.path.join(out, "story_meta_resolver.pcap"))
 
 
+def gen_story_meta_active(out):
+    """공격 스토리 같은 인프라의 흔한 목적지 분모. 외부로 접속한 내부 host 는 .10~.15 의 6대이고, C2(93.184.215.192,
+    cdn.sync-mirror.net)에 그중 5대가 붙는다(.10 비콘 탐지, .11~.14 1회씩). IPv6 링크 로컬 주소 6개는 SSDP·mDNS
+    멀티캐스트(ff02::c, ff02::fb)만 보낸다. Zeek 는 IPv6 멀티캐스트를 사설 대역으로 보지 않아 흐름 요약(경계)에 남지만
+    접속이 아니므로 분모에 넣지 않는다(넣으면 12대 중 5대라 흔한 목적지로 보지 않게 됨)."""
+    from scapy.all import IPv6
+    cap = Capture()
+    c2, host = "93.184.215.192", "cdn.sync-mirror.net"
+    for i in range(51, 57):
+        src = "fe80::10:%x" % i
+        eth = Ether(src="02:00:00:00:10:%02x" % i, dst="33:33:00:00:00:0c")
+        cap.add(eth / IPv6(src=src, dst="ff02::c") / UDP(sport=50000 + i, dport=1900) / Raw(b"M-SEARCH * HTTP/1.1\r\nHOST: [ff02::c]:1900\r\n\r\n"), T0 + i)
+        eth = Ether(src="02:00:00:00:10:%02x" % i, dst="33:33:00:00:00:fb")
+        cap.add(eth / IPv6(src=src, dst="ff02::fb") / UDP(sport=5353, dport=5353) / DNS(qd=DNSQR(qname="_ipp._tcp.local", qtype="PTR")), T0 + i + 0.5)
+    beacon(cap, "10.0.10.10", c2, host, T0 + 300, [30] * 13)
+    for i, src in enumerate(("10.0.10.11", "10.0.10.12", "10.0.10.13", "10.0.10.14")):
+        http_get(cap, src, c2, host, T0 + 320 + i * 20)
+    http_get(cap, "10.0.10.15", "93.184.215.30", "www.plain-site.org", T0 + 420)
+    cap.tick(T0 + 1200)
+    cap.write(os.path.join(out, "story_meta_active.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2232,7 +2254,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_killchain_story, gen_heartbleed_long,
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
-              gen_story_meta_base, gen_story_meta_resolver]
+              gen_story_meta_base, gen_story_meta_resolver,
+              gen_story_meta_active]
 
 
 def main():
