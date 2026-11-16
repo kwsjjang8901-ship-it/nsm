@@ -738,7 +738,7 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--chip)}tr.det td{backgroun
 :root{--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--surf:#fff;--obs:#7a5af5;--obs-bg:#f1edff}
 @media (prefers-color-scheme: dark){:root{--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--surf:#1c2027;--obs:#a996ff;--obs-bg:#231d3d}}
 svg .lo{stroke:var(--obs);stroke-width:1.8;fill:none;stroke-dasharray:3 4}svg .lo.strong{stroke-width:2.4}svg .node.obs{fill:var(--obs-bg);stroke:var(--obs);stroke-dasharray:5 4}
-.sw.obs{background:var(--obs-bg);border:2px dashed var(--obs);width:8px;height:8px}.ob{color:var(--obs);font-weight:600}.tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;border:1px solid var(--line);white-space:nowrap}.tag.obs{color:var(--obs);border:1px dashed var(--obs);background:var(--obs-bg)}
+.tt2{white-space:nowrap;font-variant-numeric:tabular-nums}.sw.obs{background:var(--obs-bg);border:2px dashed var(--obs);width:8px;height:8px}.ob{color:var(--obs);font-weight:600}.tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;border:1px solid var(--line);white-space:nowrap}.tag.obs{color:var(--obs);border:1px dashed var(--obs);background:var(--obs-bg)}
 .st0{--c:var(--s0)}.st1{--c:var(--s1)}.st2{--c:var(--s2)}.st3{--c:var(--s3)}.st4{--c:var(--s4)}.st5{--c:var(--s5)}.st6{--c:var(--s6)}.stn{--c:var(--mut)}
 svg text{fill:var(--fg);font-size:13px}svg .mt{fill:var(--mut);font-size:12px}svg .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
 svg .node{fill:var(--card);stroke:var(--line);stroke-width:1.5}svg .node.seed{stroke:var(--fg);stroke-width:2}svg .node.ext{fill:var(--chip);stroke-dasharray:4 3}svg .node.grp{fill:var(--bg);stroke-dasharray:2 3}
@@ -935,11 +935,11 @@ function drawMeta(s){
  if(!inf.length)h+='<div class="note">C2·유출 탐지의 외부 목적지에 접속한 다른 내부 host가 없습니다.</div>';
  else h+='<table><thead><tr><th>외부 목적지</th><th>내부 host</th><th>처음 ~ 마지막</th><th>기록</th><th>상태</th></tr></thead><tbody>'+inf.map(x=>x.popular?
    `<tr><td><code>${esc(x.key)}</code></td><td colspan="4" class="mut">내부 host ${x.total}대가 접속하는 흔한 목적지라 목록을 생략했습니다</td></tr>`:
-   x.hosts.map((y,i)=>`<tr>${i?'<td></td>':`<td><code>${esc(x.key)}</code><div class="mut">${x.total}대</div></td>`}<td>${who(y.who)}</td><td class="num">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`).join('')).join('')+'</tbody></table>';
+   x.hosts.map((y,i)=>`<tr>${i?'<td></td>':`<td><code>${esc(x.key)}</code><div class="mut">${x.total}대</div></td>`}<td>${who(y.who)}</td><td class="tt2">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`).join('')).join('')+'</tbody></table>';
  h+=`<h3 class="sub3">탐지 밖에서 관측된 내부 이동 <span class="ob">관측</span></h3>`;
  if(!ob.length)h+='<div class="note">스토리 host가 탐지 밖에서 다른 내부 host로 한 관리 접속·인증이 없습니다(디렉터리·인증 서버로 가는 일상 통신은 뺌).</div>';
  else h+='<table><thead><tr><th>출발</th><th>대상</th><th>처음 ~ 마지막</th><th>관측 내용</th></tr></thead><tbody>'+ob.map(o=>{const a=(s.lanes.find(l=>l.ip===o.a))||{ip:o.a};
-   return `<tr><td>${who(a)}</td><td>${who(o.who)}</td><td class="num">${fmtT(o.first).slice(11,16)} ~ ${fmtT(o.last).slice(11,16)}</td><td>${esc(o.what.join(' · '))}${o.strong?'':' <span class="mut">(연결·인증만)</span>'}</td></tr>`}).join('')+'</tbody></table>';
+   return `<tr><td>${who(a)}</td><td>${who(o.who)}</td><td class="tt2">${fmtT(o.first).slice(11,16)} ~ ${fmtT(o.last).slice(11,16)}</td><td>${esc(o.what.join(' · '))}${o.strong?'':' <span class="mut">(연결·인증만)</span>'}</td></tr>`}).join('')+'</tbody></table>';
  h+='<div class="note">관측은 uid가 아니라 출발지·대상·시간으로 맞춘 추정입니다. 같은 인프라는 스토리 기간 앞뒤 24시간, 내부 이동은 host가 스토리에 들어온 뒤부터 마지막 탐지 1시간 뒤까지 봅니다.</div>';
  el.innerHTML=h;
 }
