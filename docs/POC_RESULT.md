@@ -22,23 +22,28 @@ Zeek 센서 하나로 탐지·자산 식별·메타데이터 선별 전송을 �
 
 ```mermaid
 flowchart LR
-    T["미러 트래픽<br/>SPAN · TAP"] --> S
+    X["예외 파일(TSV)<br/>재시작 없이 반영 · 만료·적중 기록"] --> D
+    T["미러 트래픽<br/>SPAN · TAP"] --> A
     subgraph S["Zeek 센서 (nsm_rules, Zeek 9.x)"]
-        D["탐지 룰 33개 + 공통 모듈<br/>근거 · 킬체인 상관 · 예외 엔진"]
+        D["탐지: 룰 33개 · 47종 · 7단계<br/>근거 · 사건 묶기 · 킬체인 상관 · 예외 엔진"]
         A["자산 식별<br/>프로토콜 15종에서 신호 17종"]
-        M["메타데이터 선별 전송<br/>조사용 로그만 행·필드 축소"]
+        M["메타데이터 선별 전송<br/>행 단위 9종 + 요약 3종"]
     end
-    D --> LD["notice · nsm_detection<br/>evidence.log"]
-    A --> LA["asset_signal.log<br/>하루 약 250KB(CIC)"]
-    M --> LM["meta/*.log<br/>하루 약 22MB(CIC)"]
-    LD --> MGR["MDS Manager<br/>자산 판정 · 저장 · 조회 · 공격 스토리<br/>(PoC 대역: 통합 리포트)"]
-    LA --> MGR
-    LM --> MGR
+    D --> LD["notice · nsm_detection · evidence<br/>하루 수 MB"]
+    A --> LA["asset_signal.log<br/>하루 수십 MB"]
+    M --> LM["meta/*.log<br/>하루 1~3GB(압축 전), 전송량의 약 98%"]
+    subgraph MGR["MDS Manager"]
+        PG["PostgreSQL<br/>자산 판정 결과 · 사건 상태 · 예외 정책<br/>수십 GB 이내"]
+        CH["ClickHouse<br/>탐지 · 근거 · 자산 신호 · 메타데이터(TTL 보관)<br/>1년 0.3~0.6TB"]
+    end
+    LD --> CH
+    LA --> CH
+    LM --> CH
+    LA -.->|"자산 판정"| PG
+    PG -.->|"예외 정책 배포 · 자산 역할 자동 반영(다음 단계)"| X
 ```
 
-수집 에이전트가 세 경로를 읽어 Manager로 전송합니다.
-
-탐지·자산 신호·메타데이터는 같은 Zeek 분석 결과에서 따로 기록되고, PoC에서는 Manager 대신 통합 리포트가 세 로그를 묶습니다.
+로그 크기는 1,000명 규모 하루 기준입니다. 수집 에이전트가 세 경로를 읽어 Manager로 보내고, Manager는 계속 갱신되는 상태 데이터를 PostgreSQL에, 쌓이기만 하는 로그를 ClickHouse에 둡니다(Manager 전송 로그량 예측·스토리지 산정 절 참고). PoC에서는 Manager 대신 통합 리포트(`tests/run_pcap.sh`)가 세 로그를 묶었습니다.
 
 | 구성 요소 | 위치 | 하는 일 |
 | --- | --- | --- |
