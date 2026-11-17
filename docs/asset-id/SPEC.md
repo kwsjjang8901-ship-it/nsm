@@ -269,7 +269,7 @@
 ### 3.16 AhnLab MDS Agent (`mds`)
 
 - **관측 조건:** 단말과 MDS 장비 사이 경로가 미러에 있어야 함
-- **트리거:** `connection_established`(TCP 연결 성립). 목적지 포트가 `mds_agent_ports`(기본 8291·8293·50007·50502/tcp)
+- **트리거:** `connection_established`(TCP 연결 성립). 목적지 포트가 `mds_agent_ports`(기본 8290·8291·8293·50007·50502/tcp)
 
 | 조건 | 신호 | 대상 IP | 신뢰도 |
 |---|---|---|---|
@@ -412,7 +412,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `ignore_hostnames` | localhost 등 | 식별에 쓸 수 없는 일반 이름 |
 | `ephemeral_port_min` | 49152 | 임시 포트 기준 |
 | `syslog_parse_limit` | 50 | 송신 장비별 해석 메시지 수 |
-| `mds_agent_ports` | 8291, 8293, 50007, 50502/tcp | AhnLab MDS Agent → MDS 장비 포트 |
+| `mds_agent_ports` | 8290, 8291, 8293, 50007, 50502/tcp | AhnLab MDS Agent → MDS 장비 포트 |
 | `mds_servers` | `{}` | MDS 장비 주소. 지정하면 연결 1건으로 판단(신뢰도 90) |
 | `mds_agent_min_ports`, `mds_agent_window` | 2, 1hr | 장비 주소가 없을 때 같은 서버의 서로 다른 에이전트 포트 수와 세는 시간 |
 
