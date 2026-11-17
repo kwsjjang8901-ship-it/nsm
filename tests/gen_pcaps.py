@@ -2285,6 +2285,22 @@ def gen_report_assets_routed(out):
     cap.write(os.path.join(out, "report_assets_routed.pcap"))
 
 
+def gen_mds_agent(out):
+    """자산 식별 AhnLab MDS Agent. MDS 장비 .5 에 .10 은 8291·8293/tcp 두 포트로 연결(에이전트), .11 은
+    50007/tcp 하나만(포트 하나라 기본 규칙으로는 아님, mds_servers 지정 시 에이전트), .12 는 다른 장비 .99 의
+    8291/tcp 하나만(MikroTik Winbox 류, 아님), .13 은 .5 의 8291·8293 에 응답 없이 거부만(연결 성립 아님)."""
+    cap = Capture()
+    t = T0 + 10
+    t = tcp_established(cap, "10.0.30.10", "10.0.30.5", 8291, t)
+    t = tcp_established(cap, "10.0.30.10", "10.0.30.5", 8293, t + 2)
+    t = tcp_established(cap, "10.0.30.11", "10.0.30.5", 50007, t + 2)
+    t = tcp_established(cap, "10.0.30.12", "10.0.30.99", 8291, t + 2)
+    t = Tcp(cap, "10.0.30.13", "10.0.30.5", 8291).rejected(t + 2)
+    t = Tcp(cap, "10.0.30.13", "10.0.30.5", 8293).rejected(t + 2)
+    cap.tick(T0 + 300)
+    cap.write(os.path.join(out, "mds_agent.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2299,7 +2315,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
-              gen_report_assets_routed]
+              gen_report_assets_routed, gen_mds_agent]
 
 
 def main():

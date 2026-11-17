@@ -1009,6 +1009,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 로그량 | 같은 (IP, 신호, 값)은 `AssetID::suppress_interval`(기본 1시간) 동안 다시 쓰지 않음. 신호 소스별 켜기·끄기는 `AssetID::enable_*`(option) |
 | 탐지와의 관계 | 탐지 결과에 영향 없음(같은 이벤트에 핸들러만 추가). 서버 역할(DC·DNS·파일 서버)을 탐지 조건·예외에 자동 반영하는 것은 다음 단계(예외 엔진 E4) |
 | 머지 때 고친 점 | SMB2 클라이언트 GUID용 시그니처가 Zeek 시그니처 프레임워크 기본 동작으로 SMB2 연결마다 `Signatures::Sensitive_Signature` notice(패킷 바이트 포함)를 남기던 것을 막음(`SIG_IGNORE`). 운영 필터가 `asset_signal.log`를 끄던 것(검토 C3)을 유지 목록에 추가해 해결 |
+| AhnLab MDS Agent | 단말이 MDS 장비의 에이전트 포트(`mds_agent_ports`, 기본 8290·8291·8293·50007·50502/tcp)에 연결이 성립하면 `security_agent` `ahnlab:mds-agent`, 장비에 `device` `ahnlab-mds`. 장비 주소(`mds_servers`)를 적으면 연결 1건으로, 비어 있으면 같은 서버의 서로 다른 포트 2개 이상으로 판단(8291은 다른 제품도 씀). 신호가 없는 단말은 미설치 후보일 뿐이며 정확한 판정은 MDS Manager 에이전트 목록 대조(SPEC 3.16) |
 | 역방향 이름 | PTR 응답은 정규 역방향 이름만 쓴다. RFC 2317 위임 이름 등 주소로 바꿀 수 없는 이름은 무시한다(SPEC 4장 DNS 응답) |
 | 남은 것 | Manager 리졸버(PoC `tools/asset_resolver.py`)는 이 저장소 밖. 선별 전송(메타데이터) 포함 여부는 [메타데이터 SRS](SRS_METADATA_EXPORT.md) P4에서 결정 |
 

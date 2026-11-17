@@ -52,10 +52,10 @@
 | **보조 정보** | `fqdn`, `domain` | `pc01.corp.local`, `corp.local` | 표시, 도메인 대표값 |
 | | `os_hint` | `windows nt 10.0 build 26100` | OS 추정 |
 | | `service` | `tcp/445`, `tcp/8081/http` | 역할 추정 |
-| | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할 |
+| | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
 | | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0` | 소프트웨어 정보 |
-| | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55` | AhnLab 제품 통신 여부 |
+| | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent` | AhnLab 제품 설치 여부(통신으로 판단) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
 | **검증 중 후보** | `smb_client_guid` | `a1eefcb2-2495-6541-893f-bf5b2c69acd4` | 참고 정보, 공유·변경 통계 |
 | | `ssh_host_key` | `e4:b1:8e:…` | 참고 정보, 공유 통계 |
@@ -88,6 +88,7 @@
 | SSH | `software.zeek` | 소프트웨어, OS, 호스트 키 | 어디서나 | 8/9 (group18 키는 9) |
 | syslog | `syslog.zeek` | 장비 hostname, 장비 종류, 수집 서버 | 장비 → 수집 서버 경로 | UDP 8/9, TCP **9** |
 | 서비스(응답) | `services.zeek` | service | 양방향 미러 | 8/9 |
+| AhnLab MDS Agent | `mds_agent.zeek` | 보안 에이전트(MDS Agent), 장비(MDS) | 단말 → MDS 장비 경로 | 8/9 |
 
 ### 3.2 DHCP (`dhcp`)
 
@@ -265,6 +266,19 @@
 - **예외:** `ignore_service_ports`(137, 138, 1900, 5353, 5355/udp), 임시 포트(49152 이상), 다른 프로토콜 안에서 확인된 분석기(`nested_analyzers`: ntlm, gssapi, krb, dce_rpc, smb 등)
 - **활용:** 역할 판정(4.8). 양방향 미러가 필요
 
+### 3.16 AhnLab MDS Agent (`mds`)
+
+- **관측 조건:** 단말과 MDS 장비 사이 경로가 미러에 있어야 함
+- **트리거:** `connection_established`(TCP 연결 성립). 목적지 포트가 `mds_agent_ports`(기본 8290·8291·8293·50007·50502/tcp)
+
+| 조건 | 신호 | 대상 IP | 신뢰도 |
+|---|---|---|---|
+| `mds_servers`(MDS 장비 주소) 지정, 그 주소의 에이전트 포트에 연결 성립 1건 | `security_agent` `ahnlab:mds-agent` / `device` `ahnlab-mds` | 단말 / 장비 | 90 / 80 |
+| `mds_servers` 비어 있음, 같은 서버의 서로 다른 에이전트 포트 `mds_agent_min_ports`(2)개 이상에 `mds_agent_window`(1시간) 안에 연결 성립 | 같음 | 단말 / 장비 | 70 / 60 |
+
+- **예외:** 응답 없거나 거부된 연결은 세지 않음. 8291/tcp는 다른 제품(MikroTik Winbox 등)도 쓰므로 장비 주소를 모르면 포트 하나로는 판단하지 않음. 장비가 내부 대역 밖이면 장비 쪽 `device`는 남지 않음(단말 신호는 남음)
+- **활용:** 자산별 MDS Agent 설치 현황. 신호가 없는 단말은 미설치 **후보**일 뿐임(센서가 그 경로를 못 보거나, 관측 시간이 에이전트 보고 주기보다 짧거나, 단말이 꺼져 있었을 수 있음). 정확한 미설치 판정은 MDS Manager의 에이전트 목록과 대조
+
 ---
 
 ## 4. 판정 스펙 (`tools/asset_resolver.py`)
@@ -390,7 +404,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `asset_nets` | `{}` | 자산 대역 (`run_poc.sh -n`) |
 | `suppress_interval` | 1hr | 중복 억제 기간 |
 | `dhcp_xid_timeout` | 5min | DHCP 트랜잭션 보관 |
-| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid |
+| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent |
 | `service_ports` | 주요 포트 | 포트만으로 서비스 인정 |
 | `ignore_service_ports` | 137,138,1900,5353,5355/udp | 거의 모든 단말이 응답하는 포트 |
 | `nested_analyzers` | ntlm, gssapi, krb, … | 다른 프로토콜 안에서 확인되는 분석기 |
@@ -398,6 +412,9 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `ignore_hostnames` | localhost 등 | 식별에 쓸 수 없는 일반 이름 |
 | `ephemeral_port_min` | 49152 | 임시 포트 기준 |
 | `syslog_parse_limit` | 50 | 송신 장비별 해석 메시지 수 |
+| `mds_agent_ports` | 8290, 8291, 8293, 50007, 50502/tcp | AhnLab MDS Agent → MDS 장비 포트 |
+| `mds_servers` | `{}` | MDS 장비 주소. 지정하면 연결 1건으로 판단(신뢰도 90) |
+| `mds_agent_min_ports`, `mds_agent_window` | 2, 1hr | 장비 주소가 없을 때 같은 서버의 서로 다른 에이전트 포트 수와 세는 시간 |
 
 리졸버 옵션: `--shared-mac-threshold`(2), `--multi-account-window`(10분), `--max-idle`(24시간), `--tz`(9).
 

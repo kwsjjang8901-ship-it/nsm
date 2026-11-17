@@ -10,3 +10,4 @@
 @load ./syslog
 @load ./x509
 @load ./smb_guid
+@load ./mds_agent

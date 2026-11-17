@@ -41,6 +41,18 @@ export {
 	option enable_x509 = T;         ##< 사내 서버 인증서 -> dns_name, device
 	option enable_ssh_host_key = T; ##< SSH 서버 호스트 키 지문 -> ssh_host_key
 	option enable_smb_guid = T;     ##< SMB2 NEGOTIATE 클라이언트 GUID -> smb_client_guid
+	option enable_mds_agent = T;    ##< AhnLab MDS Agent -> MDS 장비 통신 포트 -> security_agent, device
+
+	## AhnLab MDS Agent 가 MDS 장비에 접속하는 포트.
+	option mds_agent_ports: set[port] = { 8290/tcp, 8291/tcp, 8293/tcp, 50007/tcp, 50502/tcp };
+
+	## MDS 장비 주소. 지정하면 이 주소의 에이전트 포트로 접속한 host 를 바로 에이전트로 본다(신뢰도 90).
+	## 비어 있으면 같은 서버의 에이전트 포트 mds_agent_min_ports 개 이상에 접속한 host 만 본다(신뢰도 70).
+	## 8291/tcp 는 다른 제품(MikroTik Winbox 등)도 쓰므로 포트 하나만으로는 판단하지 않는다.
+	option mds_servers: set[subnet] = {};
+	option mds_agent_min_ports = 2;
+	## 포트 수를 세는 시간(같은 (클라이언트, 서버) 쌍을 처음 본 뒤부터)
+	const mds_agent_window = 1hr &redef;
 
 	## 잘 알려진 서비스 포트. TCP는 연결 성립만으로, UDP는 분석기 확인 시 기록하며
 	## 값은 "tcp/445"처럼 proto/port 로 남긴다(역할 판정은 Manager에서 포트 기준).
