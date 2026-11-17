@@ -355,3 +355,159 @@ TLS 비콘과 암호화 C2 오탐은 룰 기본값만으로 대부분 사라졌�
 3. MDS Manager 연동: 로그에 센서 ID·스키마 버전·상관 갱신 번호 추가, 목록 필드 배열화, 사건(`incident_id`·`occurrence`) 처리 규칙 반영.
 4. 운영 편의: 자산 식별 역할(DC·DNS·WINS)을 예외에 자동 반영, 예외 파일의 중복 id 거부.
 5. Manager 스토리지 실측: 로그 종류별 ClickHouse 테이블 정의와 적재 스크립트를 만들고, CIC 5일 메타데이터를 넣어 압축 후 크기로 1년 산정을 확정합니다.
+
+## 부록: 결과 로그 설명과 형식
+
+센서는 탐지·자산 식별·메타데이터 세 모듈의 결과를 JSON 로그로 남기고, `/log/zeek/` 아래 로그만 Manager로 보냅니다. `/hdd_tmp/log/zeek/` 아래는 센서에만 남는 로컬 로그입니다.
+
+| 로그 | 모듈 | 기본 경로 | Manager 전송 | 내용 | 기록 시점 |
+| --- | --- | --- | --- | --- | --- |
+| `nsm_detection.log` | 탐지 | `/log/zeek/nsm_detection` | 보냄 | 탐지 요약. 탐지 1건 = 1행 | 탐지할 때 |
+| `evidence.log` | 탐지 | `/log/zeek/evidence` | 보냄 | 탐지 근거(누가·언제·어디서·무엇을·어떻게) | 탐지할 때 |
+| `nsm_exception.log` | 탐지(예외 엔진) | `/log/zeek/nsm_exception` | 보냄 | 예외 적재·거부·만료·적중 수 | 적재할 때, 적중은 1시간마다 |
+| `asset_signal.log` | 자산 식별 | `/log/zeek/asset_signal` | 보냄 | 자산 신호(이름·MAC·OS 힌트·서비스 등) | 관측할 때(같은 신호는 1시간에 한 번) |
+| 선별 전송 로그 13종 | 메타데이터 | `/log/zeek/meta/<이름>` | 보냄 | 조사·헌팅용으로 고른 원본 행과 요약, 선별 통계 | 원본 기록 때, 요약은 주기마다 |
+| `notice.log` | 탐지 | `/hdd_tmp/log/zeek/notice` | 안 보냄 | Zeek 탐지 원문 | 탐지할 때 |
+| `capture_loss`, `stats`, `reporter`, `loadedscripts` | 센서 상태 | `/hdd_tmp/log/zeek/<이름>` | 사본을 `meta/`로 보냄(loadedscripts 제외) | 패킷 손실·처리 통계·스크립트 오류·로드 목록 | 주기마다 |
+
+공통 형식
+
+- JSON 한 줄에 한 행입니다. `ts`는 epoch 초(소수점 포함)이고, 값이 없는 필드는 키가 아예 없습니다.
+- 파일은 4시간마다 회전합니다(`Log::default_rotation_interval`).
+- 로그끼리 잇는 키는 세 가지입니다. `evidence_id`는 notice → 탐지 요약 → 근거를, `uid`는 근거 → 선별 전송 행·자산 신호를 잇습니다. 탐지의 공격자·피해 IP는 자산 신호의 `ip`와 시각으로 맞춥니다.
+- 주소·호스트명·계정 원문이 들어 있어 고객사 밖으로 내보내지 않습니다.
+
+### 탐지 로그
+
+Manager는 `nsm_detection.log`로 알림을 올리고, `evidence_id`로 `evidence.log`의 근거 행을 붙여 보여 줍니다. 필드 전체는 [SRS](SRS.md) 6장에 있습니다.
+
+**nsm_detection.log**: 탐지 요약. 단일 탐지와 킬체인 상관 탐지가 같은 형식입니다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `ts` | 탐지 시각 |
+| `detection_id` | 탐지 ID |
+| `diagnosis` | 진단명(예: `NSM.C2.HttpBeaconing`, 상관은 `NSM.Correlation.…`) |
+| `techniques` | ATT&CK 기법(상관은 `T1210->T1003.006`처럼 이어 붙임) |
+| `category` | `Single` 또는 `Correlated` |
+| `killchain_stages` | 킬체인 단계 |
+| `severity` | 단일 `Information`, 상관 `Suspicious` |
+| `first_seen`, `last_seen` | 관측 시작·끝 |
+| `attacker`, `attacker_subnet`, `victims` | 공격 host와 대역, 피해 host(최대 8개) |
+| `evidence_count`, `evidence_ids` | 근거 행 수와 키 |
+| `incident_id`, `occurrence` | 같은 사건 묶기. 15분 안에 다시 나온 같은 탐지는 같은 사건, `occurrence` = 1일 때만 새 알림 |
+| `disposition`, `exception_id` | `suppress` 예외에 맞은 탐지만. Manager는 알림을 올리지 않음 |
+
+```json
+{"ts":1794182770.0,"detection_id":"10.0.7.10|beacon|93.184.215.181|996768","diagnosis":"NSM.C2.HttpBeaconing","techniques":"T1071.001","category":"Single","killchain_stages":"Command and Control","severity":"Information","first_seen":1794182770.0,"last_seen":1794182770.0,"attacker":"10.0.7.10","attacker_subnet":"10.0.0.0/8","evidence_count":1,"evidence_ids":"10.0.7.10|beacon|93.184.215.181|996768","incident_id":"10.0.7.10|beacon|93.184.215.181|996768","occurrence":1}
+```
+
+**evidence.log**: 탐지 근거. 탐지 하나에 여러 행이 붙을 수 있습니다(확산은 피해 host마다).
+
+| 필드 | 뜻 |
+| --- | --- |
+| `ts` | 언제 |
+| `evidence_id` | 어느 탐지의 근거인지 |
+| `note`, `killchain_stage`, `technique` | 무엇을(탐지 유형·단계·기법) |
+| `account` | 누가(계정, 알 때만) |
+| `src`, `dst` | 어디서 → 어디로 |
+| `operation` | 어떻게(예: `kerberos_as_failure`, `drsuapi_DRSGetNCChanges`) |
+| `uid`, `fuid` | 선별 전송 로그·자산 신호와 잇는 연결·파일 ID |
+| `parent_id` | 상관 탐지가 묶는 하위 근거 |
+| `detail` | 부가 정보(실패 코드, 파일명, 바이트 등) |
+
+```json
+{"ts":1794182770.0,"evidence_id":"10.0.7.10|beacon|93.184.215.181|996768","note":"NSM::HTTP_Beaconing","killchain_stage":"Command and Control","technique":"T1071.001","src":"10.0.7.10","dst":"93.184.215.181","operation":"http_beacon","uid":"CUa7sl1xyX83jEsdWd","detail":"interval=30.0s consecutive=12 total=12 host=cdn.update-check.net"}
+```
+
+**nsm_exception.log**: 예외 엔진 기록. `kind`가 `loaded`(적용), `rejected`(검증 거부), `expired`(만료), `hits`(1시간 적중 수), `error`(예외 파일 오류) 중 하나입니다. 주요 필드는 `exception_id`, `disposition`, `scope`, `hits`, `last_hit`, `msg`입니다. 적중 수는 `drop`이면 걸러진 관측 수, `suppress`면 표시한 탐지 수입니다.
+
+```json
+{"ts":1794182537.699983,"node":"zeek","kind":"hits","exception_id":"legacy:ntlm_spray_allowlist","disposition":"drop","hits":12,"last_hit":1794182477.673983}
+```
+
+**notice.log**: Zeek 탐지 원문(센서 로컬). Zeek 기본 필드에 `evidence_id`, `attack`(ATT&CK), `lm_targets`(확산 피해 host)를 더합니다. 같은 내용이 요약·근거로 Manager에 가므로 센서 점검용입니다.
+
+### 자산 식별 로그
+
+**asset_signal.log**: 센서가 트래픽에서 본 자산 관련 사실(신호)을 한 행씩 남깁니다. 신호를 묶어 자산을 만들고 대표 키·OS·역할을 정하는 판정은 Manager(PoC에서는 리졸버)가 합니다. 상세는 [자산 식별 스펙](asset-id/SPEC.md) 2장에 있습니다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `ts` | 관측 시각 |
+| `uid` | 근거 연결 ID(있을 때만) |
+| `ip` | 신호가 가리키는 자산 IP |
+| `mac` | 관측 시점의 MAC(있을 때만) |
+| `signal` | 신호 종류(아래 표) |
+| `value` | 정규화한 값(소문자, MAC은 `aa:bb:cc:dd:ee:ff`) |
+| `source` | 출처 프로토콜(`ntlm`, `kerberos`, `dhcp`, `conn`, `ssh`, `http_ua` 등) |
+| `confidence` | 출처 기준 신뢰도 0\~100 |
+
+| 분류 | 신호(`signal`) | 값 예 | 판정에서의 쓰임 |
+| --- | --- | --- | --- |
+| 식별 키 | `machine_account`, `dhcp_client_id`, `mac`, `hostname` | `corp\pc01$`, `pc01` | 자산 대표 키(이 순서로 우선) |
+| 보조 정보 | `fqdn`, `domain`, `dns_name` | `pc01.corp.local` | 표시 이름 |
+| | `os_hint`, `software` | `windows 10/11`, `ssh:SSH-2.0-OpenSSH_8.9p1` | OS·소프트웨어 추정 |
+| | `service`, `device` | `tcp/445`, `vmware-esxi` | 역할·장비 추정 |
+| | `user_account`, `security_agent` | `corp\kim`, `ahnlab:V3ES90ASD/5.6.0.55` | 최근 로그온 사용자, 보안 에이전트 여부 |
+| 검증 중 | `smb_client_guid`, `ssh_host_key`, `dhcp_vendor_class`, `dhcp_fingerprint` | | 참고 정보 |
+
+- 내부 대역 IP만 기록합니다. 브로드캐스트·멀티캐스트는 빼고, 빈 값은 쓰지 않습니다.
+- 같은 (IP, 신호, 값, 출처)는 1시간에 한 번만 씁니다. 계속 보이면 1시간마다 다시 써서 IP 점유 구간을 갱신합니다.
+- 라우팅을 거친 뒤 구간을 보는 센서에서는 `mac`이 라우터 것이라 자산 구분에 쓸 수 없습니다. 통합 리포트가 이 경우를 따로 표시합니다.
+
+```json
+{"ts":1794183041.01,"uid":"CZURbrHSnAW8d4Z11","ip":"10.0.0.190","signal":"machine_account","value":"corp\\pc01$","source":"ntlm","confidence":90}
+{"ts":1794182401.0,"uid":"Cka4pUTRluqsM9ZUf","ip":"10.0.1.231","mac":"02:00:0a:00:01:e7","signal":"mac","value":"02:00:0a:00:01:e7","source":"conn","confidence":40}
+{"ts":1419870189.491788,"uid":"CLS23Q3VmxQZjP05v6","ip":"192.168.2.158","signal":"os_hint","value":"linux(ubuntu)","source":"ssh","confidence":60}
+{"ts":1794182401.001,"uid":"CIWOL51vZyRf5IO5yg","ip":"10.0.10.80","signal":"service","value":"tcp/80","source":"service","confidence":90}
+```
+
+### 메타데이터 선별 전송 로그
+
+조사·헌팅에 필요한 원본 행만 골라(필드도 골라) `/log/zeek/meta/`에 남깁니다. 연결·DNS·User-Agent처럼 양이 많은 것은 원본 대신 주기별 요약을 남깁니다. 행 단위 로그는 공통으로 `ts`, `uid`, `id.orig_h`·`id.orig_p`(출발지), `id.resp_h`·`id.resp_p`(목적지)를 가집니다. 필드 전체와 설정은 [메타데이터 선별 전송 SRS](SRS_METADATA_EXPORT.md) 5장에 있습니다.
+
+| 로그 | 종류 | 고르는 범위 | 주요 필드(공통 필드 외) |
+| --- | --- | --- | --- |
+| `kerberos` | 행 | 전체 | `request_type`, `client`, `service`, `success`, `error_msg`, `cipher` |
+| `ntlm` | 행 | 전체 | `username`, `domainname`, `hostname`, `success` |
+| `smb_mapping` | 행 | 전체, (출발지, 목적지, 공유) 1시간 중복 억제 | `path`, `share_type` |
+| `smb_files` | 행 | 쓰기·이름 변경·삭제만 | `action`, `path`, `name`, `prev_name`, `size` |
+| `dce_rpc` | 행 | 공격에 쓰이는 인터페이스(drsuapi, svcctl, winreg, samr, lsarpc, netlogon, efsrpc 등)만 | `endpoint`, `operation` |
+| `rdp` | 행 | 전체 | `cookie`, `security_protocol`, `result` |
+| `ssh` | 행 | 전체 | `auth_success`, `auth_attempts`, `direction`, `client`, `server` |
+| `ssl` | 행 | 내부↔외부, (출발지, SNI, JA3) 24시간 중복 억제 | `version`, `cipher`, `server_name`, `established`, `ja3` |
+| `http` | 행 | 내부↔외부, 10분 중복 억제 | `method`, `host`, `uri_path`, `status_code`, `request_body_len`, `response_body_len` |
+| `flow_summary` | 요약(30분) | 내부↔외부, 내부 관리 포트 | (출발지, 목적지, 포트)별 `conns`, `orig_bytes`, `resp_bytes`, `service`, `states` |
+| `dns_summary` | 요약(1시간) | 전체(역방향 조회·내부 리졸버 출발지 제외) | (출발지, 등록 도메인)별 `qtypes`, `rcodes`, `queries`, `unique_names`, `sample_names`, `answers` |
+| `http_ua_summary` | 요약(24시간) | http와 같음 | (출발지, User-Agent)별 `requests`, `hosts`, `sample_host` |
+| `meta_export_stats` | 통계(5분) | - | 스트림별 `sent`, `dropped_scope`, `dropped_filter`, `dropped_dedup`, `dropped_rate`, `summarized` |
+
+- `flow_summary`의 `states`는 연결 상태별 건수(예: `SF:12,S0:3`), `dns_summary`의 `rcodes`는 결과별 질의 수(예: `NOERROR:12,NXDOMAIN:1`)입니다.
+- `dns_summary`는 출발지 하나가 한 시간에 도메인 100개를 넘기면 나머지를 `(other)` 한 행으로 묶습니다.
+- `meta_export_stats`는 범위·조건·중복 억제·분당 상한으로 무엇이 얼마나 빠졌는지 알려 주므로, 선별 전송 설정을 조정할 때 봅니다.
+
+위에서부터 kerberos 행, flow_summary, dns_summary, http_ua_summary, meta_export_stats 예시입니다.
+
+```json
+{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","id.orig_h":"10.0.0.60","id.orig_p":62228,"id.resp_h":"10.0.0.10","id.resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
+{"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
+{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":"A,AAAA","rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
+{"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
+{"ts":1794182700.0,"node":"zeek","stream":"http","sent":1,"dropped_scope":1,"dropped_filter":1,"dropped_dedup":1,"dropped_rate":0,"summarized":0}
+```
+
+### 센서 상태 로그와 통합 리포트
+
+센서 상태 로그는 Zeek 기본 형식 그대로이며, 탐지가 없을 때 "공격이 없었는지, 센서가 못 봤는지"를 가르는 데 씁니다.
+
+| 로그 | 내용 | 주요 필드 |
+| --- | --- | --- |
+| `capture_loss` | 주기별 패킷 손실률(미러 포트 부족·센서 과부하) | `ts_delta`, `peer`, `gaps`, `acks`, `percent_lost` |
+| `stats` | 주기별 처리량·메모리·연결 수 | `mem`, `pkts_proc`, `pkts_dropped`, `events_proc`, `active_tcp_conns` |
+| `reporter` | 스크립트 오류·경고 | `level`, `message`, `location` |
+| `loadedscripts` | 기동 시 로드한 스크립트 목록(버전·구성 확인) | `name` |
+
+- `capture_loss`·`stats`·`reporter`는 선별 전송 경로(`/log/zeek/meta/`)에도 사본이 남아 Manager에서 센서 상태를 볼 수 있습니다.
+- PoC 도구 `tests/run_pcap.sh`는 위 로그를 묶어 통합 리포트 `<pcap 이름>_report.html` 하나로 만듭니다. 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태를 한 화면에 보여 주며, 운영 로그가 아니라 확인용 산출물입니다.
+- `-k`를 주면 conn·dns·http·ssl 등 Zeek 원본 로그도 모두 남깁니다. 운영 형상은 원본을 남기지 않으므로 점검용입니다.
