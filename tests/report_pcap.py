@@ -317,7 +317,10 @@ def build_stories(detections, midx, label):
 #   1) 같은 공격 인프라: C2·유출 탐지의 외부 목적지(IP·SNI·Host)에 접속한 다른 내부 host
 #   2) 관측된 내부 이동: 스토리 host 가 탐지 밖에서 다른 내부 host 로 한 관리 접속·인증
 INFRA_STAGES = {"Command and Control", "Exfiltration"}
-SHARED_MAC_IPS = 2            # 자산 신호 모드: 이 수 이상의 IPv4 가 같은 MAC 이면 라우터(뒤 주소 포함)로 표시. IPv6 링크 로컬은 같은 host 라 세지 않음
+SHARED_MAC_IPS = 2            # 자산 신호 모드: 이 수 이상의 IPv4 가 같은 MAC 이면 "공유"로 표시(이중화 VIP·IP 여러 개인 서버일 수 있음).
+ROUTER_MAC_IPS = 3            # 이 수 이상이면 라우터(그 뒤 주소들)로 표시. IPv6 링크 로컬은 같은 host 라 어느 쪽에도 세지 않음
+ROUTED_VIEW_RATIO = 0.5       # MAC 이 있는 IP 중 이 비율 이상이 라우터 MAC 이고
+ROUTED_VIEW_MIN = 10          # 그런 IP 가 이 수 이상이면 "라우팅 뒤 구간"으로 보고 표 위에 한 번만 설명, 행 표시는 짧게
 INFRA_WINDOW = 86400          # 스토리 기간 앞뒤로 같은 인프라를 찾는 시간
 INFRA_POPULAR = 50            # 이보다 많은 내부 host 가 붙는 목적지는 흔한 서비스로 본다
 INFRA_POPULAR_MIN = 5         # 또는 이 수 이상이면서
@@ -725,6 +728,7 @@ def collect(z, assets_path, args):
 
     # 자산: 리졸버 결과가 있으면 자산 단위, 없으면 IP 별 신호 요약
     asset_rows = []
+    mac_summary = None
     if assets is not None:
         for a in assets:
             asset_rows.append({
@@ -754,9 +758,20 @@ def collect(z, assets_path, args):
                 p["os"][(int(s.get("confidence") or 0), str(v))] += 1
             elif k == "service" and v:
                 p["svc"][str(v)] += 1
+        # 라우팅 뒤 구간(센서가 L3 장비를 지난 트래픽을 봄): IP 대부분이 소수의 라우터 MAC 을 공유한다
+        mac_rows = [p for ip, p in per.items() if p["macs"]]
+        router_rows = [p for p in mac_rows if len(mac_ips[p["macs"].most_common(1)[0][0]]) >= ROUTER_MAC_IPS]
+        routed_view = len(router_rows) >= ROUTED_VIEW_MIN and len(router_rows) >= ROUTED_VIEW_RATIO * len(mac_rows)
+        mac_summary = None
+        if routed_view:
+            router_macs = {m for m, ips in mac_ips.items() if len(ips) >= ROUTER_MAC_IPS}
+            mac_summary = {"ips": len(mac_rows), "macs": len({m for p in mac_rows for m in p["macs"]}),
+                           "router_macs": len(router_macs), "router_ips": len(router_rows)}
         def mac_text(m):
             n = len(mac_ips[m])
-            return f"{m} (IPv4 {n}개 공유, 라우터 추정)" if n >= SHARED_MAC_IPS else m
+            if n >= ROUTER_MAC_IPS:
+                return f"{m} (라우터)" if routed_view else f"{m} (IPv4 {n}개 공유, 라우터 추정)"
+            return f"{m} (IPv4 {n}개 공유)" if n >= SHARED_MAC_IPS else m
         def best_os(c):
             return max(c.items(), key=lambda x: (x[0][0], x[1]))[0][1] if c else ""
         det_ips = collections.Counter()
@@ -797,7 +812,7 @@ def collect(z, assets_path, args):
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "detections": detections, "stories": stories, "stage_order": STAGES, "coverage": coverage,
         "exceptions": exc,
-        "assets": asset_rows, "asset_mode": "resolver" if assets is not None else "signals",
+        "assets": asset_rows, "mac_summary": mac_summary, "asset_mode": "resolver" if assets is not None else "signals",
         "asset_report": args.asset_report or "",
         "signal_counts": collections.Counter(s.get("signal") for s in sig).most_common(),
         "signal_rows": len(sig), "signal_ips": len({s.get("ip") for s in sig}),
@@ -888,7 +903,7 @@ svg .nb.cand circle{fill:var(--surf)}svg .nb.cand text{fill:var(--c)}
  <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·역할·OS·기법"><div id="dett"></div>
  <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산(<span class="chip role">역할</span>·<span class="os">OS</span> 함께, 이름에 마우스를 올리면 자산 ID·식별 근거), 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다. 검색 칸에 역할·OS(예: DC, Windows)를 넣으면 그 자산이 공격자·대상인 탐지만 남습니다.</div></div></section>
 <section id="chain"><h2>킬체인 상관</h2><div class="box"><label class="note"><input type="checkbox" id="chainall"> 중간 단계 포함(체인이 길어질 때마다 나온 상관 탐지를 모두 보기)</label><div id="chaint"></div></div></section>
-<section id="asset"><h2>자산</h2><div class="box"><input class="filter" id="asf" placeholder="필터: 이름·IP·OS·역할"><div id="ast"></div><div class="note" id="asnote"></div></div></section>
+<section id="asset"><h2>자산</h2><div class="box"><input class="filter" id="asf" placeholder="필터: 이름·IP·OS·역할"><div class="note" id="asmac"></div><div id="ast"></div><div class="note" id="asnote"></div></div></section>
 <section id="xfer"><h2>전송량</h2><div class="box" id="xft"></div></section>
 <section id="exc"><h2>예외</h2><div class="box" id="exct"></div></section>
 <section id="sensor"><h2>센서 상태</h2><div class="box" id="sent"></div></section>
@@ -1121,9 +1136,11 @@ const roleChips=a=>a.roles.length?a.roles.map(r=>`<span class="chip">${esc(r)}</
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
  ['식별 키',a=>esc(a.key),a=>a.key],['IP',a=>a.ips.map(esc).join('<br>'),a=>a.ips.join()],['MAC',a=>a.macs.map(esc).join('<br>'),a=>a.macs.join()],
  ['OS',a=>esc(a.os),a=>a.os],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
+const ms=D.mac_summary;
+document.getElementById('asmac').innerHTML=ms?`<b>MAC으로는 자산을 구분할 수 없는 캡처 지점입니다.</b> MAC이 관측된 IP ${ms.ips.toLocaleString('en-US')}개 중 ${ms.router_ips.toLocaleString('en-US')}개가 라우터로 보이는 MAC ${ms.router_macs}개를 나눠 씁니다(MAC은 모두 ${ms.macs}개). 센서가 라우팅을 거친 뒤 구간을 보고 있어 이 MAC은 PC가 아니라 라우터(L3 스위치) 것이며, 표에는 <i>(라우터)</i>로만 적었습니다. 자산 구분은 이름·OS 힌트·에이전트 같은 다른 신호로 합니다.`:'';
 document.getElementById('asnote').innerHTML=D.asset_mode==='resolver'
  ?`자산 판정은 claudtest2 리졸버 결과입니다. 근거 신호 타임라인·식별 품질은 ${D.asset_report?`<a href="${esc(D.asset_report)}">자산 리포트</a>`:'자산 리포트'}를 보세요.`
- :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 응답한 서비스(기울임)를 보입니다. 여러 IPv4가 같은 MAC이면 라우터(또는 라우터 뒤 주소)로 표시합니다. 신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('');
+ :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 응답한 서비스(기울임)를 보입니다. IPv4 2개가 같은 MAC이면 공유(이중화 VIP나 IP가 여러 개인 서버일 수 있음), 3개 이상이면 라우터(또는 라우터 뒤 주소)로 표시합니다. 신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('');
 // 전송량
 const mm=Math.max(1,...D.meta.map(m=>m.bytes));const mt=D.meta.reduce((a,b)=>a+b.bytes,0);
 document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="num">바이트</th><th></th></tr>

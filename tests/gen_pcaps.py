@@ -2266,6 +2266,25 @@ def gen_report_assets(out):
     cap.write(os.path.join(out, "report_assets.pcap"))
 
 
+def gen_report_assets_routed(out):
+    """통합 리포트 자산 표의 라우팅 뒤 구간. 라우터 뒤 host 12대(10.0.20.1~12)가 라우터 MAC 하나로 보이며 서버 .20 에
+    접속하고(라우터 MAC, 표 위 요약), 이중화 VIP 두 주소 .30·.31 은 MAC 하나를 나눠 쓴다(공유로만 표시)."""
+    router_mac, vip_mac = "02:00:0a:00:0e:01", "02:00:0a:00:0e:fe"
+    behind = ["10.0.20.%d" % i for i in range(1, 13)]
+    macs = dict({ip: router_mac for ip in behind}, **{"10.0.14.30": vip_mac, "10.0.14.31": vip_mac})
+
+    class MacCapture(Capture):
+        def l3(self, src, dst):
+            return Ether(src=macs.get(src, mac_of(src)), dst=macs.get(dst, mac_of(dst))) / IP(src=src, dst=dst)
+
+    cap = MacCapture()
+    t = T0 + 10
+    for src in behind + ["10.0.14.30", "10.0.14.31"]:
+        t = tcp_established(cap, src, "10.0.14.20", 445, t + 2)
+    cap.tick(T0 + 300)
+    cap.write(os.path.join(out, "report_assets_routed.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2279,7 +2298,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_detect_gap, gen_bruteforce_long, gen_scan_types, gen_tls_beacon_long,
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
-              gen_story_meta_active, gen_report_assets]
+              gen_story_meta_active, gen_report_assets,
+              gen_report_assets_routed]
 
 
 def main():
