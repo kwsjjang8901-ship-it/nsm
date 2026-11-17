@@ -5,7 +5,7 @@
 #
 #     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
 #       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
-#       끝에 파일별 결과 표와 DIR/index.html(각 report.html 링크)을 만든다. 한 파일이 실패해도 나머지는 계속한다.
+#       끝에 파일별 결과 표와 DIR/index.html(각 <pcap 이름>_report.html 링크)을 만든다. 한 파일이 실패해도 나머지는 계속한다.
 #     -o DIR    출력 디렉터리(기본: out/<pcap 이름>, 여러 개면 out/<디렉터리 이름> 또는 out/batch).
 #               Zeek 로그는 DIR/zeek/, 선별 전송은 DIR/zeek/meta/
 #     -n CIDRS  내부 대역(쉼표 구분). Site::local_nets 에 더하며 자산 식별 대상 대역도 이 값을 따른다.
@@ -18,7 +18,7 @@
 #               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
 #   화면 요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
-#   출력 디렉터리의 report.html(통합 리포트: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
+#   출력 디렉터리의 <pcap 이름>_report.html(통합 리포트, pcap 이름은 확장자를 뺀 파일 이름: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
@@ -73,7 +73,8 @@ if [ $# -gt 1 ] || [ -d "$1" ]; then
             echo "  Zeek 오류:"; tail -3 "$BASE/$name/zeek/stderr.txt" | sed 's/^/    /' | tee -a "$BASE/$name/run.txt"
         fi
         det=-; [ -f "$BASE/$name/zeek/nsm_detection.log" ] && det=$(grep -vc '^#' "$BASE/$name/zeek/nsm_detection.log" || true)
-        RES+=("$name"$'\t'"$st"$'\t'"$det")
+        rf=$(basename "$f"); rf="${rf%.*}_report.html"   # 하위 실행이 만드는 통합 리포트 이름
+        RES+=("$name"$'\t'"$st"$'\t'"$det"$'\t'"$rf")
     done
 
     echo ""; echo "================ 결과 (${#LIST[@]}개)"
@@ -85,10 +86,10 @@ if [ $# -gt 1 ] || [ -d "$1" ]; then
     } > "$BASE/index.html"
     nfail=0
     for r in "${RES[@]}"; do
-        IFS=$'\t' read -r name st det <<< "$r"
+        IFS=$'\t' read -r name st det rf <<< "$r"
         [ "$st" = ok ] || nfail=$((nfail + 1))
         printf '%-40s %-5s %s\n' "$name" "$st" "$det"
-        link=-; [ -f "$BASE/$name/report.html" ] && link="<a href=\"$name/report.html\">report.html</a>"
+        link=-; [ -f "$BASE/$name/$rf" ] && link="<a href=\"$name/$rf\">$rf</a>"
         echo "<tr><td>$name</td><td class=\"$st\">$st</td><td>$det</td><td>$link</td><td><a href=\"$name/run.txt\">run.txt</a></td></tr>" >> "$BASE/index.html"
     done
     echo "</table>" >> "$BASE/index.html"
@@ -253,10 +254,11 @@ else
 fi
 echo
 echo "[3/3] 통합 리포트"
-python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$OUT/report.html" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
+REPORT="$OUT/${NAME}_report.html"
+python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
 echo
 echo "결과: $OUT"
-echo "  - report.html    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
+echo "  - $(basename "$REPORT")    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
 if [ -n "$KEEP_RAW" ]; then echo "  - zeek/*.log     Zeek 원본 로그(-k: conn·dns·http·ssl 등)"; fi
