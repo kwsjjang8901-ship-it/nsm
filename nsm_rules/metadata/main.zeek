@@ -196,7 +196,7 @@ export {
         resp_h:     addr   &log;
         resp_p:     port   &log;
         proto:      transport_proto &log;
-        service:    string &log &optional;  ##< 관측된 서비스(쉼표 구분)
+        service:    vector of string &log &optional;  ##< 관측된 서비스(이름순)
         conns:      count  &log &default=0;
         orig_bytes: count  &log &default=0;
         resp_bytes: count  &log &default=0;
@@ -213,7 +213,7 @@ export {
         node:         string &log;
         orig_h:       addr   &log;
         domain:       string &log;                  ##< 등록 도메인(parent_domain, co.kr 등 2단계 접미사 처리)
-        qtypes:       string &log &optional;        ##< 관측된 질의 유형(쉼표 구분, 예: A,AAAA,HTTPS)
+        qtypes:       vector of string &log &optional;  ##< 관측된 질의 유형(이름순, 예: ["A","AAAA","HTTPS"])
         rcodes:       string &log &optional;        ##< 결과별 질의 수(예: NOERROR:12,NXDOMAIN:1)
         queries:      count  &log &default=0;       ##< 질의 수
         unique_names: count  &log &default=0;       ##< 고유 질의 이름 수
@@ -398,13 +398,18 @@ global meta_dns: table[string] of DnsSummary = table();
 global meta_dns_src_domains: table[addr] of count = table();
 
 ## 이름순으로 쉼표로 잇는다(출력이 실행마다 같도록)
-function meta_join_sorted(ss: set[string]): string
+function meta_sorted_vec(ss: set[string]): vector of string
     {
     local v: vector of string = vector();
     for ( x in ss )
         v += x;
     sort(v, strcmp);
-    return join_string_vec(v, ",");
+    return v;
+    }
+
+function meta_join_sorted(ss: set[string]): string
+    {
+    return join_string_vec(meta_sorted_vec(ss), ",");
     }
 
 ## "A:3,B:1" 같은 건수 문자열(이름순)
@@ -424,7 +429,7 @@ function meta_flush_flows()
     for ( _k, fs in meta_flows )
         {
         if ( |fs$svc_set| > 0 )
-            fs$service = meta_join_sorted(fs$svc_set);
+            fs$service = meta_sorted_vec(fs$svc_set);
         if ( |fs$state_cnt| > 0 )
             fs$states = meta_count_str(fs$state_cnt);
         Log::write(META_FLOW_LOG, fs);
@@ -437,7 +442,7 @@ function meta_flush_dns()
     for ( _k, ds in meta_dns )
         {
         if ( |ds$qtype_set| > 0 )
-            ds$qtypes = meta_join_sorted(ds$qtype_set);
+            ds$qtypes = meta_sorted_vec(ds$qtype_set);
         if ( |ds$rcode_cnt| > 0 )
             ds$rcodes = meta_count_str(ds$rcode_cnt);
         Log::write(META_DNS_LOG, ds);

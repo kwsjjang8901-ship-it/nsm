@@ -1050,14 +1050,14 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ts` | 탐지 시각 |
 | `detection_id` | 탐지 고유 ID |
 | `diagnosis` | 진단명(예: `NSM.CredentialAccess.DcSync`, `NSM.Impact.SmbRansomware`) |
-| `techniques` | ATT&CK 기법 ID |
+| `techniques` | ATT&CK 기법 ID 배열(상관은 체인 순서, 예: `["T1210","T1003.006"]`) |
 | `category` | `Single`(단일) 또는 `Correlated`(킬체인 상관) |
-| `killchain_stages` | 킬체인 단계명(상관은 `정찰->C2->확산`처럼 이어 붙임) |
+| `killchain_stages` | 킬체인 단계명 배열(상관은 체인 순서, 예: `["Recon","Command and Control"]`) |
 | `severity` | 단일 `Information`, 상관 `Suspicious` |
 | `first_seen` / `last_seen` | 관측 시작·끝. 같은 사건의 갱신 탐지(`occurrence` > 1)는 `first_seen`이 사건의 첫 탐지 시각 |
 | `attacker` / `attacker_subnet` | 공격 호스트와 그 대역 |
-| `victims` | 피해 호스트(최대 8개, 쉼표 구분) |
-| `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 |
+| `victims` | 피해 호스트 배열(최대 8개. 확산 룰은 주소 순, 상관은 마지막 단계 host가 맨 앞) |
+| `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 배열 |
 | `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
 | `incident_id` / `occurrence` | 같은 사건 묶기(단일 탐지만). 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
 
@@ -1084,7 +1084,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ts` / `node` | 기록 시각 / 기록한 노드 |
 | `kind` | `loaded`(적용), `rejected`(검증 거부), `expired`(만료), `hits`(주기별 적중 수), `error`(예외 파일 읽기 오류) |
 | `exception_id` | 예외 id(기존 설정에서 온 예외는 `legacy:<설정 이름>`) |
-| `disposition` / `scope` | 처리 방식 / 범위 |
+| `disposition` / `scope` | 처리 방식 / 범위 배열(이름순) |
 | `hits` / `last_hit` | 주기(`exception_stats_interval`, 기본 1시간) 안 적중 수 / 마지막 적중 시각. 적중이 없으면 행을 쓰지 않는다 |
 | `msg` | 거부·오류 이유, 출처(`file`, `legacy`) |
 

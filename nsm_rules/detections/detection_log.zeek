@@ -15,17 +15,17 @@ export {
         ts:               time   &log;
         detection_id:     string &log;
         diagnosis:        string &log;
-        techniques:       string &log &optional;
+        techniques:       vector of string &log &optional;   # ATT&CK 기법(상관은 체인 순서)
         category:         string &log;
-        killchain_stages: string &log &optional;
+        killchain_stages: vector of string &log &optional;   # 킬체인 단계(상관은 체인 순서)
         severity:         string &log;
         first_seen:       time   &log &optional;
         last_seen:        time   &log &optional;
         attacker:         addr   &log &optional;
         attacker_subnet:  subnet &log &optional;
-        victims:          string &log &optional;
+        victims:          vector of string &log &optional;   # 피해 host(최대 chain_max_victims)
         evidence_count:   count  &log &default=0;
-        evidence_ids:     string &log &optional;
+        evidence_ids:     vector of string &log &optional;
         disposition:      string &log &optional;   # suppress 예외에 맞은 탐지: suppressed(Manager 는 알림 안 함)
         exception_id:     string &log &optional;   # 맞은 예외 id
         ## 같은 공격이 이어져 나온 탐지를 묶는 사건 id(그 사건의 첫 탐지 detection_id)와 몇 번째인지.
@@ -97,6 +97,16 @@ export {
     global attacker_segment: function(a: addr): subnet;
 }
 
+# ATT&CK 기법 문자열("T1071.004, T1572" 처럼 쉼표·공백 구분)을 배열로
+function technique_vec(s: string): vector of string
+    {
+    local out: vector of string = vector();
+    for ( _i, t in split_string(s, /[ ]*,[ ]*/) )
+        if ( t != "" )
+            out += t;
+    return out;
+    }
+
 function write_detection(d: DetectionInfo)
     {
     Log::write(NSM::DETECTION_LOG, d);
@@ -150,7 +160,7 @@ hook Notice::policy(n: Notice::Info) &priority=-6
     d$last_seen    = n$ts;
 
     if ( n$note in stage_name_map )
-        d$killchain_stages = stage_name_map[n$note];
+        d$killchain_stages = vector(stage_name_map[n$note]);
 
     if ( n?$disposition )
         d$disposition = n$disposition;
@@ -158,9 +168,9 @@ hook Notice::policy(n: Notice::Info) &priority=-6
         d$exception_id = n$exception_id;
 
     if ( n?$attack )
-        d$techniques = n$attack;
+        d$techniques = technique_vec(n$attack);
     else if ( n$note in NSM::attack_map )
-        d$techniques = NSM::attack_map[n$note];
+        d$techniques = technique_vec(NSM::attack_map[n$note]);
 
     if ( n?$src )
         {
@@ -169,19 +179,24 @@ hook Notice::policy(n: Notice::Info) &priority=-6
         }
     # victims: 확산 룰(06/15/16)은 lm_targets(피해 host 집합)를 우선 사용하고,
     #   그 외에는 notice 의 dst 를 쓴다. 최대 chain_max_victims 개까지 표시(초과 생략).
+    #   lm_targets 는 집합이라 순서가 없으므로 주소 순으로 정렬한다(같은 피해 집합이면 같은 배열).
     if ( n?$lm_targets && |n$lm_targets| > 0 )
         {
-        local vout: vector of string = vector();
+        local va: vector of addr = vector();
         for ( lv in n$lm_targets )
+            va += lv;
+        sort(va, function(a: addr, b: addr): int { return a < b ? -1 : ( a > b ? 1 : 0 ); });
+        local vout: vector of string = vector();
+        for ( _vi, av in va )
             {
             if ( |vout| >= chain_max_victims )
                 break;
-            vout[|vout|] = cat(lv);
+            vout += cat(av);
             }
-        d$victims = join_string_vec(vout, ",");
+        d$victims = vout;
         }
     else if ( n?$dst )
-        d$victims = cat(n$dst);
+        d$victims = vector(cat(n$dst));
 
     # evidence_count: evidence.log 에 실제 기록된 근거 행 수를 반영한다.
     #   (evidence_id 별 누적 카운터. 기록이 없으면 최소 1로 둔다)
@@ -193,10 +208,10 @@ hook Notice::policy(n: Notice::Info) &priority=-6
     else
         d$evidence_count = 1;
     if ( n?$evidence_id )
-        d$evidence_ids = n$evidence_id;
+        d$evidence_ids = vector(n$evidence_id);
 
     # 진행 중인 같은 사건이면 사건 id 를 이어 받고 횟수를 올린다.
-    local ikey = cat(n$note, "|", d?$attacker ? cat(d$attacker) : "-", "|", d?$victims ? d$victims : "-");
+    local ikey = cat(n$note, "|", d?$attacker ? cat(d$attacker) : "-", "|", d?$victims ? join_string_vec(d$victims, ",") : "-");
     if ( ikey in ongoing_incidents )
         {
         local inc = ongoing_incidents[ikey];

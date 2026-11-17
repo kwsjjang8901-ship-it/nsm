@@ -360,23 +360,26 @@ function stage_tag(note: Notice::Type): string
     return note in stage_tag_map ? stage_tag_map[note] : cat(note);
     }
 
-function chain_stage_names(st: ChainState): string
+function chain_stage_names(st: ChainState): vector of string
     {
-    local out = "";
-    local i = 0; local n = |st$stages|;
-    while ( i < n )
-        {
-        local nm = st$stages[i] in NSM::stage_name_map ?
-                   NSM::stage_name_map[st$stages[i]] : cat(st$stages[i]);
-        out = i == 0 ? nm : cat(out, "->", nm);
-        i += 1;
-        }
+    local out: vector of string = vector();
+    for ( _i, note in st$stages )
+        out += note in NSM::stage_name_map ? NSM::stage_name_map[note] : cat(note);
+    return out;
+    }
+
+# 탐지 요약(nsm_detection)의 techniques: 체인 순서대로 단계별 기법(중복 그대로)
+function chain_tids_vec(st: ChainState): vector of string
+    {
+    local out: vector of string = vector();
+    for ( _i, note in st$stages )
+        out += stage_technique(note);
     return out;
     }
 
 # 피해 host 목록 문자열 생성. last_host 를 앞에 두고 누적 victims 를 이어 붙이며
 #   최대 chain_max_victims 개까지만 표시한다(초과분은 생략).
-function victims_str(st: ChainState, last_host: addr): string
+function victims_vec(st: ChainState, last_host: addr): vector of string
     {
     local out: vector of string = vector();
     local seen: set[addr] = set();
@@ -395,7 +398,7 @@ function victims_str(st: ChainState, last_host: addr): string
         out[|out|] = cat(v);
         }
 
-    return join_string_vec(out, ",");
+    return out;
     }
 
 # detection 의 evidence_ids 에 실릴 값들.
@@ -468,7 +471,7 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
         $ts               = network_time(),
         $detection_id     = st$chain_id,
         $diagnosis        = diag,
-        $techniques       = chain_tids(st),
+        $techniques       = chain_tids_vec(st),
         $category         = "Correlated",
         $killchain_stages = chain_stage_names(st),
         $severity         = "Suspicious",
@@ -476,9 +479,9 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
         $last_seen        = ts,
         $attacker         = st$attacker,
         $attacker_subnet  = NSM::attacker_segment(st$attacker),
-        $victims          = victims_str(st, last_host),
+        $victims          = victims_vec(st, last_host),
         $evidence_count   = chain_evidence_count(all_eids),
-        $evidence_ids     = join_string_vec(all_eids, ",")]);
+        $evidence_ids     = all_eids]);
     }
 
 function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr], ts: time)

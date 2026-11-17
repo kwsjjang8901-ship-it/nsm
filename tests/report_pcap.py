@@ -48,6 +48,15 @@ def nlines(path):
     return sum(1 for _ in open(path, encoding="utf-8", errors="replace")) if path and os.path.exists(path) else 0
 
 
+def chain_text(v, category):
+    """nsm_detection 의 techniques·killchain_stages(배열)를 화면용 문자열로: 상관은 "A->B", 단일은 "A, B"."""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return ("->" if category == "Correlated" else ", ").join(str(x) for x in v)
+    return str(v)
+
+
 def split_list(v):
     if v is None:
         return []
@@ -233,7 +242,7 @@ def enrich(det, midx):
     if "flow_summary" in use:
         fl = [r for r in by["flow_summary"] if vic and to_v(r)]
         if fl:
-            ports = [f"{r.get('resp_p')}/{r.get('proto', '')}{'(' + r['service'] + ')' if r.get('service') else ''}" for r in fl]
+            ports = [f"{r.get('resp_p')}/{r.get('proto', '')}{'(' + ','.join(split_list(r['service'])) + ')' if r.get('service') else ''}" for r in fl]
             add("연결", [f"{sum(r.get('conns', 0) for r in fl):,}회, 보냄 {_fmt_bytes(sum(r.get('orig_bytes', 0) for r in fl))}"
                        f" / 받음 {_fmt_bytes(sum(r.get('resp_bytes', 0) for r in fl))}"] + ports, "flow_summary", 4)
     rc = [str(r.get("cookie")) for r in by["rdp"] if to_v(r) and r.get("cookie")] if "rdp" in use else []
@@ -679,8 +688,9 @@ def collect(z, assets_path, args):
         for eid in eids:
             evs.extend(ev_by.get(eid, []))
         item = {
-            "ts": ts, "id": d.get("detection_id"), "diagnosis": d.get("diagnosis"), "techniques": d.get("techniques"),
-            "category": d.get("category"), "stages": d.get("killchain_stages"), "severity": d.get("severity"),
+            "ts": ts, "id": d.get("detection_id"), "diagnosis": d.get("diagnosis"),
+            "techniques": chain_text(d.get("techniques"), d.get("category")),
+            "category": d.get("category"), "stages": chain_text(d.get("killchain_stages"), d.get("category")), "severity": d.get("severity"),
             "attacker": label(att, ts) if att else None, "victims": [label(v, ts) for v in vics],
             "evidence_count": d.get("evidence_count", 0), "disposition": d.get("disposition"),
             "exception_id": d.get("exception_id"), "evidence": sorted(evs, key=lambda e: e.get("ts") or 0)[:200],
@@ -1162,7 +1172,7 @@ document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="n
 const ek={};D.exceptions.forEach(e=>{const k=e.exception_id;ek[k]=ek[k]||{id:k,kinds:new Set(),hits:0,disp:e.disposition||'',scope:e.scope||'',msg:''};
  ek[k].kinds.add(e.kind);if(e.kind==='hits')ek[k].hits+=e.hits||0;if(e.scope)ek[k].scope=e.scope;if(e.disposition)ek[k].disp=e.disposition;if(e.msg&&e.kind!=='hits')ek[k].msg=e.msg});
 table('exct',[['예외 ID',e=>`<code>${esc(e.id)}</code>`,e=>e.id],['상태',e=>[...e.kinds].filter(k=>k!=='hits').map(k=>`<span class="chip ${k==='rejected'||k==='error'?'sus':''}">${esc(k)}</span>`).join(''),e=>[...e.kinds].join()],
- ['처리',e=>esc(e.disp),e=>e.disp],['범위',e=>esc(e.scope),e=>e.scope],['적중(관측 수)',e=>e.hits.toLocaleString(),e=>e.hits,'num'],['비고',e=>esc(e.msg),e=>e.msg]],Object.values(ek));
+ ['처리',e=>esc(e.disp),e=>e.disp],['범위',e=>esc([].concat(e.scope||[]).join(', ')),e=>[].concat(e.scope||[]).join()],['적중(관측 수)',e=>e.hits.toLocaleString(),e=>e.hits,'num'],['비고',e=>esc(e.msg),e=>e.msg]],Object.values(ek));
 // 센서
 const S=D.sensor;document.getElementById('sent').innerHTML=`<table>
  <tr><td>최대 캡처 손실</td><td>${(S.capture_loss_max||0).toFixed(2)}% ${S.capture_loss_max>1?'<span class="sus">미러 손실 확인 필요</span>':''}</td></tr>

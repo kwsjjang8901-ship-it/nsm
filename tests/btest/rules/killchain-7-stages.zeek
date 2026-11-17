@@ -15,4 +15,4 @@
 # @TEST-EXEC: assert-rows nsm_detection.log ge 1 category=Correlated diagnosis=NSM.Correlation.Recon.InitialAccess attacker=172.16.0.66
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.C2 attacker=172.16.0.66
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Lateral attacker=172.16.0.66
-# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Impact attacker=172.16.0.66 'techniques=T1046->T1505.003->T1071.001->T1558.003->T1021.002->T1486'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Impact attacker=172.16.0.66 'techniques=T1046,T1505.003,T1071.001,T1558.003,T1021.002,T1486'
