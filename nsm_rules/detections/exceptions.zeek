@@ -77,7 +77,7 @@ export {
         kind:         string &log;            ##< loaded, rejected, expired, hits, error(파일 읽기 오류)
         exception_id: string &log;
         disposition:  string &log &optional;
-        scope:        string &log &optional;
+        scope:        vector of string &log &optional;   ##< notice 이름·group:<묶음>(이름순)
         hits:         count  &log &optional;  ##< 주기 안 적중 수(kind=hits)
         last_hit:     time   &log &optional;
         msg:          string &log &optional;  ##< 거부 이유, 출처(file, legacy) 등
@@ -155,19 +155,19 @@ function disp_of(r: ExceptionRec): string
     return r?$disposition ? to_lower(r$disposition) : "drop";
     }
 
-function scope_str(r: ExceptionRec): string
+function scope_vec(r: ExceptionRec): vector of string
     {
     local v: vector of string = vector();
     for ( s in r$scope )
         v += s;
     sort(v, strcmp);
-    return join_string_vec(v, ",");
+    return v;
     }
 
 function exc_log(kind: string, id: string, r: ExceptionRec, msg: string)
     {
     local l = ExceptionLogInfo($ts=network_time(), $node=peer_description, $kind=kind,
-                               $exception_id=id, $disposition=disp_of(r), $scope=scope_str(r));
+                               $exception_id=id, $disposition=disp_of(r), $scope=scope_vec(r));
     if ( msg != "" )
         l$msg = msg;
     Log::write(EXCEPTION_LOG, l);

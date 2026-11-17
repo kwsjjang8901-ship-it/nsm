@@ -21,7 +21,7 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 category=Correlated attacker=10.0.0.250 diagnosis=NSM.Correlation.Recon.Exfil
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated attacker=10.0.0.250 diagnosis=NSM.Correlation.Recon.Impact
 # 8단계 전체 기법 흐름(신규 탐지의 기법은 attack_map 에서 가져온다)
-# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated 'techniques=T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1558.003,T1003.006,T1021.006,T1041,T1486'
 # 7·8단계의 마지막 host = 피해 .251
 # @TEST-EXEC: assert-rows evidence.log eq 8 note=NSM::Correlated_KillChain src=10.0.0.250 operation=killchain
 # @TEST-EXEC: assert-rows evidence.log eq 3 note=NSM::Correlated_KillChain src=10.0.0.250 dst=10.0.0.251

@@ -17,7 +17,7 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.C2
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.Lateral
 # @TEST-EXEC: assert-rows nsm_detection.log eq 4 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.Exfil
-# @TEST-EXEC: assert-rows nsm_detection.log eq 4 category=Correlated 'techniques=T1046->T1568.002->T1071.001->T1021.002->T1041'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 4 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041'
 # 5단계 갈래별 마지막 host 가 victims 맨 앞(host 마다 유출 룰 2개)
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 diagnosis=NSM.Correlation.Recon.Exfil victims=10.0.0.241,10.0.0.242
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 diagnosis=NSM.Correlation.Recon.Exfil victims=10.0.0.242,10.0.0.241

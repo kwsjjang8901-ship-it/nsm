@@ -179,7 +179,7 @@ flowchart LR
 | ts | 시각 | 주기 안 첫 연결의 시작 시각 |
 | node | 문자열 | 기록한 노드 |
 | orig_h, resp_h, resp_p, proto | 주소, 주소, 포트, 프로토콜 | 묶는 키 |
-| service | 문자열 | 관측된 서비스(쉼표 구분, 예: `ssl`, `ntlm,gssapi,smb`) |
+| service | 문자열 배열 | 관측된 서비스(이름순, 예: `["ssl"]`, `["gssapi","ntlm","smb"]`) |
 | conns | 수 | 연결 수 |
 | orig_bytes, resp_bytes | 수 | 바이트 합(페이로드) |
 | states | 문자열 | 연결 상태별 건수(예: `SF:12,S0:3`) |
@@ -194,7 +194,7 @@ flowchart LR
 | ts, ts_end | 시각 | 주기 안 첫·마지막 질의 시각 |
 | node, orig_h | | flow_summary와 같음 |
 | domain | 문자열 | 등록 도메인. 출발지 상한을 넘은 도메인은 `(other)` |
-| qtypes | 문자열 | 관측된 질의 유형(이름순, 예: `A,AAAA,HTTPS`) |
+| qtypes | 문자열 배열 | 관측된 질의 유형(이름순, 예: `["A","AAAA","HTTPS"]`) |
 | rcodes | 문자열 | 결과별 질의 수(이름순, 예: `NOERROR:12,NXDOMAIN:1`) |
 | queries | 수 | 질의 수 |
 | unique_names | 수 | 고유 질의 이름 수(1000개까지 셈) |
@@ -239,7 +239,7 @@ flowchart LR
 {"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","id.orig_h":"10.0.0.71","id.orig_p":47984,"id.resp_h":"93.184.215.131","id.resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
 {"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
-{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":"A,AAAA","rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
+{"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":["A","AAAA"],"rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
 {"ts":1794182700.0,"node":"zeek","stream":"http","sent":1,"dropped_scope":1,"dropped_filter":1,"dropped_dedup":1,"dropped_rate":0,"summarized":0}
 ```
 

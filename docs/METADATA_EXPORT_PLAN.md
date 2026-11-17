@@ -98,7 +98,7 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 | ts | 주기 안 첫 연결 시작 시각 |
 | node | 기록한 노드 |
 | orig_h, resp_h, resp_p, proto | 묶는 키 |
-| service | 관측된 서비스(쉼표 구분) |
+| service | 관측된 서비스(문자열 배열, 이름순) |
 | conns | 연결 수 |
 | orig_bytes, resp_bytes | 바이트 합 |
 | states | 연결 상태별 건수(예: `SF:12,S0:3`) |
