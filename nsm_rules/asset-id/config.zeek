@@ -44,7 +44,7 @@ export {
 	option enable_mds_agent = T;    ##< AhnLab MDS Agent -> MDS 장비 통신 포트 -> security_agent, device
 
 	## AhnLab MDS Agent 가 MDS 장비에 접속하는 포트.
-	option mds_agent_ports: set[port] = { 8291/tcp, 8293/tcp, 50007/tcp };
+	option mds_agent_ports: set[port] = { 8291/tcp, 8293/tcp, 50007/tcp, 50502/tcp };
 
 	## MDS 장비 주소. 지정하면 이 주소의 에이전트 포트로 접속한 host 를 바로 에이전트로 본다(신뢰도 90).
 	## 비어 있으면 같은 서버의 에이전트 포트 mds_agent_min_ports 개 이상에 접속한 host 만 본다(신뢰도 70).
