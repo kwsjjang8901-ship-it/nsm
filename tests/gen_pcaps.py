@@ -2301,6 +2301,60 @@ def gen_mds_agent(out):
     cap.write(os.path.join(out, "mds_agent.pcap"))
 
 
+# --------------------------------------------------------------------------- 10/12/14 명시적 프록시 경유 유출
+
+def proxy_upload(cap, src, proxy, t, target, sni=None, upload=0, pport=3128, connect=True):
+    """PC -> 프록시 연결 하나. connect=True 면 CONNECT 호스트:443 -> 200 -> TLS(SNI) 뒤 upload 바이트 업로드,
+    False 면 해석할 수 없는 데이터만(첫 요청을 못 본 프록시 연결 모사: 목적지 이름을 모름)."""
+    s = Tcp(cap, src, proxy, pport)
+    t = s.handshake(t)
+    if not connect:
+        t = s.client_send(rand_bytes(300), t)
+        t = s.client_send(rand_bytes(300), t + 1, skip=upload)
+        return s.close(t + 0.01)
+    if connect:
+        req = "CONNECT %s:443 HTTP/1.1\r\nHost: %s:443\r\nUser-Agent: Mozilla/5.0\r\nProxy-Connection: keep-alive\r\n\r\n" % (target, target)
+        t = s.client_send(req.encode(), t)
+        t = s.server_send(b"HTTP/1.1 200 Connection established\r\n\r\n", t + 0.01)
+    t = s.client_send(client_hello(sni or target), t + 0.01)
+    t = s.server_send(server_hello(), t + 0.02)
+    t = s.client_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.client_send(tls_record(23, rand_bytes(200)), t + 0.01)
+    if upload:
+        t = s.client_send(tls_record(23, rand_bytes(200)), t + 1, skip=upload)
+    t = s.server_send(tls_record(23, rand_bytes(100)), t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_exfil_proxy(out):
+    """명시적 프록시(10.0.40.5:3128, 내부 대역) 경유 업로드와 클라우드 서비스 1시간 누적(12).
+    .10 Dropbox 로 30MB 두 번(10분 간격): 12 탐지(합계 60MB), 10·14 미탐(연결마다·1분마다 30MB).
+    .11 S3 로 60MB 한 번: 10·12·14 탐지. .12 일반 사이트로 60MB: 10·14 탐지, 12 미탐(클라우드 아님).
+    .13 Dropbox 로 20MB 두 번: 미탐(합계 40MB). .14 프록시 없이 Dropbox 로 20MB 세 번(10분 간격): 12 탐지(합계 60MB).
+    .15 배운 프록시로 첫 요청 없이 60MB: 10·14 탐지(프록시 경유), 12 미탐(목적지 이름 모름).
+    .16 내부 일반 서버(10.0.40.6:8080, 프록시 아님)로 60MB: 미탐.
+    프록시 자신이 외부로 60MB(Dropbox): 미탐(같은 전송을 PC 쪽에서 봄)."""
+    mb = 1024 * 1024
+    P = "10.0.40.5"
+    cap = Capture()
+    t = T0 + 1
+    proxy_upload(cap, "10.0.40.10", P, t, "uploads.dropboxapi.com", upload=30 * mb)
+    proxy_upload(cap, "10.0.40.10", P, t + 600, "content.dropboxapi.com", upload=30 * mb)
+    proxy_upload(cap, "10.0.40.11", P, t + 30, "nsm-test.s3.ap-northeast-2.amazonaws.com", upload=60 * mb)
+    proxy_upload(cap, "10.0.40.12", P, t + 60, "www.example.com", upload=60 * mb)
+    proxy_upload(cap, "10.0.40.13", P, t + 90, "uploads.dropboxapi.com", upload=20 * mb)
+    proxy_upload(cap, "10.0.40.13", P, t + 700, "uploads.dropboxapi.com", upload=20 * mb)
+    for i in range(3):
+        tls_session(cap, "10.0.40.14", "93.184.215.70", t + 120 + 600 * i, sni="uploads.dropboxapi.com",
+                    upload_skip=20 * mb)
+    proxy_upload(cap, "10.0.40.15", P, t + 150, "unknown.example", upload=60 * mb, connect=False)
+    bulk_upload(cap, "10.0.40.16", "10.0.40.6", 8080, 60 * mb, t + 180)
+    tls_session(cap, P, "93.184.215.71", t + 210, sni="uploads.dropboxapi.com", upload_skip=60 * mb)
+    cap.tick(t + 1800)
+    cap.write(os.path.join(out, "exfil_proxy.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2315,7 +2369,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
-              gen_report_assets_routed, gen_mds_agent]
+              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy]
 
 
 def main():

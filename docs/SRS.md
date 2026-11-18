@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 33개(파일 01\~34, 11번은 08번에 통합), 탐지 유형 47종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 112개(자산 식별·선별 전송 포함), 합성 pcap 53개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 113개(자산 식별·선별 전송 포함), 합성 pcap 54개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -69,7 +69,7 @@ flowchart LR
 | --- | --- | --- |
 | 로더 | `nsm_rules/__load__.zeek` | 모든 구성 요소를 정해진 순서로 로드(7.1절) |
 | 공통 정의 | `detections/main.zeek` | 탐지 유형(notice) 목록, 공통 파라미터·함수, 킬체인 단계명 |
-| 탐지 룰 | `detections/01~24_*.zeek`, `web_common.zeek` | 위협별 탐지(4장) |
+| 탐지 룰 | `detections/01~24_*.zeek`, `web_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14 공용) |
 | 근거·요약 | `evidence_log.zeek`, `detection_log.zeek`, `attack_mapping.zeek` | 근거 기록, 탐지 요약, ATT&CK 매핑 |
 | 상관·묶기 | `correlation_killchain.zeek`, `notice_aggregation.zeek` | 킬체인 상관, 중복 묶기 |
 | 설정 | `nsm_config_fixed.zeek`, `nsm_config_custom.zeek`, `intel_ja3.zeek` | 운영 기본값, 고객별 값, JA3 목록(7장) |
@@ -159,9 +159,9 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 + 그 연속 구간이 30분 이상 | 2분 넘는 연결 제외, SNI·목적지 예외 |
 | C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
-| 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상 | 1시간 억제 |
-| 유출 | 기존 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 클라우드 저장소(지정 호스트 패턴)로 50MB 이상 업로드 | 출발지 예외 |
-| 유출 | 기존 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | T1041 | 한 호스트의 외부향 업로드 합계가 1분 안 50MB 이상(1MB 단위 실시간 집계) | 5분 억제 |
+| 유출 | 기존 | 10_large_transfer_exfil | Exfil_Large_Transfer | T1041 | 외부향 단일 연결 업로드 50MB 이상(명시적 프록시 경유 포함) | 1시간 억제 |
+| 유출 | 기존 | 12_web_upload_exfil | Exfil_Web_Upload | T1567.002 | 한 클라우드 저장소 서비스(지정 호스트 패턴)로 1시간 누적 50MB 이상 업로드(명시적 프록시 경유 포함) | 1시간 억제, 집계형 |
+| 유출 | 기존 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | T1041 | 한 호스트의 외부향 업로드 합계가 1분 안 50MB 이상(1MB 단위 실시간 집계, 명시적 프록시 경유 포함) | 5분 억제 |
 | 유출 | 신규 | 33_ai_threats | AI_Service_Upload | T1567 | 한 출발지가 한 AI 서비스로 1시간 안 10MB 이상 업로드 | 출발지·도메인 예외 |
 | 유출 | 신규 | 19_outbound_smb | Outbound_SMB | T1048 | 내부 → 외부 445·139 TCP 연결 성립(1건) | 경계에서 막힌 시도는 제외 |
 | 영향 | 신규 | 21_smb_ransomware | SMB_Ransomware | T1486 | 1분 안 확장자가 바뀐 이름 변경 30개 이상, 또는 랜섬 노트 생성 폴더 5개 이상 | Office 임시 파일 제외, 백업 서버 예외 |
@@ -796,32 +796,48 @@ DNS 터널링과 같은 방식으로 데이터를 서브도메인에 실어 내�
 
 ##### 단일 연결 대용량 유출 (`Exfil_Large_Transfer`, T1041) · 10_large_transfer_exfil
 
-공격자는 수집한 데이터를 압축해 한 번에 외부로 보냅니다. **내부 → 외부 연결 하나의 업로드가 50MB를 넘으면** 탐지합니다.
+공격자는 수집한 데이터를 압축해 한 번에 외부로 보냅니다. **내부 → 외부 연결 하나의 업로드가 50MB를 넘으면** 탐지합니다. PC에 프록시가 설정된 환경에서는 PC → 프록시 연결도 외부 연결로 봅니다(아래 "명시적 프록시 인식").
 
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 업로드량 | `connection_state_remove`의 `c$orig$size` (클라이언트가 보낸 페이로드) |
 | 서비스 | `c$conn$service` (근거용) |
+| 프록시 경유와 실제 목적지 | `proxy_common.zeek`의 `exfil_outbound(c)`·`conn_dest_name(c)`(아래) |
 
-- 주체: `src` = 유출 host, `dst` = 외부 목적지.
+- 주체: `src` = 유출 host, `dst` = 외부 목적지. 프록시를 거친 연결은 `dst`가 프록시 주소이고, 실제 목적지는 근거의 `host=`에 남습니다.
 - 집계·억제: 연결 종료 시 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 → 외부만. 연결이 끝나야 판정하므로 장기 연결은 14번이 보완합니다. 백업·동기화처럼 허용한 대용량 전송은 예외 파일(5.4절)로 뺍니다.
-- 근거: 전송량(MB), 서비스, uid(`conn.log`와 바로 조인).
+- 제외·오탐 통제: 내부 → 외부(또는 프록시 경유)만. 프록시가 출발지인 연결(프록시 → 인터넷)은 같은 전송을 PC 쪽에서 보므로 뺍니다(`exfil_skip_proxy_source`). 연결이 끝나야 판정하므로 장기 연결은 14번이 보완합니다. 백업·동기화처럼 허용한 대용량 전송은 예외 파일(5.4절)로 뺍니다.
+- 근거: 전송량(MB), 서비스, 목적지 이름(`host=`), 프록시(`via_proxy=주소:포트`), uid(`conn.log`와 바로 조인).
 
-##### 클라우드 업로드 유출 (`Exfil_Web_Upload`, T1567.002) · 12_web_upload_exfil
+###### 명시적 프록시 인식 (`proxy_common.zeek`, 10·12·14 공용)
 
-외부 저장소 서비스(Google Drive, Dropbox, S3, OneDrive, MEGA 등)로 올리는 유출은 정상 서비스 트래픽에 섞입니다. HTTPS라 본문은 못 보므로 목적지 이름과 업로드량으로 추론합니다. **클라우드 저장소로 판별된 목적지에 연결 하나로 50MB를 넘게 올리면** 탐지합니다.
+PC에 프록시가 설정된 환경(PAC·WPAD 포함)에서는 PC의 웹 연결이 모두 프록시(예: 3128/tcp)로 갑니다. Zeek에 보이는 목적지가 프록시라서, 프록시가 내부 대역(`local_nets`)에 있으면 외부로 나간 업로드가 보이지 않습니다. 고객 환경 캡처 두 건(S3 45MB, Dropbox 43MB)에서 외부 업로드의 거의 전부가 프록시를 거쳤고, 같은 프록시라도 고객 설정에 따라 내부·외부로 다르게 판단됐습니다.
 
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
-| 목적지 서비스 | `c$ssl$server_name`(SNI) 우선, 없으면 `c$http$host`. `cloud_hosts` 패턴과 비교 |
-| 업로드량 | `connection_state_remove`의 `c$orig$size` |
+| 프록시 요청 | 연결의 첫 요청이 `CONNECT 호스트:포트`이거나 절대 URL(`http://호스트/…`). `http_request`, `c$http$method`·`c$http$uri` |
+| 실제 목적지 이름 | CONNECT가 성공하면 Zeek가 같은 연결의 나머지를 TLS로 해석해 SNI(`c$ssl$server_name`)가 보입니다. 이름은 SNI > CONNECT 대상 > HTTP Host 순 |
+| 프록시 학습 | CONNECT·절대 URL을 받은 (주소, 포트)를 24시간 기억(`proxy_learn_expire`). 첫 요청을 못 본 연결(캡처 전부터 열려 있던 연결 등)도 배운 프록시나 `proxy_servers`로 가면 프록시 경유로 봅니다. 이때 목적지 이름은 모릅니다 |
+
+- 내부·외부 판단(`local_nets`)과 상관없이 동작합니다.
+- 배운 프록시는 워커마다 따로 기억합니다. 같은 PC-프록시 쌍은 보통 같은 워커로 갑니다.
+- PC-프록시 구간도 TLS인 HTTPS 프록시는 CONNECT가 암호화돼 인식하지 못합니다. 미러링이 프록시 바깥 구간만 보면 출발지가 모두 프록시라 PC를 알 수 없습니다(10장).
+
+##### 클라우드 업로드 유출 (`Exfil_Web_Upload`, T1567.002) · 12_web_upload_exfil
+
+외부 저장소 서비스(Google Drive, Dropbox, S3, OneDrive, MEGA 등)로 올리는 유출은 정상 서비스 트래픽에 섞입니다. HTTPS라 본문은 못 보므로 목적지 이름과 업로드량으로 추론합니다. 클라우드 클라이언트는 파일을 여러 연결·조각(S3 multipart 8MB 등)으로 나눠 올리고, 천천히 올리면 1분 합계(14번)에도 닿지 않습니다. 그래서 연결 하나가 아니라 서비스별 누적으로 봅니다. **한 출발지가 한 클라우드 저장소 서비스(등록 도메인 기준, 예: `dropboxapi.com`)로 1시간 안에 올린 합계가 50MB를 넘으면** 탐지합니다. 연결 하나로 50MB를 넘는 업로드도 그대로 탐지됩니다. 명시적 프록시를 거친 업로드도 봅니다(10번의 "명시적 프록시 인식").
+
+| 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
+| --- | --- |
+| 목적지 서비스 | `c$ssl$server_name`(SNI) 우선, 없으면 프록시 CONNECT 대상, 그다음 `c$http$host`. `cloud_hosts` 패턴과 비교. 누적 키는 등록 도메인(`parent_domain`) |
+| 업로드량 | `connection_state_remove`의 `c$orig$size`를 (출발지, 서비스)별로 합산(SumStats SUM, 창 `webupload_epoch` 1시간) |
+| 근거 표본 | 연결 표본 최대 5개(SumStats SAMPLE). 임계를 넘긴 연결도 들어가도록 표본을 합계보다 먼저 넣음 |
 
 - 같은 전송에 10·14번도 함께 뜰 수 있습니다. 12번은 "어느 서비스로"가 식별된 더 구체적인 근거입니다.
-- 주체: `src` = 유출 host.
-- 집계·억제: 연결 종료 시 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 서비스를 식별하지 못하면 판정하지 않습니다. 예외 목적지(기존 `web_upload_allowlist`, 코드상 목적지 판정). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). `cloud_hosts`의 `*.amazonaws.com` 등이 넓어 백업·CI 트래픽 오탐 가능성이 있습니다(10장).
-- 근거: 서비스 이름, 전송량.
+- 주체: `src` = 유출 host, `dst` = 외부 목적지(프록시를 거친 업로드만 있으면 비움. 실제 목적지는 근거의 `host=`).
+- 집계·억제: (출발지, 서비스)별 1시간 합계, 임계 즉시 탐지, 1시간 억제. 바이트는 연결이 끝날 때 더하므로 진행 중인 장시간 업로드는 10·14번이 먼저 봅니다. 창은 고정 구간이라 경계에 걸친 업로드는 두 창으로 나뉠 수 있습니다.
+- 제외·오탐 통제: 서비스를 식별하지 못하면 세지 않습니다(첫 요청을 못 본 프록시 연결 포함). 프록시가 출발지인 연결은 뺍니다. 예외 목적지(기존 `web_upload_allowlist`, 코드상 목적지 판정). 예외는 예외 엔진(5.4절, `exception_drop_agg`, 집계 전)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 집계형이라 목적지 쪽 축 예외는 `suppress`여도 `drop`으로 동작합니다. 프록시를 거친 업로드는 목적지 주소가 프록시이므로 서비스 예외는 도메인 축으로 겁니다. `cloud_hosts`의 `*.amazonaws.com` 등이 넓어 백업·CI 트래픽 오탐 가능성이 있습니다(10장).
+- 근거: 연결마다 1행. 서비스(등록 도메인), 목적지 이름(`host=`), 연결 업로드량, 합계, 연결 수, 창, 프록시(`via_proxy=`).
 
 ##### 호스트 단위 볼륨 유출 (`Exfil_Volume_Aggregate`, T1041) · 14_large_transfer_exfil
 
@@ -830,12 +846,13 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 업로드 증가분 | 내부 → 외부 TCP 연결 성립 시 `ConnThreshold::set_bytes_threshold`(1MB 단위) → `ConnThreshold::bytes_threshold_crossed`마다 `c$orig$size` 증가분을 관측, 연결 종료 시 남은 증가분 반영 |
+| 프록시 경유 | 연결 성립 때 이미 아는 프록시(배운 프록시·`proxy_servers`)면 그때부터, 처음 보는 프록시면 CONNECT·절대 URL 요청(`http_request`)이 보일 때부터 셈 |
 
 - 패킷마다 이벤트를 받지 않고 1MB마다 깨어나므로 고대역에서도 부하가 작습니다. 연결 중에도 반영돼 장기 연결도 끝나기 전에 탐지합니다. 탐지는 최대 1MB만큼 늦어질 수 있습니다.
 - 집계는 페이로드 기준이라 다운로드 때 내부 PC가 보내는 ACK 헤더는 외부 전송량에 들어가지 않습니다.
 - 주체: `src` = 유출 host.
 - 집계·억제: host별 바이트 합계(SumStats SUM), 임계 즉시 탐지, 5분 억제.
-- 제외·오탐 통제: 내부 → 외부 TCP만. 허용한 백업·동기화 목적지는 예외 파일(5.4절)로 빼며, 예외에 맞은 연결은 더 세지 않습니다.
+- 제외·오탐 통제: 내부 → 외부(또는 프록시 경유) TCP만. 프록시가 출발지인 연결은 세지 않습니다. 허용한 백업·동기화 목적지는 예외 파일(5.4절)로 빼며, 예외에 맞은 연결은 더 세지 않습니다.
 - 근거: 자기완결적 1행(합계, 창).
 
 ##### 외부향 SMB (`Outbound_SMB`, T1048) · 19_outbound_smb
@@ -1253,13 +1270,17 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `exfil_bytes_threshold` | 50*1024*1024 (룰 100MB) | \[10\] 단일 연결 업로드 바이트 | 백업 환경에서는 올림 |
-| `webupload_bytes` | 50*1024*1024 | \[12\] 클라우드 업로드 바이트 |  |
+| `webupload_bytes` | 50*1024*1024 | \[12\] (출발지, 클라우드 서비스)별 창 안 업로드 합계 임계 |  |
+| `webupload_epoch` | 1hr | \[12\] 누적 창 | 늘리면 천천히 올리는 유출도 잡지만 정상 동기화 누적도 늘어남 |
 | `cloud_hosts` | Google Drive·Dropbox·S3 등 패턴 | \[12\] 클라우드 저장소 호스트 |  |
 | `web_upload_allowlist` | 비어 있음 | \[12\] 예외 목적지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `exfil_epoch` | 1min | \[14\] 집계 창 |  |
 | `exfil_thresholds` | vector(50.0*1024*1024) (룰 5MB) | \[14\] 호스트당 합계 임계 |  |
 | `exfil_volume_step` | 1024\*1024 | \[14\] 실시간 집계 단위(1MB) |  |
 | `suppress_large_exfil` / `suppress_web_upload` / `suppress_vol_agg` | 1hr / 1hr / 5min | 억제 시간 |  |
+| `proxy_servers` | 비어 있음 | \[10·12·14\] 고객이 아는 명시적 프록시 주소. 이 주소로 가는 TCP 연결은 첫 요청을 못 봐도 프록시 경유로 봄 | 학습만으로 충분하면 비워 둠 |
+| `proxy_learn` / `proxy_learn_expire` | T / 24hr | \[10·12·14\] CONNECT·절대 URL 요청을 받은 (주소, 포트)를 프록시로 배움 / 기억 시간 |  |
+| `exfil_skip_proxy_source` | T | \[10·12·14\] 프록시가 출발지인 외부 전송을 유출 탐지에서 뺌 | 미러링이 프록시 바깥 구간만 보고 `proxy_servers`를 지정한 환경이면 F |
 
 #### 13 DGA
 
@@ -1570,7 +1591,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 77개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합 테스트 44개(`tests/btest/rules`), 클러스터 테스트 6개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 27개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 4개는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
+| btest | 113개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 77개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1609,6 +1630,9 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
+| 명시적 프록시 인식은 유출 룰(10·12·14)에만 적용 | 07·30 비커닝, 09 암호화 C2, 24 비표준 포트, 33 AI 서비스는 프록시를 거친 통신을 여전히 "목적지 = 프록시"로 봄. 특히 비커닝은 모든 목적지가 프록시 하나로 합쳐짐 | 룰마다 세는 키를 목적지 IP에서 목적지 이름으로 바꾸는 작업이 필요해 오탐 측정 뒤 별도 진행 |
+| HTTPS 프록시(PC-프록시 구간도 TLS)와 프록시 바깥 구간만 보는 미러링 | 앞의 것은 CONNECT가 암호화돼 프록시 경유를 모름, 뒤의 것은 출발지가 모두 프록시라 PC를 모름 | 설치 가이드에서 미러링을 PC-프록시 구간으로 잡게 안내. 앞의 것은 "프록시로 올린 양"만 보는 보조 룰 검토 |
+| 50MB 미만 유출 | 12는 1시간 누적 50MB, 14는 1분 50MB라 그보다 작은 유출은 미탐(고객 시험 45MB·43MB) | 고객별 `nsm_config_custom.zeek`에서 임계 조정. 오탐을 보고 결정 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |
 | 기존 `*_allowlist` 설정이 호환용으로 남아 있음 | `redef`라 바꾸면 재시작이 필요하고 사유·만료를 남기지 못함 | 새 예외는 예외 파일로. 고객 설정을 예외 파일로 옮긴 뒤 다음 메이저 버전에서 제거 검토. 자산 그룹(E4). suppress 탐지의 상관 처리(E5)는 보류(5.4절) |
 | 자산 식별의 서버 역할을 센서에서 쓰지 못함 | 역할 판정(DC·파일 서버·DNS 서버)은 Manager 리졸버에서 하므로, DC 목록·리졸버 목록을 여전히 설정에 적어야 함 | 자산 그룹을 예외 엔진 축으로(E4), 역할 목록을 Manager가 센서로 배포하는 방식 검토 |

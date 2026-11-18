@@ -170,9 +170,10 @@ event connection_state_remove(c: connection)
     if ( detect_ai_upload && c$orig$size > 0 && ! NSM::exception_drop_agg(AI_Service_Upload, c) )
         {
         local key: SumStats::Key = [$host=c$id$orig_h, $str=svc];
-        SumStats::observe("nsm.ai_upload", key, [$num=c$orig$size]);
+        # 표본을 먼저 넣는다: 합계를 넣는 순간 임계를 넘으면 그 연결도 근거에 남도록
         SumStats::observe("nsm.ai_upload.sample", key,
                           [$str=cat(c$uid, "|", c$id$resp_h, "|", name, "|", c$orig$size)]);
+        SumStats::observe("nsm.ai_upload", key, [$num=c$orig$size]);
         }
     }
 

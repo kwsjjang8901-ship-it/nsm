@@ -309,10 +309,21 @@ redef NSM::exfil_bytes_threshold         = 50*1024*1024;   # 단일 연결 orig_
 # =============================================================================
 # [12] Exfil_Web_Upload  (T1567.002 · Exfil)
 # =============================================================================
-redef NSM::webupload_bytes               = 50*1024*1024;    # 업로드 바이트 임계(50MB)
+redef NSM::webupload_bytes               = 50*1024*1024;    # (출발지, 클라우드 서비스)별 창 안 업로드 합계 임계(50MB)
+redef NSM::webupload_epoch               = 1hr;             # 누적 창
 # redef NSM::web_upload_allowlist         += { 10.20.60.0/24 };       # 승인된 클라우드 대역, nsm_config_custom.zeek에 포함됨.
 # 클라우드 서비스 목적지 패턴 추가(예: mega, wetransfer 변형 등):
 # redef NSM::cloud_hosts                  += /(?i:.*mega\.nz)/;
+
+# =============================================================================
+# [10·12·14 공용] 명시적 프록시 인식 (proxy_common.zeek)
+#   PC -> 프록시 연결의 CONNECT·절대 URL 로 실제 목적지를 알아내 유출 룰에 적용한다.
+#   CONNECT 를 받은 (주소, 포트)는 자동으로 배운다. 아는 프록시가 있으면 nsm_config_custom.zeek 에 기록.
+# =============================================================================
+# redef NSM::proxy_servers                += { 10.20.0.15 };   # 고객이 아는 프록시 주소
+# redef NSM::proxy_learn                   = T;                # CONNECT 를 받은 주소를 프록시로 배움
+# redef NSM::proxy_learn_expire            = 24hr;
+# redef NSM::exfil_skip_proxy_source       = T;                # 프록시 -> 인터넷 구간은 유출 탐지에서 뺌
 
 # =============================================================================
 # [14] Exfil_Volume_Aggregate  (T1041 · Exfil)

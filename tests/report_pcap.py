@@ -152,7 +152,7 @@ ENRICH = {
     "HttpBeaconing": ({"http", "flow_summary"}, None), "EncryptedChannel": ({"ssl", "flow_summary"}, None),
     "NonstandardPort": ({"ssl", "http", "flow_summary"}, None), "LongConnection": ({"ssl", "flow_summary"}, None),
     "LargeTransfer": ({"ssl", "http", "flow_summary"}, None), "UnknownProtocol": ({"flow_summary"}, None), "VolumeAggregate": ({"ssl", "http", "flow_summary"}, None),
-    "WebUpload": ({"http", "flow_summary"}, None),
+    "WebUpload": ({"ssl", "http", "flow_summary"}, None),
     "SshBruteforce": ({"ssh", "flow_summary"}, None), "FtpBruteforce": ({"flow_summary"}, None),
     "Heartbleed": ({"ssl", "flow_summary"}, None),
     "Xss": ({"http", "flow_summary"}, None), "HttpBruteforce": ({"http", "flow_summary"}, None),
