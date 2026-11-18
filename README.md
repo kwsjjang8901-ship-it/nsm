@@ -46,6 +46,7 @@ tests/
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
+  DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 47종)
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)
