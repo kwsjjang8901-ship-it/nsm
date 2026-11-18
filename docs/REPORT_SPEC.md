@@ -23,12 +23,12 @@ flowchart TD
     Z --> LM["OUT/zeek/meta/<br/>선별 전송 13종"]
     L --> S["화면 요약(내장 python)<br/>탐지·자산 신호·선별 전송·전송량"]
     LM --> S
-    L -.->|"-r 줄 때만"| AR["[2/3] 리졸버(claudtest2)<br/>OUT/asset_report/assets.json"]
+    L -.-> AR["[2/3] 리졸버(claudtest2, -r 줄 때만)<br/>OUT/asset_report/assets.json"]
     L --> G["[3/3] report_pcap.py collect()<br/>로그 → 데이터 JSON"]
     LM --> G
     AR -.-> G
-    G --> H["PAGE(HTML·CSS·JS 틀)의 __DATA__ 자리에 JSON 삽입"]
-    H --> O["OUT/&lt;pcap 이름&gt;_report.html<br/>브라우저에서 JS 가 그림"]
+    G --> H["PAGE(HTML·CSS·JS 틀)의<br/>자리 표시 #95;#95;DATA#95;#95;에 JSON 삽입"]
+    H --> O["OUT/#lt;pcap#gt;_report.html<br/>브라우저에서 JS 가 그림"]
 ```
 
 - 리포트는 **파일 하나**입니다. 데이터는 `<script id="data" type="application/json">` 안에 들어 있고, 화면은 같은 파일의 JS가 그 JSON으로 그립니다. 외부 라이브러리·네트워크 없이 오프라인 VM에서 열립니다.
