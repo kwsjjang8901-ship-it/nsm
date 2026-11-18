@@ -1,7 +1,7 @@
 # NSM POC 결과 보고서
 
-작성일: 2026-11-14 · 기준: main(탐지 PR #78까지) · 자산 식별·탐지·메타데이터 선별 전송을 함께 정리한 통합 보고입니다.
-영역별 상세: 탐지 요구사항 [SRS.md](SRS.md) · 선별 전송 요구사항 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) · 자산 식별 [asset-id/POC_RESULT.md](asset-id/POC_RESULT.md) · 단계별 기록 [탐지](DETECTION_POC_RESULT.md)·[선별 전송](METADATA_EXPORT_POC_RESULT.md)
+작성일: 2026-11-14 · 갱신: 2026-11-18 · 기준: main `79d3db2`(PR #97까지) · 자산 식별·탐지·메타데이터 선별 전송을 함께 정리한 통합 보고입니다.
+영역별 상세: 탐지 요구사항 [SRS.md](SRS.md) · 선별 전송 요구사항 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) · 자산 식별 [asset-id/POC_RESULT.md](asset-id/POC_RESULT.md) · 영역별 결과 보고 [탐지](DETECTION_POC_RESULT.md)·[선별 전송](METADATA_EXPORT_POC_RESULT.md)
 
 ## 요약
 
@@ -70,7 +70,7 @@ flowchart LR
 
 | 지표 | 결과 | 근거 |
 | --- | --- | --- |
-| 신호 수집 | 프로토콜 15종, 신호 출처 22개 구현. 운영 데이터로 충분히 확인 8종, 소량 6종, 합성·공개 pcap으로만 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트) | 고객 운영 pcap 9회 분석 |
+| 신호 수집 | 프로토콜 15종과 연결 정보에서 신호 출처 23개 구현(MDS Agent 에이전트 포트 연결 포함). 운영 데이터로 충분히 확인 8종, 소량 6종, 합성·공개 pcap으로만 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트) | 고객 운영 pcap 9회 분석 |
 | 로그량 | Zeek 전체 로그 대비 0.1\~0.3%. CIC 하루(8시간) 233\~256KB | 고객 pcap, CIC 5일 |
 | 서버·장비 식별 | 서버 역할 추정 자산 33% → 49%(장비·인증서 신호 추가 후). AhnLab MDS·VMware·Cisco ASA 등 장비 종류 식별 | 고객 pcap |
 | AhnLab 제품 설치 현황 | 활동 단말 중 41\~83%에서 제품 통신 확인 | 고객 pcap(구간별) |
