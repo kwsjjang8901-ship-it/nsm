@@ -201,6 +201,16 @@ redef NSM::host_scan_threshold           = 25;          # (src,포트) 고유 ho
 # 백업 에이전트(winreg 하이브 저장), 자산·인벤토리 도구(세션 조회)는 예외 파일(출발지 축)로 뺀다.
 
 # =============================================================================
+# [35] IOC_Match (T1071) — 위협 정보(IOC)의 IP·도메인·URL 일치. ioc_file 을 지정해야 동작한다.
+#   IOC 파일(TSV): #fields indicator ioc_type source category expires desc  (ioc_type: ip|domain|url)
+#   탐지 엔진 업데이트의 "IOC 정보"가 이 파일을 바꾼다. 바뀌면 재시작 없이 다시 읽는다.
+# =============================================================================
+# redef NSM::ioc_file                     = "/opt/nsm/ioc/ioc.tsv";   # 배포 시 nsm_config_custom.zeek 에 기록
+# redef NSM::ioc_match_inbound            = F;        # 외부 IOC 주소가 들어온 연결(성립한 것만)도 탐지
+# redef NSM::ioc_match_dns                = T;        # DNS 조회 이름도 맞춤(리졸버는 dns_tunnel_resolvers 로 뺌)
+# redef NSM::suppress_ioc                 = 1hr;      # (출발지, IOC) 억제
+
+# =============================================================================
 # [06] SMB_Admin_Share  (T1021.002 · Lateral)
 # =============================================================================
 redef NSM::smb_lm_epoch                  = 1min;        # 집계 윈도우

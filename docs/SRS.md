@@ -2,7 +2,7 @@
 
 최종 수정: 2026-11-18 · 원본: 이 파일(`docs/SRS.md`). 룰·설정을 바꾸는 PR에서 함께 고칩니다. PoC 결과는 [통합 PoC 결과 보고](POC_RESULT.md)에 있습니다.
 
-nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 초기 침투 → 자격증명 접근 → 확산 → C2 → 유출 → 영향)의 위협 47종을 탐지 룰 33개로 탐지하고, 탐지마다 근거와 요약 로그를 남기는 Zeek 패키지입니다. 이 문서는 2026-11-18 main(PR #97까지) 기준으로 시스템이 무엇을 해야 하는지와 어떻게 설정하는지를 정리합니다.
+nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 초기 침투 → 자격증명 접근 → 확산 → C2 → 유출 → 영향)의 위협 48종을 탐지 룰 34개로 탐지하고, 탐지마다 근거와 요약 로그를 남기는 Zeek 패키지입니다. 이 문서는 2026-11-18 main(PR #97까지) 기준으로 시스템이 무엇을 해야 하는지와 어떻게 설정하는지를 정리합니다.
 
 ## 1. 개요
 
@@ -12,10 +12,10 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 
 | 구분 | 포함 | 제외 |
 | --- | --- | --- |
-| 탐지 | 탐지 룰 33개(파일 01\~34, 11번은 08번에 통합), 탐지 유형 47종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
+| 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 113개(자산 식별·선별 전송 포함), 합성 pcap 54개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 114개(자산 식별·선별 전송 포함), 합성 pcap 55개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -106,7 +106,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 
 ## 4. 탐지 기능 요구사항
 
-탐지 룰 33개가 탐지 유형 47종을 내며, 모두 `__load__.zeek`에서 활성화돼 있습니다(비활성 룰 0개). 아래 ‘판정 조건’의 숫자는 `nsm_config_fixed.zeek`까지 적용된 현재 운영 기본값입니다.
+탐지 룰 34개가 탐지 유형 48종을 내며, 모두 `__load__.zeek`에서 활성화돼 있습니다(비활성 룰 0개). 아래 ‘판정 조건’의 숫자는 `nsm_config_fixed.zeek`까지 적용된 현재 운영 기본값입니다.
 
 ### 4.1 룰 목록 (킬체인 순서)
 
@@ -156,6 +156,7 @@ Zeek 9.0.1을 기준으로 하고 8.0.9에서도 같은 결과를 내야 하며,
 | C2 | 신규 | 24_nonstd_port | Nonstandard_Port | T1571 | 외부향 연결의 프로토콜(HTTP·TLS·SSH)이 표준 포트가 아님(1건) | 표준 포트 표, 허용 포트·목적지 |
 | C2 | 신규 | 24_nonstd_port | Long_Connection | T1572 | 외부향 TCP 연결이 6시간 이상 지속(연결 중 실시간) | VPN·메신저 목적지 예외 |
 | C2 | 신규 | 33_ai_threats | AI_API_From_Server | T1102 | 서버(서버 포트에서 응답한 내부 host 또는 `ai_server_nets`)가 생성형 AI 서비스·LLM API에 TLS 접속(1건) | 출발지 예외 |
+| C2 | 신규 | 35_ioc_match | IOC_Match | T1071 | 위협 정보(IOC)의 IP(대역 포함)·도메인(하위 포함)·URL과 일치하는 통신(1건). IOC 파일 다시 읽기 | (출발지, IOC) 1시간 억제 |
 | C2 | 신규 | 30_tls_beaconing | TLS_Beaconing | T1071.001 | 같은 외부 목적지로 3초\~1시간 주기의 TLS 연결 12회 연속 + 연결 크기가 기준 ±25%(또는 512바이트) 안 + 그 연속 구간이 30분 이상 | 2분 넘는 연결 제외, SNI·목적지 예외 |
 | C2 | 신규 | 25_unknown_protocol | Unknown_Protocol | T1095 | 외부향 TCP에서 프로토콜 미식별 + 표준 포트 아님 + 한 방향 1MB 이상, 또는 30분 이상 + 양방향 10KB 이상 | 표준 포트 제외, 목적지·포트 예외 |
 | 유출 | 기존(재작성) | 08_dns_tunneling | Exfil_DNS | T1048.003 | (출발지, 등록 도메인)별 5분 안 서브도메인 누적 256KB 이상 + 수상한 질의 비율 0.5 이상 | DNS_Tunneling과 같음 |
@@ -761,6 +762,32 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 제외·오탐 통제: 승인된 AI 연동 서버(사내 챗봇 백엔드 등)는 예외 엔진(5.4절, `exception_drop`)으로 출발지·도메인 축 예외를 등록합니다. 서버 학습은 워커별 상태라 클러스터에서는 `ai_server_nets`에 서버 대역을 적는 것을 권장합니다.
 - 근거: AI 서비스, SNI, 서버로 본 이유(`learned_server_port=…` 또는 `server_net`), uid. 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.AiApiFromServer`.
 
+##### IOC 일치 (`IOC_Match`, T1071) · 35_ioc_match
+
+위협 정보(IOC)로 받은 악성 IP·도메인·URL은 공격 행위를 보지 않아도 "알려진 나쁜 곳과 통신했다"는 직접 근거가 됩니다. 행위 탐지는 임계를 넘어야 알리지만, IOC는 한 번의 접속도 의미가 있습니다. **내부 host가 IOC의 IP(대역 포함)로 연결하거나, IOC 도메인(하위 도메인 포함)을 DNS로 조회·TLS로 접속·HTTP Host로 요청하거나, 평문 HTTP로 IOC URL을 요청**하면 탐지합니다.
+
+| 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
+| --- | --- |
+| IOC 적재 | IOC 파일(`ioc_file`, TSV)을 Input 프레임워크 `Input::add_table`(`REREAD`)로 읽어 Intel 프레임워크에 `Intel::insert`. 다시 읽을 때 지운 줄은 `Intel::remove`로 뺌. 클러스터에서는 매니저만 읽고 Intel 프레임워크가 워커에 배포. pcap을 읽을 때는 적재가 끝날 때까지 패킷 처리를 멈춤(`suspend_processing`) |
+| IP | 내부 → 외부 연결의 목적지: TCP는 `connection_established`(연결 성립), 응답 없는 TCP 시도와 UDP는 `connection_state_remove`. `Intel::seen($host=…)`로 주소·대역(`Intel::ADDR`·`SUBNET`) 모두 맞춤 |
+| 도메인 | `dns_request`의 조회 이름, `ssl_extension_server_name`의 SNI, `http_message_done`의 `c$http$host`(프록시 CONNECT 대상 포함). Intel 도메인 일치는 정확 일치뿐이라, 이름에서 등록 도메인(`parent_domain`)까지 한 단계씩 떼어 각각 맞춤(`a.b.evil.example` → `a.b.evil.example`, `b.evil.example`, `evil.example`) |
+| URL | `http_message_done`의 Host + URI를 "호스트/경로"로 정규화(스킴 제거, 호스트 소문자, 포트 제거, 경로 없으면 `/`. 프록시 절대 URL은 스킴만 떼어 씀). 쿼리 포함 전체와 쿼리를 뗀 것 둘 다 `Intel::URL`로 맞춤. IOC URL도 같은 규칙으로 정규화해 넣음 |
+| 연결 상태 | 일치한 곳을 Intel `Where` 값으로 구분: 연결 성립(`established`)·연결 시도(`attempt`)·DNS 조회(`lookup`)·TLS·HTTP 요청(`request`) |
+
+- 판정은 `Intel::match`에서 합니다(standalone·매니저. 클러스터에서 워커는 값을 보고 매니저가 IOC 전체 정보로 판정). 만료일이 지난 IOC는 일치로 치지 않습니다.
+- TLS 지문(JA3·JA4)은 IOC로 쓰지 않습니다. JA3는 브라우저가 TLS 확장 순서를 섞어 접속마다 바뀌고 흔한 라이브러리를 쓰는 정상 프로그램과 겹쳐, 09번의 점수 재료로만 씁니다. JA4는 FoxIO 라이선스·특허 문제로 제품에서 쓰지 않습니다(`nsm_rules/rules/PACKAGES-README.md`).
+- 주체: `src` = 내부 host(들어온 연결이면 외부 IOC 주소), `dst` = 연결 목적지. DNS 조회는 연결 상대가 리졸버라 `dst`를 비웁니다. 프록시를 거친 HTTPS는 `dst`가 프록시이고, IOC 도메인은 CONNECT 대상·SNI로 맞습니다.
+- 집계·억제: 단건. (출발지, IOC) 단위 1시간 억제(`suppress_ioc`).
+- 제외·오탐 통제:
+  - 외부 IOC 주소가 내부로 들어온 연결은 기본으로 보지 않습니다(`ioc_match_inbound`). 인터넷 스캔이 대부분이라, 켜더라도 연결이 성립한 것만 봅니다.
+  - 내부 리졸버(`dns_tunnel_resolvers`)가 PC 대신 묻는 조회는 출발지가 리졸버라 뺍니다(PC의 조회에서 이미 봄).
+  - 하위 도메인 일치는 등록 도메인에서 멈춥니다. `example`처럼 최상위만 남는 이름은 맞추지 않습니다.
+  - 예외는 판정 입구에서 `exception_drop`(건별)로 거릅니다. 축: 출발지·목적지·포트·도메인.
+  - CDN·공유 호스팅 IP는 정상 사이트와 겹치므로 IOC 피드에서 걸러 넣는 것을 전제로 합니다(10장).
+- 근거: IOC 값, 종류(`ip`·`domain`·`url`), 실제로 본 값(하위 도메인이면 원래 이름), 맞은 곳(`conn`·`conn_inbound`·`dns_query`·`tls_sni`·`http_host`·`http_url`), 상태, 출처, 분류(`c2`·`malware`·`phishing`·`scanner`), 설명, `host=`(도메인·URL 호스트, 리포트의 외부 대상 키). 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.IocMatch`.
+- 위험도(Manager 매핑 제안): 내부 → 외부 연결 성립·HTTP 요청 High, DNS 조회만 또는 연결 시도 Medium, 들어온 연결 Low. 센서는 상태를 근거(`status=`)와 `sub`에 남깁니다.
+- IOC 파일 형식(TSV, 예외 파일과 같은 헤더 형식): `#fields indicator ioc_type source category expires desc`. `ioc_type`은 `ip`(주소 또는 CIDR)·`domain`·`url`, `expires`는 epoch 초 또는 `-`. 형식이 틀린 줄은 빼고 `nsm_ioc.log`에 `kind=invalid`로 남기며, 읽을 때마다 `kind=summary`로 개수(active·added·removed·invalid)를 남깁니다.
+
 ##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
 
 Metasploit 역방향 셸이나 자체 프로토콜 RAT는 HTTP·TLS·SSH가 아닌 일반 TCP로 공격자 서버에 붙습니다. 비표준 포트 룰(24)은 프로토콜이 식별돼야 보고, 암호화 C2(09)·비콘(07)은 TLS·HTTP만 보므로 이런 채널은 지금까지 보이지 않았습니다. **내부 → 외부 TCP 연결에서 Zeek가 프로토콜을 식별하지 못했고 표준 포트가 아닌데, 한 방향으로 1MB 이상 보냈거나 30분 이상 이어지며 양방향 합계가 10KB 이상**이면 탐지합니다.
@@ -940,7 +967,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | --- | --- | --- |
 | 정찰 | `corr_recon_notes` | Port_Scan, Host_Scan, AD_Enumeration |
 | 초기 침투 | `corr_initial_notes` | SQL_Injection, Webshell_Access, Cross_Site_Scripting, TLS_Heartbleed, AI_Service_Exploit |
-| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing, AI_API_From_Server |
+| C2 | `corr_c2_notes` | HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol, TLS_Beaconing, AI_API_From_Server, IOC_Match |
 | 자격증명 | `corr_cred_notes` | NTLM_Spray, Kerberos_Spray, Kerberos_Bruteforce, Kerberoasting, ASREP_Roasting, Name_Poisoning, SSH_Bruteforce, FTP_Bruteforce, HTTP_Bruteforce, Machine_Account_Misuse, Coerced_Authentication, Remote_Registry_Dump |
 | 도메인 장악 | `corr_domain_notes` | DCSync, Zerologon_Attempt |
 | 확산 | `corr_lateral_notes` | SMB_Admin_Share, RDP_Lateral, SSH_Lateral, WinRM_Lateral, DCOM_Lateral, Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution |
@@ -1124,7 +1151,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 `__load__.zeek`가 아래 순서로 로드하므로, 나중에 로드되는 파일의 값이 이깁니다.
 
 1. `rules/ja3`(JA3 패키지) → `main` → `evidence_log`
-2. 탐지 룰 33개(킬체인 순서)
+2. 탐지 룰 34개(킬체인 순서)
 3. `detection_log` → `attack_mapping` → `notice_aggregation` → `correlation_killchain` → `metadata`(메타데이터 선별 전송. 이때 `rules/filter_log`도 함께 로드)
 4. `nsm_config_fixed` → **`nsm_config_custom`** → `intel_ja3`
 5. `policy/protocols/conn/mac-logging`, `policy/tuning/json-logs`
@@ -1300,7 +1327,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 더 이상 쓰이지 않는 파라미터(`dnstun_entropy`, `dnsexfil_interval`, `dga_entropy`, `dga_evidence_min_entropy`)는 기존 배포 설정과의 호환을 위해 남겨 두었고, 쓰면 경고만 나옵니다.
 
-### 7.5 신규 룰(17\~34)과 공통 모듈 파라미터
+### 7.5 신규 룰(17\~35)과 공통 모듈 파라미터
 
 신규 룰은 `nsm_config_fixed.zeek`에서 덮어쓴 값이 없으므로 룰 파일 기본값이 그대로 운영 값입니다. fixed 파일의 \[17\]\~\[24\] 섹션에 주석 처리된 예시가 있습니다.
 
@@ -1476,6 +1503,16 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `zerologon_ops` / `zerologon_epoch` / `zerologon_threshold` | NetrServerAuthenticate·2·3 / 1min / 20 | netlogon 인증 호출, 창, 횟수 |  |
 | `ad_enum_ops` / `ad_enum_epoch` / `ad_enum_threshold` / `ad_enum_num_samples` | srvsvc NetrSessionEnum, wkssvc NetrWkstaUserEnum, samr SamrGetMembersInAlias / 5min / 10 / 10 | 조회 호출, 창, 고유 host 수, 근거 표본 | 규모가 작은 도메인은 임계를 낮춤 |
 
+#### 35 IOC 일치
+
+| 파라미터 | 기본값 | 의미 | 조정 가이드 |
+| --- | --- | --- | --- |
+| `detect_ioc_match` | T | 켜기 |  |
+| `ioc_file` | 비어 있음 | IOC 파일(TSV) 경로. 비우면 IOC 일치를 하지 않음 | 탐지 엔진 업데이트의 "IOC 정보"가 이 파일을 바꿈. 바뀌면 재시작 없이 다시 읽음 |
+| `ioc_match_inbound` | F | 외부 IOC 주소가 내부로 들어온 연결(성립한 것만)도 탐지 | 인터넷에 노출된 서버가 많으면 시끄러움 |
+| `ioc_match_dns` | T | DNS 조회 이름도 맞춤 | 리졸버는 `dns_tunnel_resolvers`에 적어 출발지에서 뺌 |
+| `suppress_ioc` | 1hr | (출발지, IOC) 억제 시간 |  |
+
 #### 공통 모듈 (근거·상관·중복 묶기)
 
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
@@ -1594,7 +1631,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 113개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 77개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
+| btest | 114개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 78개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1633,6 +1670,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
+| 35 IOC 일치의 범위 | HTTPS URL은 경로가 안 보여 호스트(도메인)까지만 맞음. TLS 지문·파일 해시는 IOC로 쓰지 않음. IOC IP가 CDN·공유 호스팅이면 정상 사이트도 맞음. 클러스터 동작(매니저 판정)은 단일 센서 테스트로만 확인 | URL IOC의 호스트를 도메인 IOC로도 넣음. 피드 품질 관리(공유 IP 제외, 만료일). 클러스터 테스트 추가 |
 | 명시적 프록시 인식은 유출 룰(10·12·14)에만 적용 | 07·30 비커닝, 09 암호화 C2, 24 비표준 포트, 33 AI 서비스는 프록시를 거친 통신을 여전히 "목적지 = 프록시"로 봄. 특히 비커닝은 모든 목적지가 프록시 하나로 합쳐짐 | 룰마다 세는 키를 목적지 IP에서 목적지 이름으로 바꾸는 작업이 필요해 오탐 측정 뒤 별도 진행 |
 | HTTPS 프록시(PC-프록시 구간도 TLS)와 프록시 바깥 구간만 보는 미러링 | 앞의 것은 CONNECT가 암호화돼 프록시 경유를 모름, 뒤의 것은 출발지가 모두 프록시라 PC를 모름 | 설치 가이드에서 미러링을 PC-프록시 구간으로 잡게 안내. 앞의 것은 "프록시로 올린 양"만 보는 보조 룰 검토 |
 | 50MB 미만 유출 | 12는 1시간 누적 50MB, 14는 1분 50MB라 그보다 작은 유출은 미탐(고객 시험 45MB·43MB) | 고객별 `nsm_config_custom.zeek`에서 임계 조정. 오탐을 보고 결정 |

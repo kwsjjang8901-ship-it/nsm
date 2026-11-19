@@ -86,7 +86,7 @@ export {
     } &redef;
     const corr_c2_notes: set[Notice::Type] = {
         HTTP_Beaconing, Encrypted_C2, DGA_Domain, DNS_Tunneling, Nonstandard_Port, Long_Connection, Unknown_Protocol,
-        TLS_Beaconing, AI_API_From_Server,
+        TLS_Beaconing, AI_API_From_Server, IOC_Match,
     } &redef;
     ## 자격증명 탈취 시도(출발지 = 공격 host)
     const corr_cred_notes: set[Notice::Type] = {
@@ -337,6 +337,7 @@ const stage_tag_map: table[Notice::Type] of string = {
     [Machine_Account_Misuse] = "CredentialAccess",
     [AI_Service_Upload]      = "Exfil",
     [AI_API_From_Server]     = "C2",
+    [IOC_Match]              = "C2",
     [AI_Service_Exploit]     = "InitialAccess",
     [Coerced_Authentication] = "CredentialAccess",
     [Remote_Registry_Dump]   = "CredentialAccess",

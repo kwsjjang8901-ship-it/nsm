@@ -108,7 +108,7 @@ NOTE_KO = {
     "Xss": "크로스 사이트 스크립팅 시도", "HttpBruteforce": "웹 로그인 무차별 대입",
     "TlsBeaconing": "HTTPS 주기 통신(비콘)", "RemoteService": "원격 서비스 생성", "RemoteTask": "원격 예약 작업 등록",
     "RemoteWmi": "원격 WMI 실행", "MachineAccountMisuse": "남의 머신 계정 사용(NTLM 릴레이)",
-    "AiServiceUpload": "AI 서비스로 대량 업로드", "AiApiFromServer": "서버의 AI 서비스 접속", "AiServiceExploit": "AI 인프라 관리 API 호출",
+    "AiServiceUpload": "AI 서비스로 대량 업로드", "AiApiFromServer": "서버의 AI 서비스 접속", "IocMatch": "IOC(위협 정보) 일치", "AiServiceExploit": "AI 인프라 관리 API 호출",
     "CoercedAuth": "강제 인증 호출(PetitPotam 등)", "RemoteRegistryDump": "원격 레지스트리 하이브 저장",
     "Zerologon": "Zerologon 시도(netlogon 인증 반복)", "AdEnumeration": "AD 정보 수집(세션·로컬 관리자 조회)",
 }
@@ -161,7 +161,7 @@ ENRICH = {
     "RemoteTask": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
     "RemoteWmi": ({"ntlm", "kerberos", "dce_rpc", "flow_summary"}, ("rpcss/", "host/")),
     "MachineAccountMisuse": ({"ntlm", "kerberos", "flow_summary"}, ()),
-    "AiServiceUpload": ({"ssl", "flow_summary"}, None), "AiApiFromServer": ({"ssl", "flow_summary"}, None),
+    "AiServiceUpload": ({"ssl", "flow_summary"}, None), "AiApiFromServer": ({"ssl", "flow_summary"}, None), "IocMatch": ({"ssl", "http", "dns_summary", "flow_summary"}, None),
     "AiServiceExploit": ({"http", "flow_summary"}, None),
     "CoercedAuth": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
     "RemoteRegistryDump": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
@@ -605,7 +605,7 @@ DIAG_NOTE = {
     "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce", "TLS_Beaconing": "TlsBeaconing",
     "Remote_Service_Creation": "RemoteService", "Remote_Task_Creation": "RemoteTask", "Remote_WMI_Execution": "RemoteWmi",
     "Machine_Account_Misuse": "MachineAccountMisuse", "AI_Service_Upload": "AiServiceUpload",
-    "AI_API_From_Server": "AiApiFromServer", "AI_Service_Exploit": "AiServiceExploit",
+    "AI_API_From_Server": "AiApiFromServer", "IOC_Match": "IocMatch", "AI_Service_Exploit": "AiServiceExploit",
     "Coerced_Authentication": "CoercedAuth", "Remote_Registry_Dump": "RemoteRegistryDump",
     "Zerologon_Attempt": "Zerologon", "AD_Enumeration": "AdEnumeration",
 }

@@ -2389,6 +2389,47 @@ def gen_exfil_proxy(out):
     cap.write(os.path.join(out, "exfil_proxy.pcap"))
 
 
+# --------------------------------------------------------------------------- 35 IOC 일치(IP·도메인·URL)
+
+def gen_ioc(out):
+    """IOC 파일(btest 안 ioc.tsv): IP 93.184.216.66, 대역 93.184.217.0/24, 도메인 evil-ioc.example·phish-ioc.example,
+    URL http://dl.malware-ioc.example/payload/a.exe, 만료된 도메인 old-ioc.example, 예외용 IP 93.184.216.67.
+    .10 IOC IP 로 TCP 연결 성립(탐지, established) / .11 IOC IP 로 SYN 만(탐지, attempt) / .12 IOC 대역 93.184.217.77(탐지)
+    .13 DNS x1.cdn.evil-ioc.example(하위 도메인, 탐지, lookup) / .14 DNS evil-ioc.example.safe.example(접미사 아님, 미탐)
+    .15 TLS SNI login.phish-ioc.example(탐지) / .16 HTTP dl.malware-ioc.example/payload/a.exe?x=1(쿼리 뗀 URL, 탐지)
+    .17 같은 호스트의 다른 경로(미탐) / IOC IP -> .18:22 들어온 연결(기본 미탐, ioc_match_inbound=T 면 탐지)
+    .19 만료된 old-ioc.example 조회(미탐) / .20 예외(drop) 걸린 93.184.216.67 연결 / 리졸버 10.0.0.53 이 대신 묻는 조회(미탐)
+    .22 일반 통신(미탐) / .23 프록시 10.0.42.5:3128 로 CONNECT c2.evil-ioc.example:443(탐지, http_host)"""
+    cap = Capture()
+    t = T0 + 1
+    t = tcp_established(cap, "10.0.42.10", "93.184.216.66", 443, t)
+    s = Tcp(cap, "10.0.42.11", "93.184.216.66", 8443)
+    s._c("S", t + 1)
+    s._c("S", t + 2)
+    t = tcp_established(cap, "10.0.42.12", "93.184.217.77", 8080, t + 3)
+    dns_exchange(cap, "10.0.42.13", "x1.cdn.evil-ioc.example", 0, t + 1, answer="93.184.215.91")
+    dns_exchange(cap, "10.0.42.14", "evil-ioc.example.safe.example", 0, t + 2, answer="93.184.215.92")
+    t = tls_session(cap, "10.0.42.15", "93.184.215.93", t + 3, sni="login.phish-ioc.example")
+    t = http_exchange(cap, "10.0.42.16", "93.184.215.94", "GET", "/payload/a.exe?x=1", t + 1, host="dl.malware-ioc.example")
+    t = http_exchange(cap, "10.0.42.17", "93.184.215.94", "GET", "/other.html", t + 1, host="dl.malware-ioc.example")
+    t = tcp_established(cap, "93.184.216.66", "10.0.42.18", 22, t + 1)
+    dns_exchange(cap, "10.0.42.19", "old-ioc.example", 0, t + 1, answer="93.184.215.95")
+    t = tcp_established(cap, "10.0.42.20", "93.184.216.67", 443, t + 2)
+    q = cap.l3(DNS_SERVER, "8.8.8.8") / UDP(sport=RNG.randint(20000, 60000), dport=53) / DNS(
+        id=RNG.randint(1, 65535), rd=1, qd=DNSQR(qname="www.evil-ioc.example"))
+    cap.add(q, t + 1)
+    t = tls_session(cap, "10.0.42.22", "93.184.215.96", t + 2, sni="www.example.com")
+    s = Tcp(cap, "10.0.42.23", "10.0.42.5", 3128)
+    t = s.handshake(t + 1)
+    t = s.client_send(b"CONNECT c2.evil-ioc.example:443 HTTP/1.1\r\nHost: c2.evil-ioc.example:443\r\n\r\n", t)
+    t = s.server_send(b"HTTP/1.1 200 Connection established\r\n\r\n", t + 0.01)
+    t = s.client_send(client_hello("c2.evil-ioc.example"), t + 0.01)
+    t = s.server_send(server_hello(), t + 0.02)
+    t = s.close(t + 0.01)
+    cap.tick(t + 120)
+    cap.write(os.path.join(out, "ioc.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2403,7 +2444,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
-              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy]
+              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc]
 
 
 def main():

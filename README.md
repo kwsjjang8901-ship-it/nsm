@@ -46,12 +46,12 @@ tests/
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
-  DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 47종)
+  DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종)
   REPORT_SPEC.md            # 통합 리포트(run_pcap.sh·report_pcap.py) 생성 구조와 스펙
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)
-  DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고(룰 33개·47종, CIC-IDS2017 검증)
+  DETECTION_POC_RESULT.md   # 탐지 룰 PoC 결과 보고(룰 34개·48종, CIC-IDS2017 검증)
   METADATA_EXPORT_POC_RESULT.md # 메타데이터 선별 전송 PoC 결과 보고(전송량 측정·Manager 전송량 예측)
   asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (센서는 claudtest2 에서 머지)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
@@ -97,6 +97,7 @@ docs/
 | 32_machine_account | 남의 머신 계정 사용(NTLM 릴레이·해시 전달) | T1557.001 | 활성 |
 | 33_ai_threats | AI 관련 위협(AI 서비스 대량 업로드, 서버의 AI API 접속, 사내 AI 인프라 관리 API 공격) | T1567 / T1102 / T1190 | 활성 |
 | 34_ad_attacks | AD 공격(강제 인증, 원격 레지스트리 하이브 저장, Zerologon, AD 정보 수집) | T1187 / T1003.002 / T1210 / T1087.002 | 활성 |
+| 35_ioc_match | IOC 일치(위협 정보의 IP·도메인·URL과 일치하는 통신, `ioc_file` 지정 시) | T1071 | 활성 |
 
 ## 사용
 

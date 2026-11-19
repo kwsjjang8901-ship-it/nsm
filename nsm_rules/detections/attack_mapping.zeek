@@ -37,6 +37,7 @@ export {
         [Machine_Account_Misuse] = "T1557.001",
         [AI_Service_Upload]    = "T1567",
         [AI_API_From_Server]   = "T1102",
+        [IOC_Match]            = "T1071",
         [AI_Service_Exploit]   = "T1190",
         [Coerced_Authentication] = "T1187",
         [Remote_Registry_Dump] = "T1003.002",

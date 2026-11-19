@@ -89,6 +89,8 @@ export {
         Remote_Registry_Dump,
         Zerologon_Attempt,
         AD_Enumeration,
+        ## 35. IOC 일치(위협 정보의 IP·도메인·URL 과 일치하는 통신)
+        IOC_Match,
         ## 5. SMB 관리 공유 접근 (ADMIN$/C$/IPC$ = Lateral Movement)
         SMB_Admin_Share,
         ## 15. RDP 내부 확산 (1 src -> 다수 host 3389 = Lateral Movement)
@@ -334,6 +336,7 @@ export {
         [Machine_Account_Misuse] = "Credential Access",
         [AI_Service_Upload]      = "Exfiltration",
         [AI_API_From_Server]     = "Command and Control",
+        [IOC_Match]              = "Command and Control",
         [AI_Service_Exploit]     = "Initial Access",
         [Coerced_Authentication] = "Credential Access",
         [Remote_Registry_Dump]   = "Credential Access",
