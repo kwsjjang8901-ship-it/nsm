@@ -57,6 +57,7 @@ docs/
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
+  SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
   examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만)
 ```
 
