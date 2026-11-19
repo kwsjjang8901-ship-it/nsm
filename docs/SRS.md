@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 115개(자산 식별·선별 전송 포함), 합성 pcap 56개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 117개(자산 식별·선별 전송 포함), 합성 pcap 56개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -768,7 +768,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 
 | 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
 | --- | --- |
-| IOC 적재 | IOC 파일(`ioc_file`, TSV)을 Input 프레임워크 `Input::add_table`(`REREAD`)로 읽어 Intel 프레임워크에 `Intel::insert`. 다시 읽을 때 지운 줄은 `Intel::remove`로 뺌. 클러스터에서는 매니저만 읽고 Intel 프레임워크가 워커에 배포. pcap을 읽을 때는 적재가 끝날 때까지 패킷 처리를 멈춤(`suspend_processing`) |
+| IOC 적재 | IOC 파일(`ioc_file`, TSV)을 Input 프레임워크 `Input::add_table`(`REREAD`)로 읽어 Intel 프레임워크에 `Intel::insert`. 다시 읽을 때 지운 줄은 `Intel::remove`로 뺌. 클러스터에서는 매니저만 읽고 Intel 프레임워크가 워커에 배포(btest `cluster/ioc-match`, `cluster/ioc-match-proxy`: 워커가 본 값을 매니저가 판정, 다시 읽어 지운 IOC는 워커에서도 빠짐, 예외 적용). pcap을 읽을 때는 적재가 끝날 때까지 패킷 처리를 멈춤(`suspend_processing`) |
 | IP | 내부 → 외부 연결의 목적지: TCP는 `connection_established`(연결 성립), 응답 없는 TCP 시도와 UDP는 `connection_state_remove`. `Intel::seen($host=…)`로 주소·대역(`Intel::ADDR`·`SUBNET`) 모두 맞춤 |
 | 도메인 | `dns_request`의 조회 이름, `ssl_extension_server_name`의 SNI, `http_message_done`의 `c$http$host`(프록시 CONNECT 대상 포함). Intel 도메인 일치는 정확 일치뿐이라, 이름에서 등록 도메인(`parent_domain`)까지 한 단계씩 떼어 각각 맞춤(`a.b.evil.example` → `a.b.evil.example`, `b.evil.example`, `evil.example`) |
 | URL | `http_message_done`의 Host + URI를 "호스트/경로"로 정규화(스킴 제거, 호스트 소문자, 포트 제거, 경로 없으면 `/`. 프록시 절대 URL은 스킴만 떼어 씀). 쿼리 포함 전체와 쿼리를 뗀 것 둘 다 `Intel::URL`로 맞춤. IOC URL도 같은 규칙으로 정규화해 넣음 |
@@ -1631,7 +1631,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 115개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 79개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
+| btest | 117개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 79개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1670,7 +1670,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
-| 35 IOC 일치의 범위 | HTTPS URL은 경로가 안 보여 호스트(도메인)까지만 맞음. TLS 지문·파일 해시는 IOC로 쓰지 않음. IOC IP가 CDN·공유 호스팅이면 정상 사이트도 맞음. 클러스터 동작(매니저 판정)은 단일 센서 테스트로만 확인 | URL IOC의 호스트를 도메인 IOC로도 넣음. 피드 품질 관리(공유 IP 제외, 만료일). 클러스터 테스트 추가 |
+| 35 IOC 일치의 범위 | HTTPS URL은 경로가 안 보여 호스트(도메인)까지만 맞음. TLS 지문·파일 해시는 IOC로 쓰지 않음. IOC IP가 CDN·공유 호스팅이면 정상 사이트도 맞음 | URL IOC의 호스트를 도메인 IOC로도 넣음. 피드 품질 관리(공유 IP 제외, 만료일) |
 | 명시적 프록시 인식은 유출 룰(10·12·14)에만 적용 | 07·30 비커닝, 09 암호화 C2, 24 비표준 포트, 33 AI 서비스는 프록시를 거친 통신을 여전히 "목적지 = 프록시"로 봄. 특히 비커닝은 모든 목적지가 프록시 하나로 합쳐짐 | 룰마다 세는 키를 목적지 IP에서 목적지 이름으로 바꾸는 작업이 필요해 오탐 측정 뒤 별도 진행 |
 | HTTPS 프록시(PC-프록시 구간도 TLS)와 프록시 바깥 구간만 보는 미러링 | 앞의 것은 CONNECT가 암호화돼 프록시 경유를 모름, 뒤의 것은 출발지가 모두 프록시라 PC를 모름 | 설치 가이드에서 미러링을 PC-프록시 구간으로 잡게 안내. 앞의 것은 "프록시로 올린 양"만 보는 보조 룰 검토 |
 | 50MB 미만 유출 | 12는 1시간 누적 50MB, 14는 1분 50MB라 그보다 작은 유출은 미탐(고객 시험 45MB·43MB) | 고객별 `nsm_config_custom.zeek`에서 임계 조정. 오탐을 보고 결정 |
