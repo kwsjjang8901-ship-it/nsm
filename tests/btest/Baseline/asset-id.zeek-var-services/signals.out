@@ -9,10 +9,12 @@
 172.16.238.1	software	ssh:SSH-2.0-OpenSSH_5.2	ssh	70
 172.16.238.131	mac	00:0c:29:bd:6f:01	arp	85
 172.16.238.131	os_hint	linux	http_ua	50
+172.16.238.131	os_hint	linux(ubuntu)	http_server	45
 172.16.238.131	os_hint	linux(ubuntu)	ssh	60
 172.16.238.131	service	tcp/21	service	90
 172.16.238.131	service	tcp/22	service	90
 172.16.238.131	service	tcp/80	service	90
+172.16.238.131	software	http_server:Apache/2.2.17 (Ubuntu)	http_server	50
 172.16.238.131	software	ssh:SSH-2.0-OpenSSH_5.8p1 Debian-1ubuntu3	ssh	70
 172.16.238.131	ssh_host_key	c9:e7:26:eb:61:c3:c7:2a:e5:a9:a6:0c:ee:6e:71:5f	ssh	80
 172.16.238.2	mac	00:50:56:fd:dc:57	arp	85

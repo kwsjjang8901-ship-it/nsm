@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.2 (2026-11-06) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.3 (2026-11-19) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -54,7 +54,7 @@
 | | `service` | `tcp/445`, `tcp/8081/http` | 역할 추정 |
 | | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
-| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0` | 소프트웨어 정보 |
+| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0` | 소프트웨어 정보 |
 | | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent` | AhnLab 제품 설치 여부(통신으로 판단) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
 | **검증 중 후보** | `smb_client_guid` | `a1eefcb2-2495-6541-893f-bf5b2c69acd4` | 참고 정보, 공유·변경 통계 |
@@ -75,7 +75,8 @@
 | DHCP | `dhcp.zeek` | client-id, MAC, hostname, fqdn, domain, OS | 단말 L2 구간 또는 DHCP 서버 앞 | 8/9 |
 | ARP | `l2.zeek` | MAC | 단말 L2 구간 | 8/9 |
 | 연결 L2 주소 | `l2.zeek` | MAC(약함) | 어디서나 (라우팅 구간이면 게이트웨이 MAC) | 8/9 |
-| Kerberos | `kerberos.zeek` | 머신 계정, hostname, domain, 사용자 | DC 앞 | 8/9 |
+| Kerberos AS-REQ | `kerberos.zeek` | 머신 계정, hostname, domain, 사용자 | DC 앞 | 8/9 |
+| Kerberos 서비스 티켓(AP-REQ) | `server_names.zeek` | 서버 이름(dns_name), 서버 domain | 어디서나 (클라이언트 → 서버) | SMB 8/9, LDAP SASL 안은 **9** |
 | NTLM | `ntlm.zeek` | hostname, 머신 계정, domain, fqdn, OS 빌드, 사용자 | 인증하는 서버 앞 | 8/9 (LDAP 안 NTLM은 9) |
 | CLDAP/LDAP | `ldap.zeek` | hostname, domain, fqdn, 머신 계정 | DC 앞 | 8/9 |
 | NBNS / LLMNR / mDNS | `names.zeek` | hostname, domain(워크그룹) | 단말 L2 구간 | 8/9 |
@@ -83,7 +84,7 @@
 | DNS 동적 업데이트 | `names.zeek` | hostname, fqdn, domain | DC(DNS) 앞 | **9** |
 | SMB | `software.zeek`, `server_names.zeek`, `smb_guid.zeek` | OS(SMB1), 서버 이름, 클라이언트 GUID | 파일 서버·DC 앞 | 8/9 |
 | RDP | `software.zeek` | 클라이언트 hostname, 사용자 | RDP 서버 앞 | 8/9 |
-| HTTP | `software.zeek`, `server_names.zeek` | OS, 소프트웨어, AhnLab 제품, 서버 이름 | 어디서나 (평문 HTTP) | 8/9 |
+| HTTP | `software.zeek`, `server_names.zeek` | OS, 소프트웨어, AhnLab 제품, 서버 이름, 서버 소프트웨어·OS(Server 헤더) | 어디서나 (평문 HTTP) | 8/9 |
 | TLS | `server_names.zeek`, `x509.zeek` | 서버 이름, 장비·제품 | 어디서나 (인증서는 TLS 1.2 이하) | 8/9 |
 | SSH | `software.zeek` | 소프트웨어, OS, 호스트 키 | 어디서나 | 8/9 (group18 키는 9) |
 | syslog | `syslog.zeek` | 장비 hostname, 장비 종류, 수집 서버 | 장비 → 수집 서버 경로 | UDP 8/9, TCP **9** |
@@ -108,6 +109,7 @@
   | option 54 server id | 서버 IP에 `service udp/67` | 90 |
 - **대상 IP:** ACK의 yiaddr (없으면 ciaddr). ciaddr가 있는 REQUEST/INFORM(갱신)은 ACK 없이 ciaddr로 기록
 - **예외:** ACK 없는 DISCOVER만 있으면 기록하지 않음(IP 미확정)
+- **릴레이 구간:** 단말 L2 구간이 아니라 릴레이(라우터) ↔ DHCP 서버 구간(67/udp 양쪽, giaddr 있음)만 보여도 같은 방식으로 기록한다. 요청(op=1)과 ACK(op=2)를 방향이 아니라 BOOTP op로 가르기 때문이다(btest `dhcp-relay`). 같은 트랜잭션이 L2 구간과 릴레이 구간에서 두 번 보여도 중복 억제로 한 번만 남는다
 - **활용:** client-id·L2 MAC은 강한 키. IP 재할당 감지(점유 구간 분할)의 핵심 근거. DHCP 서버 역할 판정
 
 ### 3.3 ARP와 연결 L2 주소 (`arp`, `conn`)
@@ -121,7 +123,10 @@
     - conn MAC은 점유 구간 분할 근거로 쓰지 않음(비대칭 경로에서 자기 MAC과 방화벽 MAC이 번갈아 보임)
     - conn MAC으로만 식별된 자산은 신뢰도 "낮음"
 
-### 3.4 Kerberos (`kerberos`)
+### 3.4 Kerberos (`kerberos`, `krb`)
+
+**AS-REQ (`kerberos`)**
+
 
 - **관측 조건:** 클라이언트 → DC(88)의 AS-REQ
 - **트리거:** `krb_as_request`의 클라이언트 주체(client_name)와 realm
@@ -134,6 +139,19 @@
   | realm | `domain` | 90 |
 - **예외:** 서비스 주체(`a/b`)는 제외, enterprise principal(`user@REALM`)은 앞부분만
 - **활용:** 1순위 키. 부팅 시와 TGT 갱신(약 10시간) 때 발생하므로 DC 앞 장시간 캡처 필요. 사용자 계정은 "최근 로그온 사용자"
+
+**서비스 티켓 AP-REQ (`krb`)**
+
+- **관측 조건:** 클라이언트가 서버에 Kerberos로 인증할 때 보내는 서비스 티켓. SMB2 SESSION_SETUP, LDAP SASL(GSSAPI, Zeek 9.x) 안의 SPNEGO. DC가 보이지 않는 사용자 → 서버 라우팅 구간에서도 보인다
+- **트리거:** `krb_ap_request`의 티켓 서비스 이름(`ticket$service_name`)과 realm. 티켓의 사용자 정보는 암호화돼 있어 **서버 쪽 정보만** 나온다
+- **추출 → 신호 (대상: 응답측 서버 IP)**
+
+  | 티켓 필드 | 신호 | 신뢰도 |
+  |---|---|---|
+  | 서비스 이름의 호스트 부분 (`cifs/FS01.corp.local` → `fs01.corp.local`, `MSSQLSvc/db01.corp.local:1433` → `db01.corp.local`, `ldap/dc01.corp.local/corp.local` → `dc01.corp.local`) | `dns_name` | 50 |
+  | realm | `domain` | 70 |
+- **예외:** `krbtgt`(TGS-REQ 안 TGT), `kadmin`은 서버 이름이 아님. 호스트 부분이 realm과 같은 티켓(DFS 도메인 루트 `cifs/corp.local`)은 특정 서버가 아니라 이름·도메인 모두 기록하지 않음. 서버 이름 상한(`max_server_names`)과 끄기(`enable_server_names`)는 다른 서버 이름 신호와 같음
+- **활용:** 별칭 SPN(CNAME, 클러스터 이름)일 수 있어 **식별 키가 아니라 표시 이름**(SMB 공유 경로·SNI와 같은 등급). 이름 없는 서버의 이름과 도메인을 라우팅 구간에서 얻는 주 경로
 
 ### 3.5 NTLM (`ntlm`)
 
@@ -210,7 +228,7 @@
 - 클라이언트 core data의 client name → 클라이언트 IP에 `hostname`(80)
 - 연결 요청의 mstshash 쿠키 → `user_account`(50, 사용자 입력값)
 
-### 3.11 HTTP (`http_ua`, `ahnlab`, `http`)
+### 3.11 HTTP (`http_ua`, `ahnlab`, `http`, `http_server`)
 
 | 항목 | 조건 | 신호 | 대상 IP | 신뢰도 |
 |---|---|---|---|---|
@@ -219,8 +237,10 @@
 | Windows 시스템 UA | `Microsoft NCSI`, `WinHttp-Autoproxy-Service`, `Microsoft-CryptoAPI/…` 등 | `os_hint` `windows` | 클라이언트 | 50 |
 | AhnLab 제품 | `v3inet*/<버전>/<제품코드>/`, `MeDCore` | `security_agent` `ahnlab:<제품코드>/<버전>`, `ahnlab:MeDCore` | 클라이언트 | 80 |
 | 서버 이름 | 요청 Host 헤더 | `dns_name` | 서버 | 50 |
+| 서버 소프트웨어 | 응답 Server 헤더 | `software` `http_server:<값 앞 64자>` | 서버 | 50 |
+| 서버 OS | 응답 Server 헤더: IIS 10.0 → `windows server 2016+`, 8.5 → `windows server 2012 r2`, 8.0 → `windows server 2012`, 7.5 → `windows server 2008 r2`, 7.0 → `windows server 2008`, 6.0 → `windows server 2003`, `Microsoft-HTTPAPI/…`·`(Win32)`·`(Win64)` → `windows`, `(Ubuntu)`·`(Debian)`·`(CentOS)`·`(Red Hat)`·`(Rocky)` → `linux(…)` | `os_hint` | 서버 | 45 |
 
-- **예외:** Windows 10과 11은 UA(`Windows NT 10.0`)로 구분 불가 → `windows 10/11`. MeDCore 요청 파라미터 값은 의미 미확인으로 기록하지 않음. 프록시 요청(CONNECT, 절대 URL)의 Host는 외부 사이트 이름이므로 제외
+- **예외:** Windows 10과 11은 UA(`Windows NT 10.0`)로 구분 불가 → `windows 10/11`. MeDCore 요청 파라미터 값은 의미 미확인으로 기록하지 않음. 프록시 요청(CONNECT, 절대 URL)의 Host와 그 응답의 Server 헤더는 외부 사이트의 것이므로 제외. Server 헤더는 `enable_http_server`로 따로 끈다. IIS 버전은 클라이언트 Windows에도 있지만 다른 PC에 웹 응답을 주는 쪽은 대부분 서버라 서버 OS로 본다(신뢰도는 UA보다 낮은 45). nginx처럼 OS를 밝히지 않는 서버는 `software`만
 - **활용:** OS 추정, 소프트웨어 목록, AhnLab 제품 설치 현황(리포트 "능동 IP 중 AhnLab 제품 통신")
 
 ### 3.12 TLS (`tls`, `x509`)
@@ -231,7 +251,7 @@
 | 인증서 이름 | 서버 leaf 인증서 CN·SAN DNS (와일드카드·IP·localhost·공백 제외) | `dns_name` | 서버 | 50 |
 | 인증서 제품·장비 | 주체/발급자: `CN=AhnLab MDS`, `CN=AhnLab EPP`, VMware, Fortinet, Palo Alto, iDRAC, iLO, Synology | `device` | 서버 | 70 |
 
-- **예외:** 프록시 경유(CONNECT) 연결 제외. 서버 이름 신호(SMB·HTTP·TLS·x509 합계)는 IP당 `max_server_names`(20)개까지
+- **예외:** 프록시 경유(CONNECT) 연결 제외. 서버 이름 신호(SMB·HTTP·TLS·x509·Kerberos 합계)는 IP당 `max_server_names`(20)개까지
 - **한계:** TLS 1.3은 인증서가 암호화되어 보이지 않음. 핸드셰이크 끝이 캡처되지 않은 연결도 연결 종료 시 인증서를 확인
 
 ### 3.13 SSH (`ssh`)
@@ -311,7 +331,7 @@
 
 ### 4.4 OS 판정
 
-- 출처 우선순위: ntlm > smb > ssh > http_ua > dhcp
+- 출처 우선순위: ntlm > smb > ssh > http_ua > dhcp. `http_server`(서버의 HTTP Server 헤더, 0.3에서 추가)는 리졸버(claudtest2) 우선순위에 아직 없다. nsm 통합 리포트는 신뢰도가 높은 값을 고르므로 다른 출처가 있으면 그것이 쓰인다
 - NTLM 빌드 번호 → 버전: Windows 10(1507~22H2), Windows 11(21H2~25H2), Server 2016/2019/2022/2025. 표에 없는 빌드는 22000 이상이면 Windows 11
 - PC/서버 공용 빌드(14393, 17763, 26100) 구분
   - 서버: 서버 역할(DC·DNS·DHCP·웹·DB·메일·프록시)이 있거나, 호스트명이 Windows Server 기본 이름(`WIN-` + 11자)
@@ -391,8 +411,8 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|---|
 | 단말 L2 구간 | MAC(ARP·DHCP), client-id, 호스트명(DHCP·NBNS·LLMNR·mDNS) | OS(DHCP·UA), 사용자 | 높음 (비도메인 단말 포함) |
 | DC 앞 (서버팜) | 머신 계정(Kerberos·CLDAP·NTLM), 호스트명, DNS 동적 업데이트(9.x) | 도메인, 사용자, SMB2 GUID | 도메인 PC 높음 (2시간 이상, 출근 시간 포함) |
-| DHCP 서버 앞 | client-id, MAC(DHCP), 호스트명 | DHCP 지문 | DHCP 단말 높음 (갱신 주기에 좌우) |
-| 사용자 → 서버 라우팅 구간 (DC·DHCP 없음) | 거의 없음 (가끔 NTLM) | 서버 역할·이름, 장비 종류, AhnLab 제품, UA OS | 낮음 (운영 5~9차에서 확인) |
+| DHCP 서버 앞 (릴레이 구간 포함) | client-id, MAC(DHCP), 호스트명 | DHCP 지문 | DHCP 단말 높음 (갱신 주기에 좌우) |
+| 사용자 → 서버 라우팅 구간 (DC·DHCP 없음) | 거의 없음 (가끔 NTLM) | 서버 역할·이름, 서버 도메인(Kerberos 서비스 티켓), 서버 소프트웨어·OS(HTTP Server 헤더), 장비 종류, AhnLab 제품, UA OS | 낮음 (운영 5~9차에서 확인) |
 | 인터넷 경계 | 거의 없음 | 프록시, UA | 낮음 |
 
 ---
@@ -404,7 +424,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `asset_nets` | `{}` | 자산 대역 (`run_poc.sh -n`) |
 | `suppress_interval` | 1hr | 중복 억제 기간 |
 | `dhcp_xid_timeout` | 5min | DHCP 트랜잭션 보관 |
-| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent |
+| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent |
 | `service_ports` | 주요 포트 | 포트만으로 서비스 인정 |
 | `ignore_service_ports` | 137,138,1900,5353,5355/udp | 거의 모든 단말이 응답하는 포트 |
 | `nested_analyzers` | ntlm, gssapi, krb, … | 다른 프로토콜 안에서 확인되는 분석기 |
@@ -436,6 +456,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | LDAP(SASL) 안의 NTLM | 꺼내지 않음 | 지원 |
 | TCP syslog | 분석기 없음 | 지원 |
 | SSH DH group18 호스트 키 | 못 꺼냄 | 지원 |
+| LDAP(SASL) 안의 Kerberos 서비스 티켓 | 꺼내지 않음 | 지원 |
 
 그 밖의 한계: DHCPv6·NDP 미수집, TLS 1.3 인증서 미관측, SMB1로 시작하는 SMB 연결의 GUID 미추출, MAC 랜덤화 단말은 여러 자산으로 보일 수 있음, Zeek 클러스터(워커 여러 개)에서의 중복 억제·DHCP 트랜잭션 결합은 미검증(PLAN V4).
 
@@ -446,3 +467,4 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
+| 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |

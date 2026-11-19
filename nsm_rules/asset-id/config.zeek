@@ -35,7 +35,8 @@ export {
 	option enable_ssh = T;
 	option enable_services = T;
 	option enable_ldap = T;         ##< CLDAP/LDAP Netlogon ping (DC 찾기) -> hostname, domain
-	option enable_server_names = T; ##< SMB 공유 경로, TLS SNI, HTTP Host -> 서버 dns_name
+	option enable_server_names = T; ##< SMB 공유 경로, TLS SNI, HTTP Host, Kerberos 서비스 이름 -> 서버 dns_name
+	option enable_http_server = T;  ##< HTTP 응답 Server 헤더 -> 서버 software, os_hint
 	option enable_agents = T;       ##< AhnLab 제품 통신(User-Agent) -> security_agent
 	option enable_syslog = T;       ##< syslog 송신 장비 -> hostname, device
 	option enable_x509 = T;         ##< 사내 서버 인증서 -> dns_name, device
