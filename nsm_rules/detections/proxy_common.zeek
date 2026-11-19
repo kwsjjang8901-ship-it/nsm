@@ -8,8 +8,11 @@
 ##!   - HTTP : 절대 URL("POST http://호스트/경로").
 ##!
 ##! 프록시 학습(오탐·회피 방지를 위해 좁게 잡는다)
-##!   - 내부 PC 의 CONNECT 에 2xx 로 답한 (주소, 포트)만 프록시로 배운다. 외부 스캐너가 내부 웹서버로
-##!     보내는 CONNECT·절대 URL 탐색이나, 거부(4xx)된 CONNECT 로는 배우지 않는다.
+##!   - 내부 PC 의 CONNECT 에 2xx 로 답하고, 이어서 같은 연결에서 TLS 접속 시작(ClientHello)이 보인
+##!     (주소, 포트)만 프록시로 배운다. 외부 스캐너가 내부 웹서버로 보내는 CONNECT·절대 URL 탐색, 거부(4xx)된
+##!     CONNECT, 그리고 어떤 요청에도 200 으로 답하는 장비(프린터·NAS 등 임베디드 웹서버)에 점검 장비가 CONNECT 만
+##!     보내고 끝낸 경우로는 배우지 않는다. 진짜 프록시를 쓰는 PC 는 CONNECT 뒤에 바로 HTTPS 접속을 이어 간다.
+##!     (TLS 가 아닌 터널, 예: CONNECT 뒤 SSH 는 배우지 않는다. 그런 프록시는 proxy_servers 로 지정)
 ##!   - 절대 URL 만으로는 배우지 않는다(웹서버도 절대 URL 을 받는다). 배운 프록시로 가는 평문 HTTP 는 프록시 경유로 본다.
 ##!   - 배운 프록시나 proxy_servers 로 가는 TCP 연결은 "프록시를 거친 외부 연결"로 본다. 첫 요청을 못 본
 ##!     연결(캡처 전부터 열려 있던 연결 등)도 포함하며, 그때는 실제 목적지 이름을 모른다.
@@ -55,6 +58,8 @@ export {
     global conn_dest_name: function(c: connection): string;
     ## 근거 detail 에 붙일 프록시 정보(" via_proxy=주소:포트", 프록시가 아니면 "")
     global proxy_detail: function(c: connection): string;
+    ## 프록시 터널이 확인됨(CONNECT 2xx 뒤 TLS 시작). 이 시점에 그 (주소, 포트)를 배운 뒤 발생한다.
+    global proxy_tunnel_confirmed: event(c: connection);
 }
 
 global proxy_learned: set[addr, port] &read_expire=proxy_learn_expire;
@@ -62,6 +67,9 @@ global proxy_learned: set[addr, port] &read_expire=proxy_learn_expire;
 global proxy_clients: table[addr] of set[addr] &read_expire=proxy_learn_expire;
 
 const abs_uri = /^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//;
+
+# CONNECT 가 2xx 로 성공한 연결(uid). 이어서 TLS 가 시작되면 프록시로 배운다.
+global proxy_connect_ok: set[string] &create_expire=10min;
 
 event http_reply(c: connection, version: string, code: count, reason: string)
     {
@@ -71,12 +79,27 @@ event http_reply(c: connection, version: string, code: count, reason: string)
         return;
     if ( ! Site::is_local_addr(c$id$orig_h) )
         return;
+    add proxy_connect_ok[c$uid];
+    }
+
+event ssl_client_hello(c: connection, version: count, record_version: count, possible_ts: time,
+                       client_random: string, session_id: string, ciphers: index_vec, comp_methods: index_vec)
+    {
+    if ( c$uid !in proxy_connect_ok )
+        return;
+    delete proxy_connect_ok[c$uid];
     local p = c$id$resp_h;
     add proxy_learned[p, c$id$resp_p];
     if ( p !in proxy_clients )
         proxy_clients[p] = set();
     if ( |proxy_clients[p]| < proxy_source_min_clients )
         add proxy_clients[p][c$id$orig_h];
+    event NSM::proxy_tunnel_confirmed(c);
+    }
+
+event connection_state_remove(c: connection)
+    {
+    delete proxy_connect_ok[c$uid];
     }
 
 function conn_via_proxy(c: connection): bool

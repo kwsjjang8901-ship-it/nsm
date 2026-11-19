@@ -2430,6 +2430,28 @@ def gen_ioc(out):
     cap.write(os.path.join(out, "ioc.pcap"))
 
 
+# --------------------------------------------------------------------------- 프록시 학습: CONNECT 2xx 뒤 TLS 가 있어야 배움
+
+def gen_proxy_learn(out):
+    """어떤 요청에도 200 으로 답하는 내부 장비(.20:8080, 프린터·NAS 류)를 점검 장비 .10 이 CONNECT 로 두드림(TLS 없음):
+    프록시로 배우지 않아야 한다 -> PC .30 이 그 장비로 60MB 올려도 유출 미탐.
+    진짜 프록시 .5:3128 은 PC .31 의 CONNECT 200 뒤 TLS 가 이어져 배움 -> .31 이 첫 요청 없이 60MB 올리면 10·14 탐지.
+    처음 보는 프록시 .22:8080 에 PC .32 가 CONNECT 200 + TLS 뒤 같은 연결로 60MB -> 10·14 탐지(터널 확인 뒤부터 셈)."""
+    mb = 1024 * 1024
+    cap = Capture()
+    t = T0 + 1
+    t = proxy_probe(cap, "10.0.43.10", "10.0.43.20", 8080,
+                    b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n", "200 OK", t)
+    t = proxy_probe(cap, "10.0.43.10", "10.0.43.21", 8080,
+                    b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n", "200 OK", t + 1)
+    t = bulk_upload(cap, "10.0.43.30", "10.0.43.20", 8080, 60 * mb, t + 70)
+    t = proxy_upload(cap, "10.0.43.31", "10.0.43.5", t + 70, "www.example.com")
+    t = proxy_upload(cap, "10.0.43.31", "10.0.43.5", t + 70, "unknown.example", upload=60 * mb, connect=False)
+    t = proxy_upload(cap, "10.0.43.32", "10.0.43.22", t + 70, "files.example.net", upload=60 * mb, pport=8080)
+    cap.tick(t + 120)
+    cap.write(os.path.join(out, "proxy_learn.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2444,7 +2466,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
-              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc]
+              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn]
 
 
 def main():
