@@ -317,13 +317,14 @@ redef NSM::webupload_epoch               = 1hr;             # 누적 창
 
 # =============================================================================
 # [10·12·14 공용] 명시적 프록시 인식 (proxy_common.zeek)
-#   PC -> 프록시 연결의 CONNECT·절대 URL 로 실제 목적지를 알아내 유출 룰에 적용한다.
-#   CONNECT 를 받은 (주소, 포트)는 자동으로 배운다. 아는 프록시가 있으면 nsm_config_custom.zeek 에 기록.
+#   PC -> 프록시 연결의 CONNECT(·절대 URL) 로 실제 목적지를 알아내 유출 룰에 적용한다.
+#   내부 PC 의 CONNECT 에 2xx 로 답한 (주소, 포트)는 자동으로 배운다. 아는 프록시가 있으면 nsm_config_custom.zeek 에 기록.
 # =============================================================================
 # redef NSM::proxy_servers                += { 10.20.0.15 };   # 고객이 아는 프록시 주소
-# redef NSM::proxy_learn                   = T;                # CONNECT 를 받은 주소를 프록시로 배움
+# redef NSM::proxy_learn                   = T;                # 내부 PC 의 CONNECT 에 2xx 로 답한 주소를 프록시로 배움
 # redef NSM::proxy_learn_expire            = 24hr;
 # redef NSM::exfil_skip_proxy_source       = T;                # 프록시 -> 인터넷 구간은 유출 탐지에서 뺌
+# redef NSM::proxy_source_min_clients      = 3;                # 배운 프록시는 PC 이 수 이상이 쓸 때만 출발지 제외
 
 # =============================================================================
 # [14] Exfil_Volume_Aggregate  (T1041 · Exfil)
