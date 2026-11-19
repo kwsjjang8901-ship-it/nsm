@@ -43,6 +43,13 @@ export {
 	option enable_ssh_host_key = T; ##< SSH 서버 호스트 키 지문 -> ssh_host_key
 	option enable_smb_guid = T;     ##< SMB2 NEGOTIATE 클라이언트 GUID -> smb_client_guid
 	option enable_mds_agent = T;    ##< AhnLab MDS Agent -> MDS 장비 통신 포트 -> security_agent, device
+	option enable_agent_policy = T; ##< 고객 정의 에이전트 정책(agent_policy_file) -> security_agent "policy:<id>"
+
+	## 고객 정의 에이전트 정책 파일(TSV). 비어 있으면 꺼짐. 형식은 signals/agent_policy.zeek, SPEC 3.17.
+	## 재시작 없이 다시 읽는다(Input REREAD). 클러스터에서는 노드마다 같은 경로의 파일을 읽는다.
+	const agent_policy_file = "" &redef;
+	## 연결 정책의 서로 다른 포트를 세는 시간, 같은 (단말, 정책)을 다시 기록하기까지의 시간
+	const agent_policy_window = 1hr &redef;
 
 	## AhnLab MDS Agent 가 MDS 장비에 접속하는 포트.
 	option mds_agent_ports: set[port] = { 8290/tcp, 8291/tcp, 8293/tcp, 50007/tcp, 50502/tcp };
