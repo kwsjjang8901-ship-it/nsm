@@ -73,6 +73,7 @@ export {
         [Machine_Account_Misuse] = "NSM.CredentialAccess.MachineAccountMisuse",
         [AI_Service_Upload]      = "NSM.Exfiltration.AiServiceUpload",
         [AI_API_From_Server]     = "NSM.C2.AiApiFromServer",
+        [IOC_Match]              = "NSM.C2.IocMatch",
         [AI_Service_Exploit]     = "NSM.WebAttack.AiServiceExploit",
         [Coerced_Authentication] = "NSM.CredentialAccess.CoercedAuth",
         [Remote_Registry_Dump]   = "NSM.CredentialAccess.RemoteRegistryDump",

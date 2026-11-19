@@ -39,6 +39,7 @@
 @load ./detections/32_machine_account      # 남의 머신 계정 사용(NTLM 릴레이)
 @load ./detections/33_ai_threats           # AI 관련 위협(업로드·서버의 AI API·AI 인프라 공격)
 @load ./detections/34_ad_attacks           # AD 공격(강제 인증·원격 하이브 저장·Zerologon·AD 정보 수집)
+@load ./detections/35_ioc_match            # IOC 일치(위협 정보의 IP·도메인·URL)
 @load ./detections/14_large_transfer_exfil
 @load ./detections/21_smb_ransomware      # 랜섬웨어성 SMB 파일 변경(확장자 변경 rename·랜섬 노트)
 
