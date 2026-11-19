@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.3 (2026-11-19) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.4 (2026-11-19) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -55,7 +55,7 @@
 | | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
 | | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0` | 소프트웨어 정보 |
-| | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent` | AhnLab 제품 설치 여부(통신으로 판단) |
+| | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent`, `policy:edr-cloud` | AhnLab 제품 설치 여부(통신으로 판단), 고객 정의 에이전트 정책(3.17) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
 | **검증 중 후보** | `smb_client_guid` | `a1eefcb2-2495-6541-893f-bf5b2c69acd4` | 참고 정보, 공유·변경 통계 |
 | | `ssh_host_key` | `e4:b1:8e:…` | 참고 정보, 공유 통계 |
@@ -90,6 +90,7 @@
 | syslog | `syslog.zeek` | 장비 hostname, 장비 종류, 수집 서버 | 장비 → 수집 서버 경로 | UDP 8/9, TCP **9** |
 | 서비스(응답) | `services.zeek` | service | 양방향 미러 | 8/9 |
 | AhnLab MDS Agent | `mds_agent.zeek` | 보안 에이전트(MDS Agent), 장비(MDS) | 단말 → MDS 장비 경로 | 8/9 |
+| 고객 정의 에이전트 정책 | `agent_policy.zeek` | 보안 에이전트(`policy:<id>`), 관리 서버 장비 | 단말 → 관리 서버 또는 인터넷·프록시 경로 | 8/9 |
 
 ### 3.2 DHCP (`dhcp`)
 
@@ -299,6 +300,44 @@
 - **예외:** 응답 없거나 거부된 연결은 세지 않음. 8291/tcp는 다른 제품(MikroTik Winbox 등)도 쓰므로 장비 주소를 모르면 포트 하나로는 판단하지 않음. 장비가 내부 대역 밖이면 장비 쪽 `device`는 남지 않음(단말 신호는 남음)
 - **활용:** 자산별 MDS Agent 설치 현황. 신호가 없는 단말은 미설치 **후보**일 뿐임(센서가 그 경로를 못 보거나, 관측 시간이 에이전트 보고 주기보다 짧거나, 단말이 꺼져 있었을 수 있음). 정확한 미설치 판정은 MDS Manager의 에이전트 목록과 대조
 
+### 3.17 고객 정의 에이전트 정책 (`agent_policy`)
+
+고객이 식별하고 싶은 제품(EDR, 백신·EPP 관리 서버, 패치·자산관리, NAC, DLP 등)의 에이전트 통신을 정책 파일로 정의합니다. 맞는 통신이 보인 단말에 `security_agent` `policy:<id>`를 남깁니다. MDS Agent(3.16)는 지금 규칙을 그대로 두고, 그 밖의 제품을 이 정책으로 다룹니다.
+
+- **정책 파일:** `agent_policy_file`(TSV, 비어 있으면 꺼짐). 재시작 없이 다시 읽음(Input REREAD). 클러스터에서는 노드마다 같은 경로의 파일을 읽음. pcap을 읽을 때는 정책을 다 읽을 때까지 패킷 처리를 멈춤
+
+  ```
+  #fields	id	product	server	ports	domain	user_agent	min_ports	device
+  ep-mgr	사내 백신 관리 서버	10.0.55.5	8443/tcp	-	-	-	epp-server
+  nac	NAC 에이전트	-	7001/tcp,7002/tcp	-	-	2	-
+  edr-cloud	클라우드 EDR	-	-	*.sensor.edr-vendor.example	-	-	-
+  patch	패치 관리	-	-	-	PatchAgent/	-	-
+  ```
+
+  | 필드 | 뜻 |
+  |---|---|
+  | `id` | 정책 id(영문·숫자·`._-`). 신호 값은 `policy:<id>` |
+  | `product` | 화면에 보일 제품명(센서는 쓰지 않음) |
+  | `server` | 관리 서버 주소·대역, 쉼표로 여러 개 |
+  | `ports` | 에이전트 포트, 쉼표로 여러 개. 프로토콜을 안 적으면 tcp |
+  | `domain` | 접속 도메인(하위 도메인 포함, 앞의 `*.`는 무시). TLS SNI, HTTP Host, 프록시 CONNECT 대상과 맞춤 |
+  | `user_agent` | HTTP User-Agent에 들어 있어야 하는 문자열(대소문자 무시, 정규식 아님) |
+  | `min_ports` | 같은 서버의 서로 다른 포트를 몇 개 이상 봐야 하는지(연결 정책만). 기본 1, 서버 없이 포트만이면 기본 2 |
+  | `device` | 서버 IP에 남길 `device` 값(서버 주소를 적은 정책만) |
+- **맞추는 방식** (적은 조건은 모두 맞아야 함)
+
+  | 정책 | 트리거 | 조건 | 신뢰도 (단말 / 서버 `device`) |
+  |---|---|---|---|
+  | 연결 정책 (`domain`·`user_agent` 없음) | `connection_established`(TCP 연결 성립) | 응답측이 `server`·`ports`에 맞음. `agent_policy_window`(1시간) 안에 같은 서버의 서로 다른 포트 `min_ports`개 이상 | 서버 주소 있음 90 / 80, 포트만 70 / - |
+  | 앱 정책 (`domain` 또는 `user_agent` 있음) | `ssl_extension_server_name`, `http_message_done`(요청) | SNI·Host가 `domain`에, User-Agent가 `user_agent`에 맞음. `server`·`ports`를 적었다면 응답측도 맞아야 함 | 서버 주소 있음 90 / 80, 없음 80 / - |
+- **정책 검사:** 아래는 정책을 빼고 `asset_agent_policy.log`에 `kind=invalid`와 이유를 남김. 읽을 때마다 `kind=summary`(`active=N invalid=N`), 파일 읽기 오류는 `kind=error`
+  - id 형식이 틀림, 주소·포트·도메인 형식이 틀림
+  - `server`·`ports`·`domain`·`user_agent`가 모두 없음
+  - 서버 주소 없이 포트만 적었는데 `min_ports` < 2(8291/tcp처럼 다른 제품과 겹치는 포트 때문), 또는 `min_ports`가 적은 포트 수보다 큼
+  - `device`를 적었는데 `server`가 없음
+- **예외:** 거부·무응답 연결은 세지 않음. 프록시를 거치면 응답측이 프록시이므로 도메인 정책에 `server`를 적으면 맞지 않음(도메인 정책은 보통 `server` 없이). User-Agent는 평문 HTTP에서만 보임. UDP만 쓰는 에이전트는 연결 정책으로 잡히지 않음
+- **활용:** 자산별 에이전트 확인. **신호가 없다고 미설치가 아님** → 미설치 후보 판정은 Manager가 4.10절 규칙으로 함
+
 ---
 
 ## 4. 판정 스펙 (`tools/asset_resolver.py`)
@@ -332,7 +371,7 @@
 ### 4.4 OS 판정
 
 - 출처 우선순위: ntlm > smb > ssh > http_ua > dhcp. `http_server`(서버의 HTTP Server 헤더, 0.3에서 추가)는 리졸버(claudtest2) 우선순위에 아직 없다. nsm 통합 리포트는 신뢰도가 높은 값을 고르므로 다른 출처가 있으면 그것이 쓰인다
-- NTLM 빌드 번호 → 버전: Windows 10(1507~22H2), Windows 11(21H2~25H2), Server 2016/2019/2022/2025. 표에 없는 빌드는 22000 이상이면 Windows 11
+- NTLM 빌드 번호 → 버전: Windows 10(1507\~22H2), Windows 11(21H2\~25H2), Server 2016/2019/2022/2025. 표에 없는 빌드는 22000 이상이면 Windows 11
 - PC/서버 공용 빌드(14393, 17763, 26100) 구분
   - 서버: 서버 역할(DC·DNS·DHCP·웹·DB·메일·프록시)이 있거나, 호스트명이 Windows Server 기본 이름(`WIN-` + 11자)
   - PC: 호스트명이 PC 기본 이름(`DESKTOP-`/`LAPTOP-` + 7자)이거나 근거 없음
@@ -381,6 +420,20 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | SMB2 클라이언트 GUID | 확인 자산 수, 여러 자산이 같은 GUID(복제 VM 의심), 한 자산에 GUID 여러 개(변경) | 공유·변경이 0에 가깝고 정답 비교로 고정성 확인 |
 | SSH 호스트 키 | 같은 키를 쓰는 자산 | 승격하지 않음(이미지 공유 확인됨) |
 
+### 4.10 에이전트 미확인 판정 (Manager)
+
+센서는 "맞는 통신이 보였다"만 남깁니다. 통신이 안 보이는 이유는 미설치 말고도 많습니다(미러가 경로를 못 봄, 단말이 꺼짐, VPN·외부망 사용). 그래서 Manager는 정책마다 결과를 셋으로 나눕니다.
+
+| 결과 | 조건 |
+|---|---|
+| 설치 확인 | `expect_every`(정책별, 예: 24시간) 안에 `policy:<id>` 신호가 있음 |
+| 미확인 (미설치 후보) | 대상 범위(정책별: 대역, OS, 역할)에 들고 그 기간에 충분히 활동했는데(능동 연결이 일정 수 이상) 신호가 없음. **그리고 같은 /24 대역의 대상 자산 중 일정 비율 이상(예: 50%)에서는 신호가 보임** |
+| 판정 불가 | 같은 대역에서 신호가 거의 안 보임(미러가 그 경로를 못 보는 것으로 봄), 또는 활동이 적음 |
+
+- 대상 범위·`expect_every`·대역 비율은 Manager 정책 화면에서 정하고 센서 파일에는 넣지 않습니다.
+- 대역 조건이 없으면 측정 구간 때문에 대역 전체가 "미설치"로 보이는 오판이 납니다(운영 측정에서 미러 위치에 따라 결과가 크게 달랐던 것과 같은 이유).
+- 정확한 기준은 각 제품 관리 콘솔의 에이전트 목록입니다. 목록을 받을 수 있으면 "콘솔에 있는데 통신 없음", "통신은 있는데 콘솔에 없음"까지 나눕니다(MDS Agent 목록 대조와 같은 작업).
+
 ---
 
 ## 5. 품질 지표 (리포트)
@@ -424,7 +477,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `asset_nets` | `{}` | 자산 대역 (`run_poc.sh -n`) |
 | `suppress_interval` | 1hr | 중복 억제 기간 |
 | `dhcp_xid_timeout` | 5min | DHCP 트랜잭션 보관 |
-| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent |
+| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent, agent_policy |
 | `service_ports` | 주요 포트 | 포트만으로 서비스 인정 |
 | `ignore_service_ports` | 137,138,1900,5353,5355/udp | 거의 모든 단말이 응답하는 포트 |
 | `nested_analyzers` | ntlm, gssapi, krb, … | 다른 프로토콜 안에서 확인되는 분석기 |
@@ -435,6 +488,8 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `mds_agent_ports` | 8290, 8291, 8293, 50007, 50502/tcp | AhnLab MDS Agent → MDS 장비 포트 |
 | `mds_servers` | `{}` | MDS 장비 주소. 지정하면 연결 1건으로 판단(신뢰도 90) |
 | `mds_agent_min_ports`, `mds_agent_window` | 2, 1hr | 장비 주소가 없을 때 같은 서버의 서로 다른 에이전트 포트 수와 세는 시간 |
+| `agent_policy_file` | `""` | 고객 정의 에이전트 정책 파일(3.17). 비어 있으면 꺼짐 |
+| `agent_policy_window` | 1hr | 연결 정책의 서로 다른 포트를 세는 시간, 같은 (단말, 정책)을 다시 기록하기까지의 시간 |
 
 리졸버 옵션: `--shared-mac-threshold`(2), `--multi-account-window`(10분), `--max-idle`(24시간), `--tz`(9).
 
@@ -468,3 +523,4 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
+| 0.4 | 2026-11-19 | 고객 정의 에이전트 정책(3.17, `agent_policy_file`, `asset_agent_policy.log`), Manager의 에이전트 미확인 판정 규칙(4.10) |

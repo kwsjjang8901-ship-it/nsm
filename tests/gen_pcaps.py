@@ -2553,6 +2553,35 @@ def gen_dhcp_relay(out):
     cap.write(os.path.join(out, "dhcp_relay.pcap"))
 
 
+def gen_agent_policy(out):
+    """자산 식별 고객 정의 에이전트 정책(10.0.55.x). 테스트의 정책 파일과 짝:
+    ep-mgr(서버 .5 + 8443): .10 연결 성립 -> 맞음, .11 다른 서버 .6 -> 아님, .12 거부된 연결 -> 아님.
+    nac(서버 없이 7001·7002, 2개 이상): .13 두 포트 -> 맞음, .14 한 포트 -> 아님.
+    edr-cloud(도메인 sensor.edr-vendor.example): .15 SNI 하위 도메인 -> 맞음, .16 프록시 .4:3128 CONNECT -> 맞음,
+    .17 제조사 웹사이트 www.edr-vendor.example -> 아님.
+    patch(User-Agent "PatchAgent/"): .18 -> 맞음, .19 브라우저 -> 아님."""
+    cap = Capture()
+    t = T0 + 1
+    t = tcp_established(cap, "10.0.55.10", "10.0.55.5", 8443, t)
+    t = tcp_established(cap, "10.0.55.11", "10.0.55.6", 8443, t + 1)
+    t = Tcp(cap, "10.0.55.12", "10.0.55.5", 8443).rejected(t + 1)
+    t = tcp_established(cap, "10.0.55.13", "10.0.55.7", 7001, t + 1)
+    t = tcp_established(cap, "10.0.55.13", "10.0.55.7", 7002, t + 1)
+    t = tcp_established(cap, "10.0.55.14", "10.0.55.7", 7001, t + 1)
+    for cli, sni in [("10.0.55.15", "ts01.sensor.edr-vendor.example"), ("10.0.55.17", "www.edr-vendor.example")]:
+        s = Tcp(cap, cli, "93.184.216.80", 443)
+        t = s.handshake(t + 1)
+        t = s.client_send(client_hello(sni), t)
+        t = s.server_send(server_hello(), t + 0.02)
+        t = s.close(t + 0.01)
+    t = proxy_upload(cap, "10.0.55.16", "10.0.55.4", t + 1, "ts02.sensor.edr-vendor.example")
+    for cli, ua in [("10.0.55.18", "PatchAgent/3.2 (Windows)"), ("10.0.55.19", "Mozilla/5.0 (Windows NT 10.0)")]:
+        req = ("GET /update/check HTTP/1.1\r\nHost: patch.corp.example\r\nUser-Agent: %s\r\n\r\n" % ua).encode()
+        t = http_server_reply(cap, cli, "10.0.55.8", 80, req, "Microsoft-IIS/10.0", t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "agent_policy.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2568,7 +2597,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
-              gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay]
+              gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy]
 
 
 def main():

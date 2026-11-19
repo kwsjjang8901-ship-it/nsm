@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 121개(자산 식별·선별 전송 포함), 합성 pcap 59개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 122개(자산 식별·선별 전송 포함), 합성 pcap 60개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1056,6 +1056,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 탐지와의 관계 | 탐지 결과에 영향 없음(같은 이벤트에 핸들러만 추가). 서버 역할(DC·DNS·파일 서버)을 탐지 조건·예외에 자동 반영하는 것은 다음 단계(예외 엔진 E4) |
 | 머지 때 고친 점 | SMB2 클라이언트 GUID용 시그니처가 Zeek 시그니처 프레임워크 기본 동작으로 SMB2 연결마다 `Signatures::Sensitive_Signature` notice(패킷 바이트 포함)를 남기던 것을 막음(`SIG_IGNORE`). 운영 필터가 `asset_signal.log`를 끄던 것(검토 C3)을 유지 목록에 추가해 해결 |
 | AhnLab MDS Agent | 단말이 MDS 장비의 에이전트 포트(`mds_agent_ports`, 기본 8290·8291·8293·50007·50502/tcp)에 연결이 성립하면 `security_agent` `ahnlab:mds-agent`, 장비에 `device` `ahnlab-mds`. 장비 주소(`mds_servers`)를 적으면 연결 1건으로, 비어 있으면 같은 서버의 서로 다른 포트 2개 이상으로 판단(8291은 다른 제품도 씀). 신호가 없는 단말은 미설치 후보일 뿐이며 정확한 판정은 MDS Manager 에이전트 목록 대조(SPEC 3.16) |
+| 고객 정의 에이전트 정책 | 고객이 원하는 제품(EDR·백신 관리 서버·패치·NAC·DLP 등)의 에이전트 통신을 정책 파일(`AssetID::agent_policy_file`, TSV, 비어 있으면 꺼짐, 재시작 없이 다시 읽음)로 정의. 관리 서버 주소·포트(연결 성립), 접속 도메인(SNI·Host·프록시 CONNECT 대상), User-Agent 조건이 맞으면 단말에 `security_agent` `policy:<id>`(서버 주소 90, 도메인·UA 80, 포트만 70). 틀린 정책은 빼고 `asset_agent_policy.log`(기본 유지, `/log/zeek/asset_agent_policy`)에 이유를 남김. 미설치 후보 판정(대상 범위, 기간, 같은 대역 다른 자산의 신호 비율)은 Manager(SPEC 3.17·4.10) |
 | 라우팅 구간 신호 | DC·DHCP가 안 보이는 사용자 → 서버 구간에서도 서버 정보를 더 얻는다. ① Kerberos 서비스 티켓(SMB·LDAP 인증의 AP-REQ)의 서비스 이름 → 서버 `dns_name`(50)과 realm → `domain`(70). `krbtgt`와 도메인 이름 자체로 받은 티켓(DFS 루트)은 제외. LDAP SASL 안 티켓은 Zeek 9.x만. ② HTTP 응답 Server 헤더 → 서버 `software` `http_server:…`(50)와 `os_hint`(45, IIS 버전 → Windows Server 버전, Apache 괄호 안 배포판 → Linux). 프록시 경유 응답은 제외, `enable_http_server`로 끔. ③ DHCP 릴레이(릴레이 ↔ DHCP 서버) 구간만 보여도 단말 DHCP 신호를 남기는 것을 테스트로 확인(SPEC 3.2·3.4·3.11) |
 | 역방향 이름 | PTR 응답은 정규 역방향 이름만 쓴다. RFC 2317 위임 이름 등 주소로 바꿀 수 없는 이름은 무시한다(SPEC 4장 DNS 응답) |
 | 남은 것 | Manager 리졸버(PoC `tools/asset_resolver.py`)는 이 저장소 밖. 선별 전송(메타데이터) 포함 여부는 [메타데이터 SRS](SRS_METADATA_EXPORT.md) P4에서 결정 |
@@ -1632,7 +1633,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 121개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 79개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 33개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 122개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 79개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 34개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
