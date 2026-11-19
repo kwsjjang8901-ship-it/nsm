@@ -4,7 +4,7 @@
 ##! 탐지 원리
 ##!   - 연결 종료(connection_state_remove) 시 originator 페이로드(c$orig$size)를
 ##!     검사. 내부->외부 방향이며 임계(기본 100MB) 초과 전송이면 유출 의심.
-##!   - 명시적 프록시를 거친 연결(PC -> 프록시, CONNECT·절대 URL)도 외부로 본다(proxy_common.zeek).
+##!   - 명시적 프록시를 거친 연결(PC -> 배운 프록시·proxy_servers)도 외부로 본다(proxy_common.zeek).
 ##!     프록시가 출발지인 연결(프록시 -> 인터넷)은 같은 전송을 PC 쪽에서 보므로 뺀다.
 ##!
 ##! 증적(Evidence) 연동  ※ 단일 연결형
