@@ -21,7 +21,7 @@
 ##!
 ##! 명시적 프록시(proxy_common.zeek)
 ##!   - PC -> 프록시 연결도 센다. 연결이 성립할 때 이미 아는 프록시(배운 프록시·proxy_servers)면 그때부터,
-##!     처음 보는 프록시면 CONNECT 가 2xx 로 성공할 때부터 센다(그 전 바이트는 요청 한 줄뿐).
+##!     처음 보는 프록시면 터널이 확인될 때(CONNECT 2xx 뒤 TLS 시작)부터 센다(그 전 바이트는 요청 한 줄과 ClientHello 뿐).
 ##!   - 프록시가 출발지인 연결(프록시 -> 인터넷)은 같은 전송을 PC 쪽에서 보므로 세지 않는다.
 ##! ============================================================================
 
@@ -145,12 +145,10 @@ event connection_established(c: connection)
     vol_track(c);
     }
 
-# 처음 보는 프록시로 간 연결은 CONNECT 가 2xx 로 성공할 때(proxy_common 이 그 프록시를 배운 뒤) 세기 시작한다
-event http_reply(c: connection, version: string, code: count, reason: string) &priority=-5
+# 처음 보는 프록시로 간 연결은 프록시 터널이 확인될 때(CONNECT 2xx 뒤 TLS 시작, proxy_common 이 배운 뒤) 세기 시작한다
+event NSM::proxy_tunnel_confirmed(c: connection)
     {
     if ( ! detect_exfil_volume_aggregate || c$uid in vol_reported )
-        return;
-    if ( code < 200 || code >= 300 || ! c?$http || ! c$http?$method || c$http$method != "CONNECT" )
         return;
     if ( ! exfil_outbound(c) )
         return;

@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 114개(자산 식별·선별 전송 포함), 합성 pcap 55개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 115개(자산 식별·선별 전송 포함), 합성 pcap 56개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -844,10 +844,10 @@ PC에 프록시가 설정된 환경(PAC·WPAD 포함)에서는 PC의 웹 연결�
 | --- | --- |
 | 프록시 요청 | 연결의 첫 요청 `CONNECT 호스트:포트`와 그 응답(`http_reply`의 2xx). 배운 프록시로 가는 평문 HTTP는 절대 URL(`http://호스트/…`)에서 목적지를 읽음. `c$http$method`·`c$http$uri` |
 | 실제 목적지 이름 | CONNECT가 성공하면 Zeek가 같은 연결의 나머지를 TLS로 해석해 SNI(`c$ssl$server_name`)가 보입니다. 이름은 SNI > CONNECT 대상 > HTTP Host 순 |
-| 프록시 학습 | **내부 PC의 CONNECT에 2xx로 답한** (주소, 포트)만 24시간 기억(`proxy_learn_expire`). 배운 프록시나 `proxy_servers`로 가는 TCP 연결을 프록시 경유로 봅니다. 첫 요청을 못 본 연결(캡처 전부터 열려 있던 연결 등)도 포함하며, 이때 목적지 이름은 모릅니다 |
+| 프록시 학습 | **내부 PC의 CONNECT에 2xx로 답하고, 이어서 같은 연결에서 TLS 접속 시작(`ssl_client_hello`)이 보인** (주소, 포트)만 24시간 기억(`proxy_learn_expire`). 배운 프록시나 `proxy_servers`로 가는 TCP 연결을 프록시 경유로 봅니다. 첫 요청을 못 본 연결(캡처 전부터 열려 있던 연결 등)도 포함하며, 이때 목적지 이름은 모릅니다 |
 
 - 내부·외부 판단(`local_nets`)과 상관없이 동작합니다.
-- 프록시가 아닌 곳을 배우지 않도록 좁게 잡았습니다. 외부 스캐너가 내부 웹서버로 보내는 CONNECT·절대 URL 탐색, 거부(4xx)된 CONNECT, 절대 URL만 있는 요청으로는 배우지 않습니다. 그렇지 않으면 그 웹서버가 프록시로 잘못 배워져, 웹서버의 외부 유출이 출발지 제외로 빠지고 웹서버로 가는 내부 업로드가 유출로 잡힙니다(테스트 10.0.41.x).
+- 프록시가 아닌 곳을 배우지 않도록 좁게 잡았습니다. 외부 스캐너가 내부 웹서버로 보내는 CONNECT·절대 URL 탐색, 거부(4xx)된 CONNECT, 절대 URL만 있는 요청으로는 배우지 않습니다. 어떤 요청에도 200으로 답하는 장비(프린터·NAS 같은 임베디드 웹서버)에 취약점 점검 장비가 CONNECT만 보내고 끝낸 경우도 배우지 않습니다(진짜 프록시를 쓰는 PC는 CONNECT 뒤 바로 HTTPS 접속을 이어 감). TLS가 아닌 터널(CONNECT 뒤 SSH 등)만 쓰는 프록시는 `proxy_servers`로 지정합니다. 그렇지 않으면 그 웹서버가 프록시로 잘못 배워져, 웹서버의 외부 유출이 출발지 제외로 빠지고 웹서버로 가는 내부 업로드가 유출로 잡힙니다(테스트 10.0.41.x).
 - 프록시가 출발지인 연결을 빼는 것은 탐지를 없애는 쪽이라, `proxy_servers`이거나 서로 다른 내부 PC `proxy_source_min_clients`(3)대 이상의 CONNECT에 성공한 프록시만 뺍니다. PC 한두 대만 쓰는 디버깅 프록시를 띄워 유출을 숨기는 것을 막습니다.
 - 배운 프록시는 워커마다 따로 기억합니다. 같은 PC-프록시 쌍은 보통 같은 워커로 갑니다.
 - PC-프록시 구간도 TLS인 HTTPS 프록시는 CONNECT가 암호화돼 인식하지 못합니다. 미러링이 프록시 바깥 구간만 보면 출발지가 모두 프록시라 PC를 알 수 없습니다(10장).
@@ -875,7 +875,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 업로드 증가분 | 내부 → 외부 TCP 연결 성립 시 `ConnThreshold::set_bytes_threshold`(1MB 단위) → `ConnThreshold::bytes_threshold_crossed`마다 `c$orig$size` 증가분을 관측, 연결 종료 시 남은 증가분 반영 |
-| 프록시 경유 | 연결 성립 때 이미 아는 프록시(배운 프록시·`proxy_servers`)면 그때부터, 처음 보는 프록시면 CONNECT가 2xx로 성공할 때(`http_reply`)부터 셈 |
+| 프록시 경유 | 연결 성립 때 이미 아는 프록시(배운 프록시·`proxy_servers`)면 그때부터, 처음 보는 프록시면 터널이 확인될 때(CONNECT 2xx 뒤 TLS 시작, `NSM::proxy_tunnel_confirmed`)부터 셈 |
 
 - 패킷마다 이벤트를 받지 않고 1MB마다 깨어나므로 고대역에서도 부하가 작습니다. 연결 중에도 반영돼 장기 연결도 끝나기 전에 탐지합니다. 탐지는 최대 1MB만큼 늦어질 수 있습니다.
 - 집계는 페이로드 기준이라 다운로드 때 내부 PC가 보내는 ACK 헤더는 외부 전송량에 들어가지 않습니다.
@@ -1308,7 +1308,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `exfil_volume_step` | 1024\*1024 | \[14\] 실시간 집계 단위(1MB) |  |
 | `suppress_large_exfil` / `suppress_web_upload` / `suppress_vol_agg` | 1hr / 1hr / 5min | 억제 시간 |  |
 | `proxy_servers` | 비어 있음 | \[10·12·14\] 고객이 아는 명시적 프록시 주소. 이 주소로 가는 TCP 연결은 첫 요청을 못 봐도 프록시 경유로 봄 | 학습만으로 충분하면 비워 둠 |
-| `proxy_learn` / `proxy_learn_expire` | T / 24hr | \[10·12·14\] 내부 PC의 CONNECT에 2xx로 답한 (주소, 포트)를 프록시로 배움 / 기억 시간 |  |
+| `proxy_learn` / `proxy_learn_expire` | T / 24hr | \[10·12·14\] 내부 PC의 CONNECT에 2xx로 답하고 이어서 TLS가 시작된 (주소, 포트)를 프록시로 배움 / 기억 시간 |  |
 | `proxy_source_min_clients` | 3 | \[10·12·14\] 배운 프록시를 출발지 제외 대상으로 볼 최소 내부 PC 수 | PC가 적은 시험 환경에서는 프록시 → 인터넷 구간도 함께 탐지될 수 있음(중복이지 누락은 아님) |
 | `exfil_skip_proxy_source` | T | \[10·12·14\] 프록시가 출발지인 외부 전송을 유출 탐지에서 뺌(`proxy_servers` 또는 PC `proxy_source_min_clients`대 이상) | 미러링이 프록시 바깥 구간만 보고 `proxy_servers`를 지정한 환경이면 F |
 
@@ -1631,7 +1631,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 114개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 78개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
+| btest | 115개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 79개(`tests/btest/rules`), 클러스터 테스트 7개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 29개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
