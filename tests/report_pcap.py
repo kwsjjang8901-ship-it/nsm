@@ -324,7 +324,7 @@ def build_stories(detections, midx, label):
 
 # 메타데이터 관측: 탐지 밖에서 스토리를 넓히는 두 가지(추정 조인, uid 아님)
 #   1) 같은 공격 인프라: C2·유출 탐지의 외부 목적지(IP·SNI·Host)에 접속한 다른 내부 host
-#   2) 관측된 내부 이동: 스토리 host 가 탐지 밖에서 다른 내부 host 로 한 관리 접속·인증
+#   2) 확인이 필요한 내부 접속(예전 이름 관측된 내부 이동): 스토리 host 가 탐지 기준에는 못 미친 채 다른 내부 host 로 한 관리 접속·인증
 INFRA_STAGES = {"Command and Control", "Exfiltration"}
 SHARED_MAC_IPS = 2            # 자산 신호 모드: 이 수 이상의 IPv4 가 같은 MAC 이면 "공유"로 표시(이중화 VIP·IP 여러 개인 서버일 수 있음).
 ROUTER_MAC_IPS = 3            # 이 수 이상이면 라우터(그 뒤 주소들)로 표시. IPv6 링크 로컬은 같은 host 라 어느 쪽에도 세지 않음
@@ -336,7 +336,7 @@ INFRA_POPULAR_MIN = 5         # 또는 이 수 이상이면서
 INFRA_POPULAR_RATIO = 0.5     # 외부로 접속한 내부 host 의 이 비율 이상이 붙으면 흔한 서비스(작은 망 대응)
 RESOLVER_MIN_DOMAINS = 5      # 다른 host 들의 조회 도메인이 이 수 이상일 때만 리졸버를 가린다
 RESOLVER_COVER = 0.5          # 다른 host 들이 조회한 도메인의 이 비율 이상을 자기도 조회하면 내부 리졸버로 본다
-OBS_AFTER = 3600              # 스토리 마지막 탐지 뒤 관측 이동을 보는 시간
+OBS_AFTER = 3600              # 스토리 마지막 탐지 뒤 확인이 필요한 내부 접속을 찾는 시간
 OBS_MAX = 40
 OBS_COMMON = 3                # 스토리 밖 내부 host 가 이 수 이상 같은 대상에 같은 접속을 하면 평소 통신으로 뺀다
 OBS_RISKY_RPC = {"svcctl", "atsvc", "itaskschedulerservice", "iwbemservices", "iwbemlevel1login",
@@ -370,7 +370,7 @@ def infra_keys(d):
 
 
 def obs_sig(k, r, to_kdc):
-    """관측 이동 행 하나를 (접속 종류, 표시 문구, 강한 신호, 원격 실행류) 로. 일상 통신이면 None."""
+    """확인이 필요한 내부 접속 행 하나를 (접속 종류, 표시 문구, 강한 신호, 원격 실행류) 로. 일상 통신이면 None."""
     if k == "smb_mapping":
         path = str(r.get("path") or "")
         share = path.upper().rstrip("\\").split("\\")[-1]
@@ -399,7 +399,7 @@ def obs_sig(k, r, to_kdc):
 
 
 def meta_observe(stories, detections, midx, internal, label, sig=()):
-    """스토리마다 infra(같은 인프라에 붙은 내부 host)와 observed(관측된 내부 이동)를 붙인다."""
+    """스토리마다 infra(같은 인프라에 붙은 내부 host)와 observed(확인이 필요한 내부 접속)를 붙인다."""
     dindex = collections.defaultdict(list)     # 목적지 키 -> [(시각, 출발지, 로그)]
     kdc = set()
     for src, lst in midx.items():
@@ -446,7 +446,7 @@ def meta_observe(stories, detections, midx, internal, label, sig=()):
         return not (internal(ip) or a.is_multicast or a.is_unspecified or a.is_reserved or a.is_link_local)
     active = len({src for src, lst in midx.items() if internal(src)
                   and any(ext_unicast(r.get("id.resp_h") or r.get("resp_h") or "") for t, k, r in lst)})
-    # 관측 이동의 평소 통신 판정: (출발, 대상, 접속 종류)의 처음 시각, (대상, 접속 종류)별 출발 host
+    # 확인이 필요한 내부 접속의 평소 통신 판정: (출발, 대상, 접속 종류)의 처음 시각, (대상, 접속 종류)별 출발 host
     pair_first, sig_srcs = {}, collections.defaultdict(set)
     for src, lst in midx.items():
         if not internal(src):
@@ -506,7 +506,7 @@ def meta_observe(stories, detections, midx, internal, label, sig=()):
         # 외부 대상 키(IP·이름): 공유하는 host 가 없어도 요약 칸의 외부 대상 수에 쓴다
         s["ext_keys"] = sorted({k for i in s["steps"] if detections[i].get("stages") in INFRA_STAGES and detections[i].get("attacker")
                                 for k in infra_keys(detections[i])})
-        # 2) 관측된 내부 이동
+        # 2) 확인이 필요한 내부 접속
         # host 가 스토리에 들어온 시각. 집계형 확산 탐지는 창이 끝날 때 나오므로, 공격자 -> 대상의 첫 메타데이터 행이
         # 탐지 1시간 안쪽에 있으면 그 시각을 쓴다.
         def first_contact(a, v, td):
@@ -913,7 +913,7 @@ svg .nb.cand circle{fill:var(--surf)}svg .nb.cand text{fill:var(--c)}
  <div id="storymeta"></div>
  <h3 class="sub3">무슨 일이 있었나</h3><ol class="nar" id="storylist"></ol>
  <details style="margin-top:8px"><summary class="note">근거 연결률(탐지 종류별, 빈틈 검토용)</summary><div id="storycov"></div></details>
- <div class="note">번호는 탐지 순서이고 세 그림에서 같습니다(그림의 번호·카드를 누르면 아래 설명으로 이동). 확산 경로의 열은 시작 공격자에서 몇 번 건너갔는지이며, 대상이 5대를 넘는 탐지는 4대만 그리고 나머지는 "외 N대"로 묶습니다. 채운 표시는 상관 규칙이 이은 확정 체인, 빈 표시·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값입니다. 설명의 보라 줄(번호 없음)은 메타데이터 관측으로, 같은 공격 인프라에 붙은 host의 첫 접속과 탐지 밖 내부 이동을 시간 순서로 끼운 것입니다. 집계형 확산 탐지는 탐지 시각(집계 창 끝)이 아니라 공격자 → 대상의 첫 접속 추정 시각에 놓습니다. 요약 칸의 최초 관측·체류는 이 관측을 포함한 값이며, 관측 보기를 끄면 탐지만으로 셉니다.</div></div></section>
+ <div class="note">번호는 탐지 순서이고 세 그림에서 같습니다(그림의 번호·카드를 누르면 아래 설명으로 이동). 확산 경로의 열은 시작 공격자에서 몇 번 건너갔는지이며, 대상이 5대를 넘는 탐지는 4대만 그리고 나머지는 "외 N대"로 묶습니다. 채운 표시는 상관 규칙이 이은 확정 체인, 빈 표시·점선은 같은 공격자나 확산 대상에서 나온 체인 밖 탐지입니다. <i>추정</i> 줄은 선별 전송 로그를 출발·대상·시간(±10분, 흐름 요약 30분)으로 맞춘 값입니다. 설명의 보라 줄(번호 없음)은 메타데이터 관측으로, 같은 공격 인프라에 붙은 host의 첫 접속과 확인이 필요한 내부 접속을 시간 순서로 끼운 것입니다. 집계형 확산 탐지는 탐지 시각(집계 창 끝)이 아니라 공격자 → 대상의 첫 접속 추정 시각에 놓습니다. 요약 칸의 최초 관측·체류는 이 관측을 포함한 값이며, 관측 보기를 끄면 탐지만으로 셉니다.</div></div></section>
 <section id="det"><h2>탐지</h2><div class="box"><div id="detbars"></div></div>
  <div class="box" style="margin-top:10px"><input class="filter" id="detf" placeholder="필터: 진단·IP·자산 이름·역할·OS·기법"><div id="dett"></div>
  <div class="note">행을 누르면 근거(evidence)가 펼쳐집니다. 대상은 확산·랜섬웨어 등에서는 피해 host, C2·유출·비표준 포트에서는 연결한 외부 서버입니다(<span class="chip ext">외부</span> 표시, 자산 식별 대상 아님). IP 옆 이름은 자산 판정 결과가 있으면 탐지 시각에 그 IP를 쓰던 자산(<span class="chip role">역할</span>·<span class="os">OS</span> 함께, 이름에 마우스를 올리면 자산 ID·식별 근거), 없으면 자산 신호의 호스트명(<i>기울임</i>, 판정 전 참고값)입니다. 검색 칸에 역할·OS(예: DC, Windows)를 넣으면 그 자산이 공격자·대상인 탐지만 남습니다.</div></div></section>
@@ -1054,7 +1054,7 @@ function drawGraph(s,steps){
  const el=document.getElementById('storygraph');el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="확산 경로">${g.join('')}</svg>`;
  el.querySelectorAll('g.nb').forEach(c=>{const x=steps.find(y=>y.k===+c.dataset.k);c.onclick=()=>jump(x.k);c.onmousemove=e=>showTip(e,tipHtml(x));c.onmouseleave=hideTip});
 }
-// 메타데이터 관측 패널: 같은 공격 인프라에 붙은 내부 host, 탐지 밖 내부 이동
+// 메타데이터 관측 패널: 같은 공격 인프라에 붙은 내부 host, 확인이 필요한 내부 접속
 function drawMeta(s){
  const el=document.getElementById('storymeta');
  if(!document.getElementById('storyobs').checked){el.innerHTML='';return}
@@ -1067,13 +1067,13 @@ function drawMeta(s){
    const rows=x.hosts.map((y,i)=>`<tr>${i?'<td></td>':head}<td>${who(y.who)}</td><td class="tt2">${fmtT(y.first).slice(5,16)} ~ ${fmtT(y.last).slice(11,16)}</td><td class="mut">${esc(y.logs.join(', '))} · ${y.n}행</td><td>${ST2[y.status]}</td></tr>`);
    if(x.omitted)rows.push(`<tr>${rows.length?'<td></td>':head}<td colspan="4" class="mut">관측만 host ${x.omitted}대는 생략(내부 host 상당수가 접속하는 흔한 목적지)</td></tr>`);
    return rows.join('')}).join('')+'</tbody></table>';
- h+=`<h3 class="sub3">탐지 밖에서 관측된 내부 이동 <span class="ob">관측</span></h3>`;
+ h+=`<h3 class="sub3">확인이 필요한 내부 접속 <span class="ob">관측</span> <span class="mut" style="font-weight:400">탐지 기준에는 못 미친 관리 접속 · 통신 기록으로 찾음</span></h3>`;
  const sk=s.observed_skip||{},skn=(sk.prior||0)+(sk.common||0);
- if(!ob.length)h+='<div class="note">스토리 host가 탐지 밖에서 다른 내부 host로 한 관리 접속·인증이 없습니다(디렉터리·인증 서버로 가는 일상 통신은 뺌).</div>';
+ if(!ob.length)h+='<div class="note">스토리 host가 다른 내부 host로 한 관리 접속·인증 가운데 확인이 필요한 것이 없습니다(디렉터리·인증 서버로 가는 일상 통신은 뺌).</div>';
  else h+='<table><thead><tr><th>출발</th><th>대상</th><th>처음 ~ 마지막</th><th>관측 내용</th></tr></thead><tbody>'+ob.map(o=>{const a=(s.lanes.find(l=>l.ip===o.a))||{ip:o.a};
    return `<tr><td>${who(a)}</td><td>${who(o.who)}</td><td class="tt2">${fmtT(o.first).slice(11,16)} ~ ${fmtT(o.last).slice(11,16)}</td><td>${esc(o.what.join(' · '))}${o.strong?'':' <span class="mut">(연결·인증만)</span>'}</td></tr>`}).join('')+'</tbody></table>';
  if(skn)h+=`<div class="note">평소 통신으로 보고 뺀 출발·대상 ${skn}쌍: 스토리에 들어오기 전부터 같은 대상에 같은 접속을 하던 ${sk.prior||0}쌍, 스토리 밖 host ${D.obs_common}대 이상이 같은 대상에 같은 접속을 하는 ${sk.common||0}쌍(원격 실행·관리 공유는 빼지 않음).</div>`;
- h+='<div class="note">관측은 uid가 아니라 출발지·대상·시간으로 맞춘 추정입니다. 같은 인프라는 스토리 기간 앞뒤 24시간, 내부 이동은 host가 스토리에 들어온 뒤부터 마지막 탐지 1시간 뒤까지 봅니다.</div>';
+ h+='<div class="note">관측은 uid가 아니라 출발지·대상·시간으로 맞춘 추정입니다. 같은 인프라는 스토리 기간 앞뒤 24시간, 확인이 필요한 내부 접속은 host가 스토리에 들어온 10분 전부터 마지막 탐지 1시간 뒤까지 봅니다.</div>';
  el.innerHTML=h;
 }
 // 내러티브: 번호·시각·문장·근거, 10분 넘는 공백 표시
@@ -1087,7 +1087,7 @@ function drawNarr(steps,s){
    if(it.kind==='move'){const o=it.o;
     out.push(`<li class="ob"><span class="tm">${fmtT(it.t).slice(11)}</span><span class="sp"><i class="od"></i></span><div class="bd">
      <div class="tt">${who(lane(o.a))} → ${who(o.who)} ${esc(o.what.join(' · '))}<span class="k">관측</span>${o.strong?'':'<span class="k">연결·인증만</span>'}</div>
-     <div class="how">탐지 밖 내부 이동 · ${esc(o.logs.join(', '))} · ${range}</div></div></li>`)}
+     <div class="how">확인이 필요한 내부 접속 · ${esc(o.logs.join(', '))} · ${range}</div></div></li>`)}
    else{const y=it.y,st={story:'이 스토리 host',other:'다른 스토리에서 탐지된 host',obs:'탐지 없이 관측만 된 host'}[y.status];
     out.push(`<li class="ob"><span class="tm">${fmtT(it.t).slice(11)}</span><span class="sp"><i class="od"></i></span><div class="bd">
      <div class="tt">${who(y.who)} → ${it.keys.map(k=>`<code>${esc(k)}</code>`).join(', ')} 같은 공격 인프라에 접속<span class="k">관측</span></div>
@@ -1101,7 +1101,7 @@ function drawNarr(steps,s){
    <div class="how">${howHtml(d)||'근거·선별 전송 기록 없음'}</div></div></li>`)});
  document.getElementById('storylist').innerHTML=out.join('');
 }
-// 관측 사건: 탐지 밖 내부 이동(observed)과 같은 인프라에 붙은 다른 host(흔한 목적지 제외)의 첫 접속
+// 관측 사건: 확인이 필요한 내부 접속(observed)과 같은 인프라에 붙은 다른 host(흔한 목적지 제외)의 첫 접속
 function obsEvents(s){
  if(!document.getElementById('storyobs').checked)return[];
  const ev=(s.observed||[]).map(o=>({t:o.first,last:o.last,kind:'move',o}));
