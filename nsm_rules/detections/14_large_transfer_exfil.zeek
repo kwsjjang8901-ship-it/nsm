@@ -18,15 +18,22 @@
 ##!       * 연결 진행 중에도 step 마다 반영되므로 장기 연결도 종료 전에 탐지된다.
 ##!   - 차이: 캡처 손실로 빠진 구간도 시퀀스 번호 기준으로 포함된다(실제 전송량에 더 가깝다).
 ##!     탐지 시점은 최대 step 만큼 늦어질 수 있다.
+##!
+##! 명시적 프록시(proxy_common.zeek)
+##!   - PC -> 프록시 연결도 센다. 연결이 성립할 때 이미 아는 프록시(배운 프록시·proxy_servers)면 그때부터,
+##!     처음 보는 프록시면 CONNECT·절대 URL 요청이 보일 때부터 센다(그 전 바이트는 요청 한 줄뿐).
+##!   - 프록시가 출발지인 연결(프록시 -> 인터넷)은 같은 전송을 PC 쪽에서 보므로 세지 않는다.
 ##! ============================================================================
 
 @load base/frameworks/sumstats
 @load base/frameworks/notice
 @load base/utils/site
 @load base/protocols/conn/thresholds
+@load base/protocols/http
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./proxy_common
 
 module NSM;
 
@@ -123,14 +130,31 @@ function vol_report(c: connection)
     vol_reported[c$uid] = cur;
     }
 
+function vol_track(c: connection)
+    {
+    vol_reported[c$uid] = 0;
+    ConnThreshold::set_bytes_threshold(c, exfil_volume_step, T);
+    }
+
 event connection_established(c: connection)
     {
     if ( ! detect_exfil_volume_aggregate )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) || Site::is_local_addr(c$id$resp_h) )
+    if ( ! exfil_outbound(c) )
         return;
-    vol_reported[c$uid] = 0;
-    ConnThreshold::set_bytes_threshold(c, exfil_volume_step, T);
+    vol_track(c);
+    }
+
+# 처음 보는 프록시로 간 연결은 CONNECT·절대 URL 요청이 보일 때 세기 시작한다
+event http_request(c: connection, method: string, original_URI: string, unescaped_URI: string, version: string)
+    {
+    if ( ! detect_exfil_volume_aggregate || c$uid in vol_reported )
+        return;
+    if ( ! is_proxy_request(method, original_URI) )
+        return;
+    if ( ! Site::is_local_addr(c$id$orig_h) || ( exfil_skip_proxy_source && is_proxy_host(c$id$orig_h) ) )
+        return;
+    vol_track(c);
     }
 
 event ConnThreshold::bytes_threshold_crossed(c: connection, threshold: count, is_orig: bool)
