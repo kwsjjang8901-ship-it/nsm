@@ -2327,6 +2327,17 @@ def proxy_upload(cap, src, proxy, t, target, sni=None, upload=0, pport=3128, con
     return s.close(t + 0.01)
 
 
+def proxy_probe(cap, src, dst, dport, req, status, t, upload=0):
+    """HTTP 요청 한 줄과 응답(상태 지정). upload 가 있으면 같은 연결로 그만큼 더 보낸다."""
+    s = Tcp(cap, src, dst, dport)
+    t = s.handshake(t)
+    t = s.client_send(req, t)
+    t = s.server_send(("HTTP/1.1 %s\r\nContent-Length: 0\r\n\r\n" % status).encode(), t + 0.01)
+    if upload:
+        t = s.client_send(rand_bytes(300), t + 0.5, skip=upload)
+    return s.close(t + 0.01)
+
+
 def gen_exfil_proxy(out):
     """명시적 프록시(10.0.40.5:3128, 내부 대역) 경유 업로드와 클라우드 서비스 1시간 누적(12).
     .10 Dropbox 로 30MB 두 번(10분 간격): 12 탐지(합계 60MB), 10·14 미탐(연결마다·1분마다 30MB).
@@ -2334,7 +2345,8 @@ def gen_exfil_proxy(out):
     .13 Dropbox 로 20MB 두 번: 미탐(합계 40MB). .14 프록시 없이 Dropbox 로 20MB 세 번(10분 간격): 12 탐지(합계 60MB).
     .15 배운 프록시로 첫 요청 없이 60MB: 10·14 탐지(프록시 경유), 12 미탐(목적지 이름 모름).
     .16 내부 일반 서버(10.0.40.6:8080, 프록시 아님)로 60MB: 미탐.
-    프록시 자신이 외부로 60MB(Dropbox): 미탐(같은 전송을 PC 쪽에서 봄)."""
+    프록시 자신이 외부로 60MB(Dropbox): 미탐(같은 전송을 PC 쪽에서 봄).
+    프록시가 아닌 곳을 배우지 않는지: 10.0.41.x(아래 주석)."""
     mb = 1024 * 1024
     P = "10.0.40.5"
     cap = Capture()
@@ -2351,6 +2363,28 @@ def gen_exfil_proxy(out):
     proxy_upload(cap, "10.0.40.15", P, t + 150, "unknown.example", upload=60 * mb, connect=False)
     bulk_upload(cap, "10.0.40.16", "10.0.40.6", 8080, 60 * mb, t + 180)
     tls_session(cap, P, "93.184.215.71", t + 210, sni="uploads.dropboxapi.com", upload_skip=60 * mb)
+    # 프록시가 아닌 곳은 배우지 않는다(10.0.41.x)
+    #   외부 스캐너의 CONNECT(405) 를 받은 내부 웹서버 .31 이 외부로 60MB: 10·14 탐지(출발지 제외 안 됨)
+    #   내부 PC .32 -> 그 웹서버 .31:80 으로 60MB: 미탐(내부 전송)
+    #   외부 스캐너의 절대 URL GET(200) 을 받은 .33 이 외부로 60MB: 10·14 탐지
+    #   내부 PC .34 -> 내부 서버 .35:8080 CONNECT 거부(405) 뒤 같은 연결로 60MB: 미탐
+    #   내부 PC .36 한 대만 CONNECT 에 성공한 디버깅 프록시 .37:8888 이 외부로 60MB: 10·14 탐지(PC 3대 미만)
+    scan = "198.51.100.9"
+    t2 = t + 240
+    t2 = proxy_probe(cap, scan, "10.0.41.31", 80, b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+                     "405 Method Not Allowed", t2)
+    t2 = bulk_upload(cap, "10.0.41.31", "93.184.215.80", 443, 60 * mb, t2 + 70)
+    t2 = proxy_probe(cap, "10.0.41.32", "10.0.41.31", 80,
+                     b"POST /upload HTTP/1.1\r\nHost: intranet\r\nContent-Length: 62914560\r\n\r\n", "100 Continue", t2 + 70,
+                     upload=60 * mb)
+    t2 = proxy_probe(cap, scan, "10.0.41.33", 80, b"GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\n\r\n",
+                     "200 OK", t2 + 70)
+    t2 = bulk_upload(cap, "10.0.41.33", "93.184.215.81", 443, 60 * mb, t2 + 70)
+    t2 = proxy_probe(cap, "10.0.41.34", "10.0.41.35", 8080,
+                     b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n", "405 Method Not Allowed", t2 + 70,
+                     upload=60 * mb)
+    t2 = proxy_upload(cap, "10.0.41.36", "10.0.41.37", t2 + 70, "www.example.com", upload=1 * mb, pport=8888)
+    t2 = tls_session(cap, "10.0.41.37", "93.184.215.82", t2 + 70, sni="www.example.com", upload_skip=60 * mb)
     cap.tick(t + 1800)
     cap.write(os.path.join(out, "exfil_proxy.pcap"))
 
