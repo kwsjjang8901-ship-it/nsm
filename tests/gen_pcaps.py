@@ -2452,6 +2452,107 @@ def gen_proxy_learn(out):
     cap.write(os.path.join(out, "proxy_learn.pcap"))
 
 
+# --------------------------------------------------------------------------- 자산 식별: 라우팅 구간에서도 보이는 신호
+
+def smb2_krb_session_setup(realm, svc, host):
+    """SMB2 SESSION_SETUP 요청(NetBIOS 머리 포함). 보안 버퍼는 SPNEGO 안의 Kerberos AP-REQ(서비스 티켓)."""
+    from scapy.all import ASN1_BIT_STRING, ASN1_GENERAL_STRING, ASN1_STRING, raw
+    from scapy.layers.gssapi import GSSAPI_BLOB
+    from scapy.layers.kerberos import (KRB_AP_REQ, KRB_GSSAPI_Token, KRB_InnerToken, KRB_Ticket,
+                                       EncryptedData, PrincipalName)
+    from scapy.layers.spnego import SPNEGO_MechType, SPNEGO_negToken, SPNEGO_negTokenInit, SPNEGO_Token
+    ticket = KRB_Ticket(realm=ASN1_GENERAL_STRING(realm),
+                        sname=PrincipalName(nameType=2, nameString=[ASN1_GENERAL_STRING(p) for p in [svc] + host.split("/")]),
+                        encPart=EncryptedData(etype=18, kvno=3, cipher=ASN1_STRING(rand_bytes(64))))
+    # ap-options 는 실제 클라이언트처럼 32비트(mutual-required)로 넣는다(비우면 Zeek 가 해석하지 못함).
+    ap = KRB_AP_REQ(apOptions=ASN1_BIT_STRING("00100000" + "0" * 24), ticket=ticket, authenticator=EncryptedData(etype=18, cipher=ASN1_STRING(rand_bytes(48))))
+    blob = raw(GSSAPI_BLOB(innerToken=SPNEGO_negToken(token=SPNEGO_negTokenInit(
+        mechTypes=[SPNEGO_MechType(oid="1.2.840.48018.1.2.2"), SPNEGO_MechType(oid="1.2.840.113554.1.2.2")],
+        mechToken=SPNEGO_Token(value=KRB_GSSAPI_Token(innerToken=KRB_InnerToken(root=ap)))))))
+    hdr = b"\xfeSMB" + struct.pack("<HHIHHIIQIIQ16s", 64, 0, 0, 1, 1, 0, 0, 2, 0xfeff, 0, 0, b"\x00" * 16)
+    body = struct.pack("<HBBIIHHQ", 25, 0, 1, 1, 0, 64 + 24, len(blob), 0) + blob
+    msg = hdr + body
+    return b"\x00" + len(msg).to_bytes(3, "big") + msg
+
+
+def gen_asset_krb_spn(out):
+    """자산 식별 Kerberos 서비스 이름(10.0.54.x, realm AD.EXAMPLE.ORG). PC 가 서버 445 로 SMB2 SESSION_SETUP(AP-REQ):
+    .10 은 cifs/FS01.ad.example.org -> 서버 이름·도메인, .11 은 도메인 이름 자체(cifs/ad.example.org, DFS 루트) -> 기록 안 함,
+    .12 는 짧은 이름(cifs/FS03) -> 이름만, .13 은 MSSQLSvc/db01.ad.example.org:1433 -> 포트를 뗀 이름,
+    외부 93.184.216.50 은 자산 대역이 아니라 기록 안 함."""
+    cap = Capture()
+    t = T0 + 1
+    for cli, srv, svc, host in [("10.0.54.100", "10.0.54.10", "cifs", "FS01.ad.example.org"),
+                                ("10.0.54.101", "10.0.54.11", "cifs", "ad.example.org"),
+                                ("10.0.54.102", "10.0.54.12", "cifs", "FS03"),
+                                ("10.0.54.103", "10.0.54.13", "MSSQLSvc", "db01.ad.example.org:1433"),
+                                ("10.0.54.104", "93.184.216.50", "cifs", "files.example.net")]:
+        s = Tcp(cap, cli, srv, 445)
+        t = s.handshake(t + 1)
+        t = s.client_send(smb2_krb_session_setup("AD.EXAMPLE.ORG", svc, host), t)
+        t = s.close(t + 0.05)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "asset_krb_spn.pcap"))
+
+
+def http_server_reply(cap, cli, srv, dport, req, server, t):
+    s = Tcp(cap, cli, srv, dport)
+    t = s.handshake(t)
+    t = s.client_send(req, t)
+    t = s.server_send(("HTTP/1.1 200 OK\r\nServer: %s\r\nContent-Length: 2\r\n\r\nok" % server).encode(), t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_asset_http_server(out):
+    """자산 식별 HTTP Server 헤더(10.0.53.x). PC .100 이 내부 서버에 요청:
+    .10 IIS 10.0(-> windows server 2016+), .11 Apache Ubuntu(-> linux(ubuntu)), .12 WinRM 5985 HTTPAPI(-> windows),
+    .14 nginx(OS 없음, 소프트웨어만). 프록시 .5:3128 에 절대 URL 로 보낸 요청의 응답(외부 사이트 Server)은 .5 에 붙이지 않음.
+    외부 93.184.216.34 응답은 자산 대역이 아니라 기록 안 함."""
+    cap = Capture()
+    t = T0 + 1
+    get = b"GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0\r\n\r\n"
+    for srv, port, host, server in [("10.0.53.10", 80, "intranet", "Microsoft-IIS/10.0"),
+                                    ("10.0.53.11", 80, "wiki", "Apache/2.4.52 (Ubuntu)"),
+                                    ("10.0.53.12", 5985, "app01:5985", "Microsoft-HTTPAPI/2.0"),
+                                    ("10.0.53.14", 8080, "jenkins:8080", "nginx/1.24.0"),
+                                    ("93.184.216.34", 80, "www.example.com", "ECS (sec/96EC)")]:
+        t = http_server_reply(cap, "10.0.53.100", srv, port, get % host.encode(), server, t + 1)
+    t = http_server_reply(cap, "10.0.53.100", "10.0.53.5", 3128,
+                          b"GET http://www.example.com/ HTTP/1.1\r\nHost: www.example.com\r\nUser-Agent: Mozilla/5.0\r\n\r\n",
+                          "Microsoft-IIS/8.5", t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "asset_http_server.pcap"))
+
+
+def gen_dhcp_relay(out):
+    """자산 식별 DHCP 릴레이: 단말 L2 구간이 아니라 릴레이(라우터 10.0.52.1) -> DHCP 서버(10.0.51.67) 구간만 보이는 경우.
+    67/udp <-> 67/udp 로 DISCOVER/OFFER/REQUEST/ACK 가 오가고 giaddr 가 10.0.52.1. 단말(pc-relay01) 은 ACK 에서 10.0.52.20 할당."""
+    from scapy.layers.dhcp import BOOTP, DHCP
+    cap = Capture()
+    t = T0 + 1
+    relay, server, cli_ip = "10.0.52.1", "10.0.51.67", "10.0.52.20"
+    mac = bytes.fromhex("3c5282aa0052")
+    cid = b"\x01" + mac
+    prl = [1, 3, 6, 15, 31, 33, 43, 44, 46, 47, 119, 121, 249, 252]
+    xid = 0x5a5a0052
+
+    def pkt(src, dst, op, mtype, opts, yiaddr="0.0.0.0"):
+        return cap.l3(src, dst) / UDP(sport=67, dport=67) / BOOTP(
+            op=op, hops=1 if op == 1 else 0, xid=xid, yiaddr=yiaddr, giaddr=relay, chaddr=mac + b"\x00" * 10) / \
+            DHCP(options=[("message-type", mtype)] + opts + ["end"])
+
+    req_opts = [("client_id", cid), ("hostname", b"pc-relay01"), ("vendor_class_id", b"MSFT 5.0"),
+                ("param_req_list", prl)]
+    srv_opts = [("server_id", server), ("lease_time", 86400), ("subnet_mask", "255.255.255.0"),
+                ("router", relay), ("domain", b"corp.example")]
+    cap.add(pkt(relay, server, 1, "discover", req_opts), t)
+    cap.add(pkt(server, relay, 2, "offer", srv_opts, yiaddr=cli_ip), t + 0.01)
+    cap.add(pkt(relay, server, 1, "request", [("requested_addr", cli_ip), ("server_id", server)] + req_opts), t + 0.02)
+    cap.add(pkt(server, relay, 2, "ack", srv_opts, yiaddr=cli_ip), t + 0.03)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "dhcp_relay.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2466,7 +2567,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_scan_reverse, gen_ai_threats, gen_scan_rounds, gen_ad_attacks, gen_story_meta,
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
-              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn]
+              gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
+              gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay]
 
 
 def main():
