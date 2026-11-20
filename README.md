@@ -65,6 +65,7 @@ docs/
   asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (센서는 claudtest2 에서 머지)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
+  LOG_SCHEMA_REVIEW.md      # 센서 로그 형식 검토(Manager 개발 관점: 등급 숫자, 센서 식별, 상관 갱신, 근거 필드)
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
   SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
   examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만), 기본 예외 목록(exceptions.proxy-beacon.tsv)
