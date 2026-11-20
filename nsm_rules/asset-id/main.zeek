@@ -57,6 +57,12 @@ export {
 		source:     string &log;
 		## 출처 기준 신뢰도 0-100
 		confidence: count  &log;
+		## 계정 신호(user_account·machine_account)의 value 를 나눈 값.
+		##   domain\user 는 (user, domain), user@realm 은 (user, realm). 도메인이 없으면 user_name 만.
+		##   user_domain_type: 도메인에 점이 있으면 dns, 없으면 netbios. evidence.log 와 같은 규칙이다.
+		user_name:        string &log &optional;
+		user_domain:      string &log &optional;
+		user_domain_type: string &log &optional;
 	};
 
 	## 신호를 기록한다. 중복 억제와 자산 대역 필터를 거친다.
@@ -121,6 +127,40 @@ function normalize_mac(s: string): string
 	return m;
 	}
 
+# 계정 값을 사용자·도메인으로 나눠 rec 에 채운다(nsm_rules 의 NSM::split_account 와 같은 규칙).
+#   자산 식별 패키지는 단독으로도 쓰이므로 따로 둔다.
+function split_account(rec: Info)
+	{
+	local a = rec$value;
+	local user = a;
+	local domain = "";
+	local p: string_vec;
+
+	if ( /\\/ in a )
+		{
+		p = split_string1(a, /\\/);
+		domain = p[0];
+		user = p[1];
+		}
+	else if ( /@/ in a )
+		{
+		p = split_string1(a, /@/);
+		user = p[0];
+		domain = p[1];
+		}
+
+	if ( user == "" )
+		return;
+
+	rec$user_name = user;
+
+	if ( domain != "" )
+		{
+		rec$user_domain = domain;
+		rec$user_domain_type = /\./ in domain ? "dns" : "netbios";
+		}
+	}
+
 function emit(ip: addr, signal: string, value: string, source: string,
               confidence: count, uid: string &default="",
               mac: string &default=""): bool
@@ -144,6 +184,9 @@ function emit(ip: addr, signal: string, value: string, source: string,
 
 	if ( mac != "" )
 		rec$mac = mac;
+
+	if ( signal == USER_ACCOUNT || signal == MACHINE_ACCOUNT )
+		split_account(rec);
 
 	Log::write(AssetID::LOG, rec);
 	return T;

@@ -25,6 +25,13 @@
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated diagnosis=NSM.Correlation.Recon.Exfil attacker=10.0.0.240
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041'
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 5 category=Correlated
+#
+# 근거 요약: 워커-2 비콘 근거(목적지 이름·프록시)와 매니저 확산 근거(계정)가 상관 행에 모인다.
+#   근거는 쓴 노드에만 있으므로 단계마다 상관 이벤트에 실어 보낸다. 비콘 전(2단계) 상관 행에는 없다
+# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 rule=HTTP_Beaconing dst_names=update.c2-test.net relays=10.0.0.5:3128
+# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 rule=Correlated_KillChain diagnosis=NSM.Correlation.Recon.Exfil dst_names=update.c2-test.net relays=10.0.0.5:3128 accounts=corp\\admin01 victim_count=2
+# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 rule=Correlated_KillChain diagnosis=NSM.Correlation.Recon.Lateral dst_names=update.c2-test.net accounts=corp\\admin01
+# @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 rule=Correlated_KillChain diagnosis=NSM.Correlation.Recon.C2 dst_names=-
 
 @load policy/frameworks/cluster/experimental
 
@@ -49,6 +56,9 @@ event step_beacon()
 	{
 	if ( Cluster::node != "worker-2" )
 		return;
+	NSM::write_evidence([$ts=network_time(), $evidence_id="t-beacon", $note=NSM::HTTP_Beaconing,
+	                     $src=10.0.0.240, $dst=93.184.215.90,
+	                     $detail="interval=60.0s host=update.c2-test.net via_proxy=10.0.0.5:3128"]);
 	NOTICE([$note=NSM::HTTP_Beaconing, $src=10.0.0.240, $dst=93.184.215.90,
 	        $msg="test: beacon", $identifier="t-beacon", $evidence_id="t-beacon"]);
 	}
@@ -84,8 +94,12 @@ event NSM::corr_notice(cn: NSM::CorrNotice) &priority=-10
 	else if ( cn$note == NSM::DGA_Domain )
 		Cluster::publish(Cluster::worker_topic, step_beacon);
 	else if ( cn$note == NSM::HTTP_Beaconing )
+		{
+		NSM::write_evidence([$ts=network_time(), $evidence_id="t-smb", $note=NSM::SMB_Admin_Share,
+		                     $src=10.0.0.240, $dst=10.0.0.241, $account="corp\\admin01"]);
 		NOTICE([$note=NSM::SMB_Admin_Share, $src=10.0.0.240, $msg="test: smb lateral",
 		        $identifier="t-smb", $evidence_id="t-smb", $lm_targets=set(10.0.0.241, 10.0.0.242)]);
+		}
 	else if ( cn$note == NSM::SMB_Admin_Share )
 		Cluster::publish(Cluster::worker_topic, step_exfil);
 	else if ( cn$note == NSM::Exfil_Large_Transfer )

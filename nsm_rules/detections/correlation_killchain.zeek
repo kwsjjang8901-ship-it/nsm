@@ -151,6 +151,11 @@ export {
         src:         addr;
         evidence_id: string   &default="";
         targets:     set[addr] &default=addr_set();
+        ## 이 탐지 근거의 요약(nsm_detection 의 accounts·dst_names·relays). 근거를 쓴 노드에서 만들어
+        ##   함께 보내므로, 클러스터에서도 상관 행이 모든 단계의 요약을 갖는다.
+        accounts:    set[string] &default=string_set();
+        names:       set[string] &default=string_set();
+        relays:      set[string] &default=string_set();
     };
 
     ## notice 요약 전달 이벤트. 클러스터에서는 워커/매니저 모두 매니저로 보내고,
@@ -180,6 +185,9 @@ type ChainState: record {
     expire_at:  time;                     # 이 prime 의 만료(전이별 window)
     chain_id:   string;
     victims:    set[addr];                # 각 단계에서 관측된 피해 host 누적
+    accounts:   set[string];              # 각 단계 근거 요약 누적(detection 의 accounts·dst_names·relays)
+    names:      set[string];
+    relays:     set[string];
 };
 
 global primes: table[addr, Notice::Type] of ChainState &write_expire=chain_max_expire;
@@ -244,6 +252,14 @@ function stage_technique(n: Notice::Type): string
     }
 
 global kc_counter: count = 0;
+# 프로세스마다 다른 짧은 값. 재시작 직후 같은 초·같은 번호로 과거 체인 id 와 겹치지 않게 하고,
+#   클러스터에서 여러 노드가 같은 id 를 만들지 않게 한다.
+global kc_run: string = "";
+
+event zeek_init()
+    {
+    kc_run = fmt("%06x", rand(0xffffff));
+    }
 
 function chain_tids(st: ChainState): string
     {
@@ -298,11 +314,46 @@ function fresh_chain(note: Notice::Type, origin: addr, eid: string, ts: time): C
     if ( eid != "" )
         eids[|eids|] = eid;
     local vic: set[addr] = set();
-    # chain_id: 재시작 후 번호 재사용으로 과거 로그와 섞이지 않도록 시각을 포함한다.
+    local acc: set[string] = set();
+    local nam: set[string] = set();
+    local rel: set[string] = set();
+    # chain_id: kc-<시작 epoch>-<프로세스 값>-<번호>. 재시작·노드가 달라도 겹치지 않게 프로세스 값을 넣는다.
     return [$stages=vector(note), $eids=eids,
             $attacker=origin, $started_at=ts,
-            $expire_at=ts, $chain_id=fmt("kc-%d-%d", double_to_count(time_to_double(ts)), kc_counter),
-            $victims=vic];
+            $expire_at=ts, $chain_id=fmt("kc-%d-%s-%d", double_to_count(time_to_double(ts)), kc_run, kc_counter),
+            $victims=vic, $accounts=acc, $names=nam, $relays=rel];
+    }
+
+# 체인 요약 누적. 오래 이어지는 체인에서 메모리가 늘지 않도록 칸마다 chain_summary_keep 개까지.
+const chain_summary_keep = 32;
+
+function absorb_set(dst: set[string], src: set[string])
+    {
+    for ( v in src )
+        {
+        if ( |dst| >= chain_summary_keep )
+            return;
+        add dst[v];
+        }
+    }
+
+function chain_absorb(st: ChainState, cn: CorrNotice)
+    {
+    absorb_set(st$accounts, cn$accounts);
+    absorb_set(st$names, cn$names);
+    absorb_set(st$relays, cn$relays);
+    }
+
+# 정렬해 최대 NSM::evidence_summary_max 개
+function summary_vec(s: set[string]): vector of string
+    {
+    local out: vector of string = vector();
+    for ( v in s )
+        out += v;
+    sort(out, function(a: string, b: string): int { return strcmp(a, b); });
+    if ( |out| > NSM::evidence_summary_max )
+        out = out[:NSM::evidence_summary_max];
+    return out;
     }
 
 const stage_tag_map: table[Notice::Type] of string = {
@@ -402,6 +453,12 @@ function victims_vec(st: ChainState, last_host: addr): vector of string
     return out;
     }
 
+# 피해 host 전체 수(victims_vec 이 잘라도 실제 수).
+function victims_total(st: ChainState, last_host: addr): count
+    {
+    return ( last_host in st$victims ) ? |st$victims| : |st$victims| + 1;
+    }
+
 # detection 의 evidence_ids 에 실릴 값들.
 #   계약: 여기 실린 모든 id 는 evidence.log 에서 조회 가능해야 한다.
 #   -> chain 자신의 요약 근거(chain_id)도 반드시 포함한다(기존 누락 지점).
@@ -468,21 +525,31 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
     local diag = fmt("%s.%s.%s", NSM::diagnosis_map[Correlated_KillChain],
                      stage_tag(first_note), stage_tag(last_note));
 
-    NSM::write_detection([
+    local d = NSM::DetectionInfo(
         $ts               = network_time(),
         $detection_id     = st$chain_id,
         $diagnosis        = diag,
+        $rule             = "Correlated_KillChain",
         $techniques       = chain_tids_vec(st),
         $category         = "Correlated",
         $killchain_stages = chain_stage_names(st),
         $severity         = "Suspicious",
+        $severity_id      = 3,
         $first_seen       = st$started_at,
         $last_seen        = ts,
         $attacker         = st$attacker,
         $attacker_subnet  = NSM::attacker_segment(st$attacker),
         $victims          = victims_vec(st, last_host),
+        $victim_count     = victims_total(st, last_host),
         $evidence_count   = chain_evidence_count(all_eids),
-        $evidence_ids     = all_eids]);
+        $evidence_ids     = all_eids);
+    if ( |st$accounts| > 0 )
+        d$accounts = summary_vec(st$accounts);
+    if ( |st$names| > 0 )
+        d$dst_names = summary_vec(st$names);
+    if ( |st$relays| > 0 )
+        d$relays = summary_vec(st$relays);
+    NSM::write_detection(d);
     }
 
 function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr], ts: time)
@@ -537,6 +604,7 @@ function corr_process(cn: CorrNotice)
             # 이 단계에서 관측된 피해 host 누적(확산 대상 등)
             for ( dv in dsts )
                 add ext$victims[dv];
+            chain_absorb(ext, cn);
             emit_chain(ext, s, cn$ts);
             current = ext;
             matched = T;
@@ -549,6 +617,7 @@ function corr_process(cn: CorrNotice)
         current = fresh_chain(m, s, eid, cn$ts);
         for ( dv0 in dsts )
             add current$victims[dv0];
+        chain_absorb(current, cn);
         }
 
     prime_forward(m, current, s, dsts, cn$ts);
@@ -570,7 +639,17 @@ event Notice::log_notice(rec: Notice::Info)
 
     local cn = CorrNotice($ts=rec$ts, $note=rec$note, $src=rec$src);
     if ( rec?$evidence_id )
+        {
         cn$evidence_id = rec$evidence_id;
+        # 근거 요약은 근거를 쓴 이 노드에만 있으므로 여기서 실어 보낸다.
+        local ev1 = vector(rec$evidence_id);
+        for ( _i, a in NSM::evidence_accounts_of(ev1) )
+            add cn$accounts[a];
+        for ( _j, nm in NSM::evidence_names_of(ev1) )
+            add cn$names[nm];
+        for ( _k, r in NSM::evidence_relays_of(ev1) )
+            add cn$relays[r];
+        }
     if ( rec?$lm_targets )
         cn$targets = rec$lm_targets;
 
