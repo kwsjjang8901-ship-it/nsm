@@ -19,6 +19,7 @@
 @load base/protocols/conn
 @load base/utils/site
 @load ./main
+@load ./proxy_common
 @load ./evidence_log
 @load ./exceptions
 
@@ -88,22 +89,29 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
     if ( proto !in nonstd_port_standard )
         return;
     local c = info$c;
-    if ( ! nsm_outbound(c) )
-        return;
+    # 명시적 프록시 경유(CONNECT 터널 안 TLS): 프록시 포트(3128 등)가 아니라 CONNECT 대상 포트로 판정한다(proxy_aware_nonstd).
+    local pdst = "";
     local p = c$id$resp_p;
-    if ( p in nonstd_port_standard[proto] )
-        return;
-    # HTTP 프록시 터널(CONNECT) 안의 TLS 는 프록시 포트(80·8080·3128 …)에서 보이지만 비표준 포트 사용이 아니다
     if ( proto == "ssl" && c?$http && c$http?$method && c$http$method == "CONNECT" )
+        {
+        pdst = proxy_aware_nonstd && Site::is_local_addr(c$id$orig_h) ? proxy_c2_dest(c) : "";
+        if ( pdst == "" )
+            return;                        # 프록시 인식을 끄거나 목적지를 모르면 보지 않음
+        p = count_to_port(proxy_dest(c)$p, tcp);
+        }
+    else if ( ! nsm_outbound(c) )
+        return;
+    if ( p in nonstd_port_standard[proto] )
         return;
     # 예외(예외 파일 + 기존 nonstd_port_allowed_ports·_allowed_dsts·_allowlist)
     if ( NSM::exception_drop(Nonstandard_Port, c) )
         return;
 
-    local eid = cat(c$id$orig_h, "|nonstd-port|", c$id$resp_h, "|", c$uid);
+    local dkey = pdst != "" ? pdst : cat(c$id$resp_h);
+    local eid = cat(c$id$orig_h, "|nonstd-port|", dkey, "|", c$uid);
 
     # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
-    local nid = cat(c$id$orig_h, c$id$resp_h, p, proto, "nonstd-port");
+    local nid = cat(c$id$orig_h, dkey, p, proto, "nonstd-port");
     if ( NSM::notice_suppressed(Nonstandard_Port, nid) )
         return;
 
@@ -117,12 +125,12 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
             $dst=c$id$resp_h,
             $operation=fmt("%s_on_nonstandard_port", proto),
             $uid=c$uid,
-            $detail=fmt("protocol=%s port=%s", proto, p)]);
+            $detail=fmt("protocol=%s port=%s%s%s", proto, p, pdst != "" ? cat(" host=", pdst) : "", proxy_detail(c))]);
 
     NOTICE([$note=Nonstandard_Port,
             $conn=c,
             $msg=fmt("%s on non-standard port to external host: %s -> %s:%s",
-                     to_upper(proto), c$id$orig_h, c$id$resp_h, p),
+                     to_upper(proto), c$id$orig_h, dkey, p),
             $sub=fmt("protocol=%s port=%s", proto, p),
             $identifier=nid,
             $suppress_for=1hr,

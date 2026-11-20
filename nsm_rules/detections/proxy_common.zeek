@@ -46,6 +46,20 @@ export {
     ## 배운 프록시를 출발지 제외 대상으로 볼 최소 내부 PC 수(서로 다른 CONNECT 성공 클라이언트)
     const proxy_source_min_clients = 3 &redef;
 
+    ## C2·AI 계열 룰의 프록시 인식(프록시를 거친 연결도 실제 목적지 기준으로 판정).
+    ## 고객 프록시 환경 측정(2026-11, 1.4시간)에서 33·24·09 는 새 오탐이 거의 없었고, 07·30 은 흔한 OS·SaaS
+    ## 주기 통신(업데이트·원격 측정·연결 확인)이 많아 기본 끔. 켤 때는 docs/examples/exceptions.proxy-beacon.tsv 를 함께 쓴다.
+    const proxy_aware_ai = T &redef;          ##< 33 AI 업로드·서버의 AI 접속
+    const proxy_aware_nonstd = T &redef;      ##< 24 비표준 포트(CONNECT 대상 포트로 판정)
+    const proxy_aware_enc_c2 = T &redef;      ##< 09 수상한 암호화 통신(터널 안 TLS)
+    const proxy_aware_beacon = F &redef;      ##< 07·30 주기 접속
+
+    ## 프록시 경유 연결의 실제 목적지
+    type ProxyDest: record {
+        name: string &default="";             ##< 호스트 이름 또는 주소(소문자, 포트 제외)
+        p:    count  &default=0;              ##< 목적지 포트(CONNECT 대상 포트, 절대 URL 포트, 없으면 443·80)
+    };
+
     ## 이 연결이 프록시를 거친 외부 연결인가(배운 프록시 또는 proxy_servers 로 가는 TCP 연결)
     global conn_via_proxy: function(c: connection): bool;
     ## 프록시 경유 연결의 실제 목적지 호스트(CONNECT 대상·절대 URL 호스트, 포트 제외). 모르면 ""
@@ -58,6 +72,11 @@ export {
     global conn_dest_name: function(c: connection): string;
     ## 근거 detail 에 붙일 프록시 정보(" via_proxy=주소:포트", 프록시가 아니면 "")
     global proxy_detail: function(c: connection): string;
+    ## 프록시 경유 연결의 실제 목적지(이름·포트). 프록시가 아니거나 첫 요청을 못 봤으면 빈 값
+    global proxy_dest: function(c: connection): ProxyDest;
+    ## C2·AI 계열 룰이 쓸 프록시 경유 목적지 이름. 목적지를 모르거나, 프록시 자신이거나, 내부 주소면 ""
+    ##   (목적지를 모르는 연결을 프록시 하나로 묶으면 주기·누적 판정이 오탐을 낸다)
+    global proxy_c2_dest: function(c: connection): string;
     ## 프록시 터널이 확인됨(CONNECT 2xx 뒤 TLS 시작). 이 시점에 그 (주소, 포트)를 배운 뒤 발생한다.
     global proxy_tunnel_confirmed: event(c: connection);
 }
@@ -169,4 +188,39 @@ function proxy_detail(c: connection): string
     if ( ! conn_via_proxy(c) )
         return "";
     return fmt(" via_proxy=%s:%s", c$id$resp_h, port_to_count(c$id$resp_p));
+    }
+
+function proxy_dest(c: connection): ProxyDest
+    {
+    local d = ProxyDest();
+    if ( ! conn_via_proxy(c) || ! c?$http || ! c$http?$method )
+        return d;
+    d$name = proxy_target(c);
+    if ( d$name == "" )
+        return d;
+    local hp = "";
+    if ( c$http$method == "CONNECT" && c$http?$uri )
+        hp = c$http$uri;
+    else if ( c$http?$host )
+        hp = c$http$host;
+    if ( /:[0-9]+$/ in hp )
+        d$p = to_count(split_string(hp, /:/)[|split_string(hp, /:/)| - 1]);
+    else
+        d$p = c$http$method == "CONNECT" ? 443 : 80;
+    return d;
+    }
+
+function proxy_c2_dest(c: connection): string
+    {
+    local d = proxy_dest(c);
+    if ( d$name == "" )
+        return "";
+    local n = sub(sub(d$name, /^\[/, ""), /\]$/, "");
+    if ( is_valid_ip(n) )
+        {
+        local a = to_addr(n);
+        if ( a == c$id$resp_h || Site::is_local_addr(a) || a in proxy_servers )
+            return "";
+        }
+    return d$name;
     }

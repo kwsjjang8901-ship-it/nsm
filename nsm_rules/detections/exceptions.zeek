@@ -28,6 +28,7 @@
 @load base/frameworks/input
 @load base/frameworks/cluster
 @load ./main
+@load ./proxy_common
 
 module NSM;
 
@@ -285,6 +286,15 @@ function rebuild_index(report: bool)
 function ctx_of_conn(c: connection): ExceptionCtx
     {
     local x = ExceptionCtx($src=c$id$orig_h, $dst=c$id$resp_h, $dst_port=c$id$resp_p);
+    # 프록시 경유: 목적지 축은 프록시가 아니라 실제 목적지다. 실제 서버 주소는 모르므로 dst 는 비우고
+    #   (dst 를 적은 예외는 맞지 않음) 포트·도메인은 프록시가 받은 요청(CONNECT·Host)에서 가져온다.
+    local pd = proxy_dest(c);
+    if ( pd$name != "" )
+        {
+        delete x$dst;
+        x$dst_port = count_to_port(pd$p, tcp);
+        x$domain = pd$name;
+        }
     if ( |c$service| > 0 )
         {
         local sv: set[string] = set();
@@ -294,6 +304,8 @@ function ctx_of_conn(c: connection): ExceptionCtx
         }
     if ( c?$ssl && c$ssl?$server_name && c$ssl$server_name != "" )
         x$domain = c$ssl$server_name;
+    else if ( x?$domain )
+        ;
     else if ( c?$http && c$http?$host && c$http$host != "" )
         x$domain = c$http$host;
     else if ( c?$dns && c$dns?$query && c$dns$query != "" )

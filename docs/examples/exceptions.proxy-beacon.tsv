@@ -1,0 +1,13 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#fields	id	scope	src	dst	dst_port	service	domain	ja4	disposition	reason	owner	expires	ref
+EX-pb-ms-ncsi	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	msftconnecttest.com,msftncsi.com	-	-	기본 예외(프록시 주기 접속) Windows 네트워크 연결 확인(NCSI): 연결 상태를 주기적으로 확인	nsm-default	-	-
+EX-pb-ms-update	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	delivery.mp.microsoft.com,update.microsoft.com,windowsupdate.com	-	-	기본 예외(프록시 주기 접속) Windows 업데이트·전달 최적화 확인	nsm-default	-	-
+EX-pb-ms-telemetry	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	dc.services.visualstudio.com,in.applicationinsights.azure.com,events.data.microsoft.com	-	-	기본 예외(프록시 주기 접속) Microsoft 제품·Application Insights 원격 측정(주기 전송)	nsm-default	-	-
+EX-pb-ms-bing	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	www.bing.com	-	-	기본 예외(프록시 주기 접속) Windows 검색·위젯의 주기 갱신	nsm-default	-	-
+EX-pb-vscode	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	update.code.visualstudio.com,main.vscode-cdn.net	-	-	기본 예외(프록시 주기 접속) VS Code 업데이트 확인(약 5분 주기)	nsm-default	-	-
+EX-pb-google	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	android.clients.google.com,optimizationguide-pa.googleapis.com	-	-	기본 예외(프록시 주기 접속) Chrome·Google 서비스의 주기 동기화	nsm-default	-	-
+EX-pb-apple	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	weatherkit.apple.com	-	-	기본 예외(프록시 주기 접속) Apple 날씨 위젯 주기 갱신	nsm-default	-	-
+EX-pb-elastic	HTTP_Beaconing,TLS_Beaconing	-	-	-	-	telemetry.elastic.co	-	-	기본 예외(프록시 주기 접속) Elastic 제품 원격 측정	nsm-default	-	-
