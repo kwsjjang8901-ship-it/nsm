@@ -11,6 +11,10 @@
     software snmp_sysdescr:<값>      → snmp.sys_description
     software snmp_sysobjid:<OID>     → snmp.sys_object_id
     software x509_subject:/x509_issuer:<DN> → x509.subject / x509.issuer (Zeek 순서와 CN 먼저 순서 둘 다 시도)
+    software http_wwwauth:<값>       → http_header.wwwauth
+    software sip_ua:/sip_server:<값> → sip_header.user_agent / sip_header.server
+    software ftp_banner:/smtp_banner:/pop3_banner:<값> → ftp.banner / smtp.banner / pop3.banner
+    software mysql:<버전>            → mysql.banners
     dhcp_vendor_class                → dhcp_vendor_class
   Recog 정규식은 Ruby 문법이라 Python 으로 옮길 수 없는 지문은 건너뛰고 수를 센다.
 - TCP SYN 지문(tcp_fp): p0f DB 를 그대로 쓰지 않고(Zeek 값에 옵션 순서가 없음) 초기 TTL·윈도·옵션으로 OS 계열만 추정한다.
@@ -155,6 +159,12 @@ def recog_inputs(signal, value):
         return [("snmp.sys_description", v, "SNMP sysDescr")]
     if k == "snmp_sysobjid":
         return [("snmp.sys_object_id", v, "SNMP sysObjectID")]
+    simple = {"http_wwwauth": ("http_header.wwwauth", "HTTP 인증 realm"), "sip_ua": ("sip_header.user_agent", "SIP User-Agent"),
+              "sip_server": ("sip_header.server", "SIP Server"), "ftp_banner": ("ftp.banner", "FTP 접속 인사"),
+              "smtp_banner": ("smtp.banner", "SMTP 접속 인사"), "pop3_banner": ("pop3.banner", "POP3 접속 인사"),
+              "mysql": ("mysql.banners", "MySQL 버전")}
+    if k in simple:
+        return [(simple[k][0], v, simple[k][1])]
     if k in ("x509_subject", "x509_issuer"):
         key = "x509.subject" if k == "x509_subject" else "x509.issuer"
         return [(key, d, "인증서 주체" if k == "x509_subject" else "인증서 발급자") for d in _dn_variants(v)]
@@ -163,12 +173,19 @@ def recog_inputs(signal, value):
 
 def fp_summary(r):
     """Recog 결과 하나 -> 화면용 한 줄(제조사·제품·버전, 장비 종류, OS)."""
-    hw = " ".join(x for x in (r.get("hw.vendor"), r.get("hw.product") or r.get("hw.family"), r.get("hw.model")) if x)
-    sv = " ".join(x for x in (r.get("service.vendor"), r.get("service.product"), r.get("service.version")) if x)
-    os_ = " ".join(x for x in (r.get("os.vendor"), r.get("os.product") or r.get("os.family"), r.get("os.version")) if x)
+    def name(vendor, product, version):
+        # 제품명이 제조사로 시작하면 제조사는 한 번만("Postfix Postfix" -> "Postfix")
+        if vendor and product and product.lower().startswith(vendor.lower()):
+            vendor = ""
+        return " ".join(x for x in (vendor, product, version) if x)
+    hw = name(r.get("hw.vendor"), r.get("hw.product") or r.get("hw.family"), r.get("hw.model"))
+    sv = name(r.get("service.vendor"), r.get("service.product"), r.get("service.version"))
+    os_ = name(r.get("os.vendor"), r.get("os.product") or r.get("os.family"), r.get("os.version"))
     dev = r.get("hw.device") or r.get("os.device") or ""
-    parts = [x for x in (hw, sv, os_) if x]
-    s = " · ".join(dict.fromkeys(parts)) or r.get("_desc", "")
+    parts = list(dict.fromkeys(x for x in (hw, sv, os_) if x))
+    # 다른 부분에 통째로 들어 있는 부분은 뺀다("Cisco · Cisco IOS 15.2" -> "Cisco IOS 15.2")
+    parts = [x for x in parts if not any(x != y and x in y for y in parts)]
+    s = " · ".join(parts) or r.get("_desc", "")
     return f"{s} [{dev}]" if dev else s
 
 

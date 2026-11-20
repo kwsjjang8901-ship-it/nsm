@@ -16,6 +16,7 @@
 172.16.238.131	service	tcp/21	service	90
 172.16.238.131	service	tcp/22	service	90
 172.16.238.131	service	tcp/80	service	90
+172.16.238.131	software	ftp_banner:localhost.localdomain FTP server (Version 6.4/OpenBSD/Linux-ftpd-0.17) ready.	ftp	60
 172.16.238.131	software	http_server:Apache/2.2.17 (Ubuntu)	http_server	50
 172.16.238.131	software	ssh:SSH-2.0-OpenSSH_5.8p1 Debian-1ubuntu3	ssh	70
 172.16.238.131	ssh_host_key	c9:e7:26:eb:61:c3:c7:2a:e5:a9:a6:0c:ee:6e:71:5f	ssh	80
