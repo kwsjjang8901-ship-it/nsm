@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통합 공격 스토리 목업</title>
+<style>
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --line:#e1e5eb; --line2:#eef1f5; --ink:#1f2733; --ink2:#5b6676; --ink3:#8a94a3;
+  --top:#1c2230; --top2:#262e3f; --accent:#2f6fde; --accent-bg:#e9f0fd; --new:#7c3aed; --new-bg:#f1eafe;
+  --crit:#c62828; --crit-bg:#fdecec; --high:#e65100; --high-bg:#fff1e5; --med:#a67c00; --med-bg:#fff8db; --low:#2e7d32; --low-bg:#e8f5e9;
+  --ok:#2e7d32; --warn:#e65100; --bad:#c62828; --obs:#7c3aed;
+  --mta:#00897b; --mta-bg:#e0f2f1; --mds:#2f6fde; --mds-bg:#e9f0fd; --nsm:#7c3aed; --nsm-bg:#f1eafe; --xc:#b71c1c; --xc-bg:#fdecec;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.55 "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",system-ui,sans-serif}
+button{font:inherit;cursor:pointer}
+a{color:var(--accent);text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.sys{background:#11151e;color:#9aa4b5;font-size:11px;padding:3px 16px}
+.top{background:var(--top);color:#dfe5ef;display:flex;align-items:center;height:48px;padding:0 16px;gap:4px;position:sticky;top:0;z-index:20}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;color:#fff;margin-right:22px;white-space:nowrap}
+.logo i{display:inline-block;width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#3b82f6,#1d4ed8)}
+.nav{display:flex;gap:2px;overflow-x:auto}
+.nav button{background:none;border:0;color:#c3cad6;padding:0 13px;height:48px;white-space:nowrap}
+.nav button:hover{color:#fff;background:var(--top2)}
+.nav button.on{color:#fff;box-shadow:inset 0 -3px 0 #4c8dff}
+.nav .tag{display:inline-block;margin-left:5px;vertical-align:1px;font-size:10px;line-height:15px;padding:0 5px;border-radius:7px;background:var(--new);color:#fff}
+.topr{margin-left:auto;color:#c3cad6;white-space:nowrap}
+.page{padding:14px 18px 40px;max-width:1500px;margin:0 auto}
+.crumb{color:var(--ink3);font-size:12px;margin-bottom:8px}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.bar h1{font-size:17px;margin:0 8px 0 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.panel>h3{margin:0;padding:10px 14px;border-bottom:1px solid var(--line2);font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel>h3 .r{margin-left:auto;font-weight:400;color:var(--ink3);font-size:12px}
+.pbody{padding:12px 14px}
+.grid{display:grid;gap:12px}.grid>*{min-width:0}
+.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}.g21{grid-template-columns:2fr 1fr}.g5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:1100px){.g4,.g5{grid-template-columns:repeat(2,1fr)}.g2,.g21{grid-template-columns:1fr}}
+.kpi{padding:12px 14px}.kpi .k{color:var(--ink2);font-size:12px}.kpi .v{font-size:22px;font-weight:700;margin-top:2px}.kpi .d{font-size:12px;color:var(--ink3)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:4px;padding:5px 10px;color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:#b9c3d1}.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.45;cursor:default}
+.sel{border:1px solid var(--line);border-radius:4px;padding:5px 6px;background:#fff}
+.inp{border:1px solid var(--line);border-radius:4px;padding:5px 8px;background:#fff}
+.pill{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;line-height:18px;white-space:nowrap}
+.pnew{background:var(--new-bg);color:var(--new);border:1px solid #ddd0fb}
+.sev{display:inline-block;min-width:62px;text-align:center;font-size:11px;font-weight:700;border-radius:3px;padding:1px 6px}
+.sev.s5{background:var(--crit-bg);color:var(--crit)}.sev.s4{background:var(--high-bg);color:var(--high)}.sev.s3{background:var(--med-bg);color:var(--med)}.sev.s2,.sev.s1{background:var(--accent-bg);color:var(--accent)}
+.prod{display:inline-block;font-size:11px;font-weight:700;border-radius:3px;padding:0 6px;color:#fff;white-space:nowrap}
+.prod.MTA{background:var(--mta)}.prod.MDS{background:var(--mds)}.prod.NSM{background:var(--nsm)}.prod.XC{background:var(--xc)}
+.pc{display:inline-flex;gap:3px;align-items:center;margin-right:6px;white-space:nowrap}.pc b{font-size:12px}
+.note{color:var(--ink3);font-size:12px}.muted{color:var(--ink3)}
+.oktxt{color:var(--ok);font-size:12px}.warntxt{color:#8a3b00;font-size:12px}
+table.t{width:100%;border-collapse:collapse}
+.t th{background:#f7f9fb;color:var(--ink2);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:12px}
+.t td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+.t tr.click:hover td{background:#f5f8fd;cursor:pointer}.t tr.sel td{background:#eef3fd}
+.t .num{text-align:right;font-variant-numeric:tabular-nums}.nw{white-space:nowrap}.tw{overflow-x:auto}
+.sub{display:block;font-size:11px;color:var(--ink3);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.chip{display:inline-block;background:#eef1f5;border-radius:3px;padding:0 5px;font-size:11px;color:var(--ink2);margin:1px 2px 1px 0;white-space:nowrap}
+.chip.xc{background:var(--xc-bg);color:var(--xc);font-weight:700}.chip.est{background:var(--new-bg);color:var(--obs)}.chip.warn{background:var(--high-bg);color:var(--high)}.chip.ok{background:var(--low-bg);color:var(--low)}
+.seg{display:inline-flex;background:#e9edf3;border-radius:16px;padding:3px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:5px 16px;border-radius:14px;color:var(--ink2)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12);font-weight:700}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:12px 0}
+.tabs button{background:none;border:0;padding:8px 14px;color:var(--ink2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+.callout{background:#f5f8fd;border:1px solid #d9e4f7;border-radius:6px;padding:9px 12px;font-size:12.5px;color:var(--ink2)}
+.callout.warn{background:#fff8f1;border-color:#ffd9b8}
+.hidden{display:none!important}
+.stg{display:inline-flex;gap:2px;vertical-align:middle}.stg i{width:15px;height:8px;border-radius:2px;background:#e3e8ef}
+.stg i.MTA{background:var(--mta)}.stg i.MDS{background:var(--mds)}.stg i.NSM{background:var(--nsm)}
+.board{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.board>div{border:1px solid var(--line);border-radius:6px;padding:8px;min-height:74px;background:#fafbfc}
+.board>div.on{background:#f5f8fd;border-color:#c9d6ee}.board h4{margin:0 0 6px;font-size:12px}
+@media(max-width:1100px){.board{grid-template-columns:repeat(2,1fr)}}
+.nb{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;margin:1px;cursor:pointer}
+.nb.MTA{background:var(--mta)}.nb.MDS{background:var(--mds)}.nb.NSM{background:var(--nsm)}
+ol.narr{list-style:none;margin:0;padding:0}
+ol.narr li{display:grid;grid-template-columns:88px 54px minmax(0,1fr);gap:8px;padding:8px 6px;border-bottom:1px solid var(--line2);border-radius:4px}
+ol.narr li.hl{background:#fff8db}ol.narr li.xc{background:var(--xc-bg)}
+ol.narr .tm{color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums}
+ol.narr .ev{color:var(--ink3);font-size:12px;margin-top:2px}
+.svgt text{font-size:11.5px;fill:#5b6676}
+.gnode{cursor:pointer}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:12.5px}.kv dt{color:var(--ink3)}.kv dd{margin:0;word-break:break-all}
+.drawer{position:fixed;top:0;right:0;width:min(560px,100%);height:100%;background:#fff;box-shadow:-6px 0 24px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:40;display:flex;flex-direction:column}
+.drawer.on{transform:none}.drawer header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.drawer header h2{font-size:15px;margin:0}.drawer .body{padding:14px 16px;overflow:auto;flex:1}
+.shade{position:fixed;inset:0;background:rgba(15,20,30,.3);z-index:30;display:none}.shade.on{display:block}
+.modal{position:fixed;left:50%;top:6vh;transform:translateX(-50%);width:min(820px,96vw);max-height:88vh;background:#fff;border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.25);z-index:50;display:none;flex-direction:column}
+.modal.on{display:flex}.modal header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.modal header h2{font-size:15px;margin:0}.modal .body{padding:14px 16px;overflow:auto}.modal footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.mshade{position:fixed;inset:0;background:rgba(15,20,30,.35);z-index:45;display:none}.mshade.on{display:block}
+pre.yaml{background:#0f172a;color:#d6e2f5;padding:10px 12px;border-radius:6px;overflow:auto;font-size:12px;margin:0;white-space:pre;line-height:1.5}
+pre.yaml .k{color:#93c5fd}pre.yaml .x{color:#fca5a5}pre.yaml .c{color:#94a3b8}
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.flow .st{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:#fafbfc;font-size:12px}
+.flow .ar{color:var(--ink3)}
+.prog{height:6px;background:#e6ebf2;border-radius:3px;overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+.toggle{display:inline-block;width:32px;height:18px;border-radius:9px;background:#cfd6e0;position:relative;cursor:pointer;vertical-align:middle}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle.on{background:var(--accent)}.toggle.on::after{left:16px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2733;color:#fff;padding:8px 14px;border-radius:6px;font-size:12.5px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}.toast.on{opacity:1}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="sys">MDS Manager · 통합 상관·공격 스토리 목업(MDS·MTA·NSM) · 설계안 docs/INTEGRATED_CORRELATION_DESIGN.md · 화면의 데이터는 모두 예시입니다</div>
+<div class="top">
+  <div class="logo"><i></i>MDS Manager</div>
+  <nav class="nav" id="nav">
+    <button data-v="dash">대시보드</button>
+    <button data-v="events">탐지 현황</button>
+    <button data-v="xa" class="on">통합 분석 <span class="tag">신규</span></button>
+    <button data-v="resp">대응 현황</button>
+    <button data-v="admin">관리</button>
+  </nav>
+  <div class="topr">admin</div>
+</div>
+
+<div class="page">
+  <!-- 통합 분석 -->
+  <div id="v-xa">
+    <div class="crumb" id="crumb">통합 분석 › 통합 공격 스토리</div>
+    <div class="bar"><h1>통합 분석</h1>
+      <div class="seg" id="seg"><button data-t="story" class="on">통합 공격 스토리</button><button data-t="xc">통합 상관 탐지</button><button data-t="ent">엔티티 연결</button></div>
+      <span class="pill pnew">신규 메뉴</span>
+      <span class="note" style="margin-left:auto">MTA·MDS·NSM 탐지를 같은 사용자·PC·파일·외부 대상으로 묶습니다</span>
+    </div>
+    <div id="t-story"></div>
+    <div id="t-detail" class="hidden"></div>
+    <div id="t-xc" class="hidden"></div>
+    <div id="t-ent" class="hidden"></div>
+  </div>
+  <!-- 관리 › 통합 상관 룰 -->
+  <div id="v-admin" class="hidden">
+    <div class="crumb">관리 › 탐지/대응 › 통합 상관 룰</div>
+    <div id="admBody"></div>
+  </div>
+  <div id="v-other" class="hidden"><div class="panel"><div class="pbody muted" style="padding:40px;text-align:center">이 메뉴는 기존 목업(mdsm_nsm_mockup.html)과 같습니다. 이 목업은 통합 분석과 관리 › 통합 상관 룰만 다룹니다.</div></div></div>
+</div>
+
+<div class="shade" id="shade"></div>
+<aside class="drawer" id="drawer"><header><h2 id="dTitle"></h2><span id="dBadge"></span><button class="btn" style="margin-left:auto" id="dClose">닫기</button></header><div class="body" id="dBody"></div></aside>
+<div class="mshade" id="mshade"></div>
+<div class="modal" id="modal"><header><h2 id="mTitle"></h2><button class="btn" style="margin-left:auto" id="mClose">✕</button></header><div class="body" id="mBody"></div><footer id="mFoot"></footer></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const prod=p=>`<span class="prod ${p}">${p==='XC'?'통합 상관':p}</span>`;
+const SEVN={5:'Critical',4:'High',3:'Medium',2:'Low',1:'Info'};
+const sev=n=>`<span class="sev s${n}">${n} ${SEVN[n]}</span>`;
+const STAGES=['정찰','초기 침투','실행','외부 연락(C2)','계정 탈취','내부 확산','정보 유출'];
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1800)}
+
+// =============================================================== 예시 데이터
+// 엔티티: 사용자·PC·메일함(설계안 4장). conf = 연결 신뢰도, via = 어떻게 이었나
+const USERS={
+ 'corp\\jiwon.lee':{name:'이지원(인사팀)',mail:'jiwon.lee@corp.example',pc:'PC-HR-07',via:[['메일함 → 사용자','디렉터리(AD mail 속성)',90],['사용자 → PC','MDS Agent 로그인 사용자',90],['사용자 → PC','NSM Kerberos 로그온(09:02)',70]]},
+ 'corp\\minho.park':{name:'박민호(인사팀)',mail:'minho.park@corp.example',pc:'PC-HR-09',via:[['메일함 → 사용자','디렉터리(AD mail 속성)',90],['사용자 → PC','MDS Agent 로그인 사용자',90]]},
+ 'corp\\sora.kim':{name:'김소라(재무팀)',mail:'sora.kim@corp.example',pc:'PC-FN-03',via:[['메일함 → 사용자','디렉터리(AD mail 속성)',90],['사용자 → PC','NSM NTLM 로그온(10:41)',70]]},
+ 'corp\\junho.choi':{name:'최준호(재무팀)',mail:'junho.choi@corp.example',pc:'VDI-POOL-12',via:[['메일함 → 사용자','디렉터리(AD mail 속성)',90],['사용자 → PC','NSM Kerberos 로그온 · 공용 VDI(같은 시간대 사용자 3명)',40]],shared:true},
+ 'corp\\daeun.han':{name:'한다은(영업팀)',mail:'daeun.han@corp.example',pc:'PC-SL-21',via:[['메일함 → 사용자','디렉터리(AD mail 속성)',90],['사용자 → PC','MDS Agent 로그인 사용자',90]]},
+};
+const PCS={
+ 'PC-HR-07':{ip:'10.10.20.47',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','DHCP 점유 구간 08:55~',85],agent:'MDS Agent'},
+ 'PC-HR-09':{ip:'10.10.20.52',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','DHCP 점유 구간 08:41~',85],agent:'MDS Agent'},
+ 'FS-01':{ip:'10.10.10.30',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','고정 IP(서버)',95],agent:'MDS Agent'},
+ 'PC-FN-03':{ip:'10.10.30.18',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','DHCP 점유 구간 08:30~',85],agent:''},
+ 'VDI-POOL-12':{ip:'10.10.60.12',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','고정 IP(VDI)',90],agent:''},
+ 'PC-SL-21':{ip:'10.20.5.21',sensor:'NSM-SENSOR-03(지사)',ipvia:['IP → PC','DHCP 점유 구간 07:58~',85],agent:'MDS Agent'},
+ 'PC-SL-24':{ip:'10.20.5.24',sensor:'NSM-SENSOR-03(지사)',ipvia:['IP → PC','DHCP 점유 구간 08:10~',85],agent:'MDS Agent'},
+ 'APP-02':{ip:'10.10.10.42',sensor:'NSM-SENSOR-01(본사)',ipvia:['IP → PC','고정 IP(서버)',95],agent:'MDS Agent'},
+};
+// 이벤트: [id, 제품, 시각, 단계, 내용, 대상 PC, 사용자, 등급, 근거]
+const EV={
+ m1:['MTA-1118-0412','MTA','09:12','초기 침투','악성 첨부 메일 수신: 발신 billing@invoice-notice.example → jiwon.lee·minho.park, 첨부 invoice_2026.xlsm(SHA-256 4f1c…e07b), 조치 태그 후 전달','PC-HR-07','corp\\jiwon.lee',3,'메일 ID <a91f…@invoice-notice.example>, SPF 실패'],
+ d1:['MDS-1118-2207','MDS','09:18','실행','invoice_2026.xlsm 실행 → 동적 분석 악성(Trojan/Win.Macro), 매크로가 PowerShell로 추가 파일 다운로드. 판정 도착 09:31(실행보다 13분 늦음)','PC-HR-07','corp\\jiwon.lee',4,'분석 ID A-77213, 유입 경로 메일'],
+ n1:['NSM-00031','NSM','09:24','외부 연락(C2)','PC-HR-07 → cdn.sync-relay.example(203.0.113.40) 60초마다 같은 크기 HTTPS 31번(TLS 비콘)','PC-HR-07','',3,'interval=60.0s consecutive=31 sni=cdn.sync-relay.example'],
+ n2:['NSM-00037','NSM','09:52','내부 확산','PC-HR-07이 svc_backup 계정으로 FS-01·PC-HR-09 관리 공유 접근','PC-HR-07','corp\\svc_backup',3,'unique_dst=2 \\\\FS-01\\ADMIN$'],
+ d2:['MDS-1118-2215','MDS','10:05','실행','PC-HR-09에서 같은 파일(4f1c…e07b) 실행 시도 → MDS Agent가 차단','PC-HR-09','corp\\minho.park',3,'분석 ID A-77213(같은 해시)'],
+ n3:['NSM-00044','NSM','10:20','정보 유출','PC-HR-07 → files.transfer-host.example 1시간 동안 합계 120MB 업로드(프록시 10.10.0.15:3128 경유)','PC-HR-07','',3,'host=files.transfer-host.example via_proxy=10.10.0.15:3128'],
+ m2:['MTA-1118-0418','MTA','10:31','초기 침투','피싱 URL 메일: 발신 it-support@m1crosoft-auth.example → 재무팀 12명, URL https://login.m1crosoft-auth.example/reset','PC-FN-03','corp\\sora.kim',3,'수신자 12명(단체 메일 기준 20명 이하)'],
+ n4:['NSM-AUX-0071','NSM','10:44','초기 침투','PC-FN-03 → login.m1crosoft-auth.example HTTPS 접속(통신 기록, 보조 조회)','PC-FN-03','',1,'ssl.log server_name=login.m1crosoft-auth.example'],
+ n5:['NSM-AUX-0072','NSM','11:02','초기 침투','VDI-POOL-12 → login.m1crosoft-auth.example HTTPS 접속(통신 기록, 보조 조회)','VDI-POOL-12','',1,'ssl.log server_name=login.m1crosoft-auth.example'],
+ d3:['MDS-1118-2230','MDS','11:15','실행','PC-SL-21에서 quote_v2.docm 실행 → 악성(Downloader/Doc.Gen)','PC-SL-21','corp\\daeun.han',4,'분석 ID A-77240, 유입 경로 웹 다운로드'],
+ n6:['NSM-00052','NSM','11:21','외부 연락(C2)','PC-SL-21 → 198.51.100.77 자체 서명 인증서·SNI 없음(수상한 암호화 통신)','PC-SL-21','',3,'score=3 [selfsigned no_sni]'],
+ n7:['NSM-00058','NSM','12:40','내부 확산','PC-SL-21(지사) → APP-02(본사 서버) 원격 서비스 생성 PSEXESVC','PC-SL-21','corp\\svc_deploy',3,'svcctl::CreateServiceW'],
+ d4:['MDS-1118-2233','MDS','12:46','실행','PC-SL-24에서 같은 파일(quote_v2.docm) 실행 → 악성','PC-SL-24','',4,'분석 ID A-77240(같은 해시)'],
+ d5:['MDS-1118-2236','MDS','12:58','실행','APP-02에서 같은 파일(quote_v2.docm) 실행 → 악성','APP-02','',4,'분석 ID A-77240(같은 해시)'],
+};
+// 통합 상관 결과
+const XC=[
+ {id:'XC-1118-0007',rule:'C-01',title:'악성 첨부 메일 뒤 같은 PC의 C2 통신',t:'09:31',key:'host = PC-HR-07',evs:['m1','d1','n1'],sev:4,late:true,story:'XS-01',note:'MDS 판정이 09:31에 도착해 지난 창을 다시 평가해 맞음(늦은 이벤트 6시간 허용). 파일 해시도 메일 첨부와 같음'},
+ {id:'XC-1118-0009',rule:'C-02',title:'피싱 URL 메일 뒤 같은 도메인 접속',t:'10:44',key:'host = PC-FN-03, dst_name = login.m1crosoft-auth.example',evs:['m2','n4'],sev:4,story:'XS-02',note:''},
+ {id:'XC-1118-0010',rule:'C-02',title:'피싱 URL 메일 뒤 같은 도메인 접속',t:'11:02',key:'host = VDI-POOL-12(추정), dst_name = login.m1crosoft-auth.example',evs:['m2','n5'],sev:4,story:'XS-02',est:true,note:'사용자 → PC 연결 신뢰도 40(공용 VDI): 최소 신뢰도 50 미만이라 "추정"으로 표시하고 알림은 보내지 않음'},
+ {id:'XC-1118-0012',rule:'C-04',title:'다른 센서 구간으로 이어진 확산',t:'12:40',key:'host = PC-SL-21 → APP-02',evs:['n6','n7'],sev:4,story:'XS-03',note:'C2 탐지는 지사 센서(NSM-SENSOR-03), 확산 대상은 본사 서버 — 센서 한 대의 상관으로는 보이지 않음'},
+ {id:'XC-1118-0013',rule:'C-03',title:'같은 악성 파일이 여러 PC에서 실행',t:'12:58',key:'file_sha256 = 9a2e…41cd(quote_v2.docm)',evs:['d3','d4','d5'],sev:4,story:'XS-03',note:'서로 다른 PC 3대(기준 3대 이상)'},
+];
+// 통합 공격 스토리: steps = [번호, 이벤트 키]
+const STORIES=[
+ {id:'XS-01',title:'악성 첨부 메일 → 인사팀 PC 감염 → C2 → 파일 서버 확산 → 업로드',sev:4,status:'조사 중',owner:'김보안',first:'09:12',last:'10:20',
+  steps:['m1','d1','n1','n2','d2','n3'],xc:['XC-1118-0007'],
+  ent:{users:['corp\\jiwon.lee','corp\\minho.park'],pcs:['PC-HR-07','PC-HR-09','FS-01'],mails:1,files:['invoice_2026.xlsm'],ext:['cdn.sync-relay.example','files.transfer-host.example','invoice-notice.example']},
+  graph:{nodes:[['snd','외부 발신','invoice-notice.example','ext',0,1],['mb1','메일함','jiwon.lee@','mail',1,0],['mb2','메일함','minho.park@','mail',1,2],['u1','사용자','이지원','user',2,0],['u2','사용자','박민호','user',2,2],['p1','PC','PC-HR-07','pc',3,0],['p2','PC','PC-HR-09','pc',3,2],['f1','파일','invoice_2026.xlsm','file',4,1],['c2','외부 대상','cdn.sync-relay.example','ext',4,0],['fs','서버','FS-01','pc',4,3],['up','외부 대상','files.transfer-host.example','ext',4,2]],
+   edges:[['snd','mb1','1 메일','MTA'],['snd','mb2','1 메일','MTA'],['mb1','u1','AD','link'],['mb2','u2','AD','link'],['u1','p1','로그인','link'],['u2','p2','로그인','link'],['p1','f1','2 실행','MDS'],['p1','c2','3 C2','NSM'],['p1','fs','4 확산','NSM'],['p1','p2','4 확산','NSM'],['p2','f1','5 차단','MDS'],['p1','up','6 업로드','NSM']]}},
+ {id:'XS-02',title:'피싱 URL 메일 → 재무팀 2명이 가짜 로그인 사이트 접속',sev:4,status:'신규',owner:'',first:'10:31',last:'11:02',
+  steps:['m2','n4','n5'],xc:['XC-1118-0009','XC-1118-0010'],
+  ent:{users:['corp\\sora.kim','corp\\junho.choi'],pcs:['PC-FN-03','VDI-POOL-12'],mails:1,files:[],ext:['login.m1crosoft-auth.example','m1crosoft-auth.example']},
+  graph:{nodes:[['snd','외부 발신','m1crosoft-auth.example','ext',0,1],['mb1','메일함','sora.kim@ 외 11명','mail',1,1],['u1','사용자','김소라','user',2,0],['u2','사용자','최준호','user',2,2],['p1','PC','PC-FN-03','pc',3,0],['p2','PC','VDI-POOL-12','pc',3,2,true],['ph','외부 대상','login.m1crosoft-auth.example','ext',4,1]],
+   edges:[['snd','mb1','1 메일','MTA'],['mb1','u1','AD','link'],['mb1','u2','AD','link'],['u1','p1','로그온','link'],['u2','p2','로그온(추정)','est'],['p1','ph','2 접속','NSM'],['p2','ph','3 접속','NSM']]}},
+ {id:'XS-03',title:'지사 PC의 악성 문서 실행 → 수상한 암호화 통신 → 본사 서버로 확산',sev:4,status:'신규',owner:'',first:'11:15',last:'12:58',
+  steps:['d3','n6','n7','d4','d5'],xc:['XC-1118-0012','XC-1118-0013'],
+  ent:{users:['corp\\daeun.han'],pcs:['PC-SL-21','PC-SL-24','APP-02'],mails:0,files:['quote_v2.docm'],ext:['198.51.100.77']},
+  graph:{nodes:[['u1','사용자','한다은','user',0,0],['p1','PC(지사)','PC-SL-21','pc',1,0],['f1','파일','quote_v2.docm','file',2,1],['c2','외부 대상','198.51.100.77','ext',2,0],['ap','서버(본사)','APP-02','pc',2,2],['p2','PC(지사)','PC-SL-24','pc',3,1]],
+   edges:[['u1','p1','로그인','link'],['p1','f1','1 실행','MDS'],['p1','c2','2 C2','NSM'],['p1','ap','3 확산','NSM'],['p2','f1','4 실행','MDS'],['ap','f1','5 실행','MDS']]}},
+];
+const RULES=[
+ {id:'C-01',title:'악성 첨부 메일 뒤 같은 PC의 C2 통신',on:true,builtin:true,type:'temporal_ordered',steps:[['MTA','악성 첨부 메일'],['MDS','악성 판정'],['NSM','C2 계열 탐지']],by:'host',span:'24시간',sev:4,hits:[1,0,2,0,1,0,1],late:'6h',conf:50},
+ {id:'C-02',title:'피싱 URL 메일 뒤 같은 도메인 접속',on:true,builtin:true,type:'temporal_ordered',steps:[['MTA','피싱 URL 메일'],['NSM','그 도메인 접속(보조 조회)']],by:'host, dst_name',span:'4시간',sev:4,hits:[0,3,1,0,0,2,2],conf:50},
+ {id:'C-03',title:'같은 악성 파일이 여러 PC에서 실행',on:true,builtin:true,type:'value_count',steps:[['MDS','악성 판정 (서로 다른 host 3대 이상)']],by:'file_sha256',span:'24시간',sev:4,hits:[0,0,0,1,0,0,1]},
+ {id:'C-04',title:'다른 센서 구간으로 이어진 확산',on:true,builtin:true,type:'temporal_ordered',steps:[['NSM','C2 계열 탐지'],['NSM','확산 계열 탐지(다른 센서 구간의 대상)']],by:'host (피벗: 대상 → 출발지)',span:'12시간',sev:4,hits:[0,0,1,0,0,0,1],pivot:true},
+ {id:'C-05',title:'같은 사용자에게 1시간 안에 악성 메일 3통 이상',on:false,builtin:true,type:'event_count',steps:[['MTA','악성 첨부 또는 피싱 URL 메일 (3통 이상)']],by:'user',span:'1시간',sev:3,hits:[4,6,3,5,7,2,4]},
+ {id:'U-01',title:'임원 메일함 대상 발신 위조 메일 뒤 해당 PC 외부 업로드',on:true,builtin:false,type:'temporal_ordered',steps:[['MTA','발신 위조(SPF·DKIM 실패) 메일, 수신자 임원 그룹'],['NSM','유출 계열 탐지']],by:'user',span:'48시간',sev:5,hits:[0,0,0,0,0,0,0],owner:'보안팀'},
+];
+const YAML={
+ 'C-01':`<span class="k">title:</span> 악성 첨부 메일 뒤 같은 PC의 C2 통신
+<span class="k">id:</span> x_mail_exec_c2
+<span class="k">correlation:</span>
+  <span class="k">type:</span> temporal_ordered
+  <span class="k">rules:</span> [mta_malicious_attachment, mds_malicious_verdict, nsm_c2]
+  <span class="k">group-by:</span> [host]
+  <span class="k">timespan:</span> 24h
+<span class="x">x-nsm-late:</span> 6h                 <span class="c"># MDS 판정이 늦게 와도 다시 평가</span>
+<span class="x">x-nsm-min-entity-conf:</span> 50      <span class="c"># 추정 연결로는 묶지 않음</span>
+<span class="x">x-nsm-severity-id:</span> 4
+<span class="k">tags:</span> [attack.initial_access, attack.t1566.001, attack.command_and_control]`,
+ 'C-02':`<span class="k">title:</span> 피싱 URL 메일 뒤 같은 도메인 접속
+<span class="k">id:</span> x_phish_url_visit
+<span class="k">correlation:</span>
+  <span class="k">type:</span> temporal_ordered
+  <span class="k">rules:</span> [mta_phishing_url, nsm_web_access_to_mail_domain]   <span class="c"># 뒤쪽은 보조 조회 룰</span>
+  <span class="k">group-by:</span> [host, dst_name]
+  <span class="k">timespan:</span> 4h
+<span class="x">x-nsm-min-entity-conf:</span> 50`,
+ 'C-03':`<span class="k">title:</span> 같은 악성 파일이 여러 PC에서 실행
+<span class="k">id:</span> x_file_spread
+<span class="k">correlation:</span>
+  <span class="k">type:</span> value_count
+  <span class="k">rules:</span> [mds_malicious_verdict]
+  <span class="k">group-by:</span> [file_sha256]
+  <span class="k">timespan:</span> 24h
+  <span class="k">condition:</span> {field: host, gte: 3}`,
+ 'C-04':`<span class="k">title:</span> 다른 센서 구간으로 이어진 확산
+<span class="k">id:</span> x_cross_sensor_lateral
+<span class="k">correlation:</span>
+  <span class="k">type:</span> temporal_ordered
+  <span class="k">rules:</span> [nsm_c2, nsm_lateral]
+  <span class="k">group-by:</span> [host]
+  <span class="k">timespan:</span> 12h
+<span class="x">x-nsm-pivot:</span> dst_to_src           <span class="c"># 확산 대상이 다음 출발지</span>
+<span class="x">x-nsm-require-distinct:</span> sensor_id`,
+ 'C-05':`<span class="k">title:</span> 같은 사용자에게 1시간 안에 악성 메일 3통 이상
+<span class="k">id:</span> x_mail_burst
+<span class="k">correlation:</span>
+  <span class="k">type:</span> event_count
+  <span class="k">rules:</span> [mta_malicious_attachment, mta_phishing_url]
+  <span class="k">group-by:</span> [user]
+  <span class="k">timespan:</span> 1h
+  <span class="k">condition:</span> {gte: 3}`,
+ 'U-01':`<span class="k">title:</span> 임원 메일함 대상 발신 위조 메일 뒤 해당 PC 외부 업로드
+<span class="k">id:</span> u_exec_spoof_exfil
+<span class="k">correlation:</span>
+  <span class="k">type:</span> temporal_ordered
+  <span class="k">rules:</span> [mta_spoofed_to_exec_group, nsm_exfil]
+  <span class="k">group-by:</span> [user]
+  <span class="k">timespan:</span> 48h
+<span class="x">x-nsm-severity-id:</span> 5`,
+};
+
+// =============================================================== 공통 UI
+function openDrawer(t,b,body){$('#dTitle').textContent=t;$('#dBadge').innerHTML=b;$('#dBody').innerHTML=body;$('#drawer').classList.add('on');$('#shade').classList.add('on')}
+function closeDrawer(){$('#drawer').classList.remove('on');$('#shade').classList.remove('on')}
+$('#dClose').onclick=closeDrawer;$('#shade').onclick=closeDrawer;
+function openModal(t,b,f){$('#mTitle').textContent=t;$('#mBody').innerHTML=b;$('#mFoot').innerHTML=f||'<button class="btn" onclick="closeModal()">닫기</button>';$('#modal').classList.add('on');$('#mshade').classList.add('on')}
+function closeModal(){$('#modal').classList.remove('on');$('#mshade').classList.remove('on')}
+$('#mClose').onclick=closeModal;$('#mshade').onclick=closeModal;
+$('#nav').onclick=e=>{const b=e.target.closest('button');if(!b)return;$$('#nav button').forEach(x=>x.classList.toggle('on',x===b));
+  $('#v-xa').classList.toggle('hidden',b.dataset.v!=='xa');$('#v-admin').classList.toggle('hidden',b.dataset.v!=='admin');$('#v-other').classList.toggle('hidden',['xa','admin'].includes(b.dataset.v));
+  if(b.dataset.v==='admin')renderRules()};
+$('#seg').onclick=e=>{const b=e.target.closest('button');if(b)tab(b.dataset.t)};
+function tab(t){$$('#seg button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+  ['story','xc','ent'].forEach(k=>$('#t-'+k).classList.toggle('hidden',k!==t));$('#t-detail').classList.add('hidden');
+  $('#crumb').textContent='통합 분석 › '+{story:'통합 공격 스토리',xc:'통합 상관 탐지',ent:'엔티티 연결'}[t];
+  ({story:renderStories,xc:renderXC,ent:renderEnt})[t]()}
+const evProd=k=>EV[k][1];
+const prodCount=s=>{const c={MTA:0,MDS:0,NSM:0};s.steps.forEach(k=>c[evProd(k)]++);return c};
+const stageBar=s=>`<span class="stg">${STAGES.map(st=>{const p=s.steps.map(k=>EV[k]).find(e=>e[3]===st);return `<i class="${p?p[1]:''}" title="${st}${p?' · '+p[1]:''}"></i>`}).join('')}</span>`;
+const lastStage=s=>STAGES.filter(st=>s.steps.some(k=>EV[k][3]===st)).pop();
+
+// =============================================================== 통합 공격 스토리 목록
+function renderStories(){
+  const tot=STORIES.length,xcN=XC.filter(x=>!x.est).length;
+  $('#t-story').innerHTML=`<div class="grid g4" style="margin-bottom:12px">
+    <div class="panel kpi"><div class="k">진행 중인 통합 스토리</div><div class="v">${tot}</div><div class="d">세 제품 중 둘 이상이 걸린 스토리</div></div>
+    <div class="panel kpi"><div class="k">통합 상관 탐지</div><div class="v" style="color:var(--xc)">${xcN}</div><div class="d">추정 1건은 알림 없이 표시</div></div>
+    <div class="panel kpi"><div class="k">메일로 시작한 스토리</div><div class="v">${STORIES.filter(s=>evProd(s.steps[0])==='MTA').length}</div><div class="d">첫 단계가 MTA 판정</div></div>
+    <div class="panel kpi"><div class="k">센서 두 곳 이상에 걸친 스토리</div><div class="v">1</div><div class="d">센서 한 대의 상관으로는 안 보임</div></div></div>
+   <div class="panel tw"><table class="t"><tr><th>통합 공격 스토리</th><th>제품별 탐지</th><th>어디까지 왔나</th><th>사용자·PC·파일·외부</th><th>통합 상관</th><th>기간</th><th>등급</th><th>상태</th></tr>
+   ${STORIES.map(s=>{const c=prodCount(s);return `<tr class="click" data-s="${s.id}"><td><b>${esc(s.title)}</b><span class="sub">${s.id} · 탐지 ${s.steps.length}건</span></td>
+    <td class="nw">${['MTA','MDS','NSM'].filter(p=>c[p]).map(p=>`<span class="pc">${prod(p)}<b>${c[p]}</b></span>`).join('')}</td>
+    <td class="nw">${stageBar(s)}<div class="note">${lastStage(s)}까지</div></td>
+    <td class="nw">${s.ent.users.length}명 · ${s.ent.pcs.length}대 · ${s.ent.files.length}개 · ${s.ent.ext.length}곳</td>
+    <td>${s.xc.map(x=>{const r=XC.find(y=>y.id===x);return `<span class="chip ${r.est?'est':'xc'}">${r.rule}${r.est?' 추정':''}</span>`}).join('')}</td>
+    <td class="nw">11-18 ${s.first} ~ ${s.last}</td><td>${sev(s.sev)}</td><td><span class="chip ${s.status==='조사 중'?'warn':''}">${s.status}</span></td></tr>`}).join('')}</table></div>
+   <div class="leg" style="margin-top:8px"><span><i style="background:var(--mta)"></i>MTA(메일)</span><span><i style="background:var(--mds)"></i>MDS(샌드박스·에이전트)</span><span><i style="background:var(--nsm)"></i>NSM(네트워크)</span><span class="note">진행 막대의 칸 색 = 그 단계를 처음 보인 제품</span></div>`;
+  $$('#t-story tr[data-s]').forEach(tr=>tr.onclick=()=>openStory(tr.dataset.s));
+}
+
+// =============================================================== 스토리 상세
+let stTab='flow';
+function openStory(id,hl){
+  const s=STORIES.find(x=>x.id===id);$('#t-story').classList.add('hidden');$('#t-xc').classList.add('hidden');$('#t-ent').classList.add('hidden');
+  const el=$('#t-detail');el.classList.remove('hidden');$$('#seg button').forEach(x=>x.classList.toggle('on',x.dataset.t==='story'));
+  $('#crumb').innerHTML=`<a onclick="tab('story')">통합 분석 › 통합 공격 스토리</a> › ${s.id}`;
+  const c=prodCount(s),num=k=>s.steps.indexOf(k)+1;
+  const board=STAGES.map(st=>{const ks=s.steps.filter(k=>EV[k][3]===st);return `<div class="${ks.length?'on':''}"><h4>${st}</h4>${ks.map(k=>`<span class="nb ${evProd(k)}" title="${esc(EV[k][4])}" onclick="hlStep(${num(k)})">${num(k)}</span>`).join('')||'<span class="note">-</span>'}</div>`}).join('');
+  const xcs=s.xc.map(x=>XC.find(y=>y.id===x));
+  const items=[...s.steps.map(k=>({t:EV[k][2],k})),...xcs.map(x=>({t:x.t,x}))].sort((a,b)=>a.t.localeCompare(b.t)||(a.x?1:-1));
+  const narr=items.map(it=>it.k?(()=>{const e=EV[it.k];return `<li id="sn${num(it.k)}" class="${String(hl)===String(num(it.k))?'hl':''}"><span class="tm">11-18 ${e[2]}</span><span>${prod(e[1])}</span><span><b>${num(it.k)}.</b> ${esc(e[4])} <span class="chip">${e[3]}</span><div class="ev">${esc(e[8])} · <a onclick="openEv('${it.k}')">원본 이벤트 ${e[0]}</a></div></span></li>`})()
+    :`<li class="xc"><span class="tm">11-18 ${it.x.t}</span><span>${prod('XC')}</span><span><b>${esc(it.x.title)}</b> <span class="chip ${it.x.est?'est':'xc'}">${it.x.rule}${it.x.est?' 추정':''}</span><div class="ev">묶은 이벤트 ${it.x.evs.map(k=>num(k)?num(k)+'번':EV[k][0]).join(' → ')} · 묶은 키 ${esc(it.x.key)}${it.x.note?' · '+esc(it.x.note):''} · <a onclick="openXC('${it.x.id}')">상관 탐지 상세</a></div></span></li>`).join('');
+  el.innerHTML=`<div class="panel"><div class="pbody">
+    <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:18px;font-weight:700">${esc(s.title)}</div><div class="note">${s.id} · ${sev(s.sev)} · 상태 ${s.status}${s.owner?' · 담당 '+s.owner:''}</div></div>
+     <div style="margin-left:auto;display:flex;gap:6px"><button class="btn" onclick="toast('보고서(PDF)로 내보냈습니다(목업)')">보고서로 내보내기</button><button class="btn" onclick="tab('story')">목록</button></div></div>
+    <div class="grid g5" style="margin-top:12px">
+     <div class="panel kpi"><div class="k">기간</div><div class="v" style="font-size:16px">${s.first} ~ ${s.last}</div></div>
+     <div class="panel kpi"><div class="k">제품별 탐지</div><div class="v" style="font-size:16px">${['MTA','MDS','NSM'].filter(p=>c[p]).map(p=>`<span class="pc">${prod(p)}<b>${c[p]}</b></span>`).join('')}</div></div>
+     <div class="panel kpi"><div class="k">사용자·PC</div><div class="v" style="font-size:16px">${s.ent.users.length}명 · ${s.ent.pcs.length}대</div><div class="d">${s.ent.pcs.join(', ')}</div></div>
+     <div class="panel kpi"><div class="k">파일·메일</div><div class="v" style="font-size:16px">${s.ent.files.length}개 · ${s.ent.mails}통</div><div class="d">${esc(s.ent.files.join(', ')||'-')}</div></div>
+     <div class="panel kpi"><div class="k">외부 대상</div><div class="v" style="font-size:16px">${s.ent.ext.length}곳</div><div class="d">${esc(s.ent.ext.join(', '))}</div></div></div>
+   </div></div>
+   <div class="tabs" id="stTabs"><button data-t="flow" class="${stTab==='flow'?'on':''}">공격 흐름</button><button data-t="ent" class="${stTab==='ent'?'on':''}">엔티티 연결 근거</button></div>
+   <div id="stFlow" class="${stTab==='flow'?'':'hidden'}">
+    <div class="panel"><h3>어느 단계까지 왔나 <span class="r">번호 색 = 제품 · 누르면 아래 설명으로</span></h3><div class="pbody"><div class="board">${board}</div></div></div>
+    <div class="panel" style="margin-top:12px"><h3>누가, 무엇으로, 어디로 <span class="r">노드 = 메일·사용자·PC·파일·외부 대상 · 회색 점선 = 엔티티 연결(누르면 근거), 보라 점선 = 추정</span></h3><div class="pbody svgt" style="overflow-x:auto">${graph(s)}</div></div>
+    <div class="panel" style="margin-top:12px"><h3>무슨 일이 있었나 <span class="r">세 제품 이벤트와 통합 상관 탐지를 시간 순서로</span></h3><div class="pbody"><ol class="narr">${narr}</ol></div></div>
+   </div>
+   <div id="stEnt" class="${stTab==='ent'?'':'hidden'}">${entPanel(s)}</div>`;
+  $('#stTabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;stTab=b.dataset.t;$$('#stTabs button').forEach(x=>x.classList.toggle('on',x===b));$('#stFlow').classList.toggle('hidden',stTab!=='flow');$('#stEnt').classList.toggle('hidden',stTab!=='ent')};
+  $$('#t-detail .gnode').forEach(g=>g.onclick=()=>nodeInfo(s,g.dataset.n));
+  if(hl)setTimeout(()=>hlStep(hl),60);
+}
+function hlStep(n){$$('ol.narr li').forEach(li=>li.classList.remove('hl'));const li=$('#sn'+n);if(li){li.classList.add('hl');li.scrollIntoView({behavior:'smooth',block:'center'})}}
+const NCOL={mail:['#e0f2f1','#00897b'],user:['#eef1f5','#5b6676'],pc:['#eef3fd','#9db8ef'],file:['#e9f0fd','#2f6fde'],ext:['#fff1e5','#e65100']};
+const ECOL={MTA:'#00897b',MDS:'#2f6fde',NSM:'#7c3aed',link:'#9aa4b5',est:'#7c3aed'};
+function graph(s){
+  const N=s.graph.nodes,CW=245,RH=78,bw=152,bh=42;
+  const maxc=Math.max(...N.map(n=>n[4])),maxr=Math.max(...N.map(n=>n[5]));const W=(maxc+1)*CW+20,H=(maxr+1)*RH+30,pos={};
+  N.forEach(n=>pos[n[0]]={x:10+n[4]*CW,y:15+n[5]*RH,n});
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${Object.entries(ECOL).map(([k,c])=>`<marker id="a${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`).join('')}</defs>`;
+  s.graph.edges.forEach(([a,b,lab,k])=>{const p=pos[a],q=pos[b];
+   // 같은 열 = 위아래로, 왼쪽으로 가는 선 = 대상 오른쪽 변으로, 그 밖 = 오른쪽 변에서 왼쪽 변으로
+   const same=q.x===p.x,left=q.x<p.x,down=q.y>p.y;
+   const x1=same?p.x+bw/2:left?p.x:p.x+bw,y1=same?p.y+(down?bh:0):p.y+bh/2,x2=same?q.x+bw/2:left?q.x+bw:q.x,y2=same?q.y+(down?0:bh):q.y+bh/2;
+   const mx=(x1+x2)/2,my=(y1+y2)/2,c=ECOL[k],dash=k==='link'?'3 3':k==='est'?'5 4':'';const lw=lab.length*7+10;
+   svg+=`<path d="M${x1} ${y1}C${same?x1:mx} ${same?my:y1},${same?x2:mx} ${same?my:y2},${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${k==='link'||k==='est'?1.2:1.8}" ${dash?`stroke-dasharray="${dash}"`:''} marker-end="url(#a${k})"/>`;
+   if(k!=='link')svg+=`<rect x="${mx-lw/2}" y="${my-8}" width="${lw}" height="15" rx="3" fill="#fff" stroke="#e1e5eb"/><text x="${mx}" y="${my+3}" text-anchor="middle" style="fill:${c};font-weight:700">${esc(lab)}</text>`});
+  N.forEach(([id,kind,label,t,,,est])=>{const p=pos[id],[f,st]=NCOL[t];const lab=label.length>20?label.slice(0,19)+'…':label;
+   svg+=`<g class="gnode" data-n="${id}"><rect x="${p.x}" y="${p.y}" width="${bw}" height="${bh}" rx="7" fill="${f}" stroke="${est?'#7c3aed':st}" ${est?'stroke-dasharray="5 4"':''}/><text x="${p.x+bw/2}" y="${p.y+17}" text-anchor="middle" style="font-weight:700;fill:#1f2733">${esc(lab)}</text><text x="${p.x+bw/2}" y="${p.y+33}" text-anchor="middle">${esc(kind)}${est?' · 추정':''}</text></g>`});
+  return svg+'</svg>';
+}
+function nodeInfo(s,id){
+  const n=s.graph.nodes.find(x=>x[0]===id);const [,kind,label,t]=n;
+  if(t==='pc'&&PCS[label]){const p=PCS[label];openDrawer(label,`<span class="chip">${kind}</span>`,`<dl class="kv"><dt>IP</dt><dd class="mono">${p.ip}</dd><dt>센서 구간</dt><dd>${p.sensor}</dd><dt>MDS Agent</dt><dd>${p.agent||'<span class="warntxt">없음</span>'}</dd><dt>IP → PC 연결</dt><dd>${p.ipvia[1]} · 신뢰도 ${p.ipvia[2]}</dd></dl>
+    <div style="margin-top:12px;font-weight:700">이 PC의 이벤트</div><table class="t" style="margin-top:6px"><tr><th>시각</th><th>제품</th><th>내용</th></tr>${Object.keys(EV).filter(k=>EV[k][5]===label).map(k=>`<tr><td class="nw">${EV[k][2]}</td><td>${prod(EV[k][1])}</td><td>${esc(EV[k][4])}</td></tr>`).join('')}</table>`);return}
+  if(t==='user'){const uk=Object.keys(USERS).find(k=>USERS[k].name.startsWith(label));const u=USERS[uk];openDrawer(u.name,`<span class="chip">사용자</span>`,`<dl class="kv"><dt>계정</dt><dd class="mono">${esc(uk)}</dd><dt>메일</dt><dd class="mono">${u.mail}</dd><dt>PC</dt><dd>${u.pc}</dd></dl>${viaTable(u.via)}`);return}
+  openDrawer(label,`<span class="chip">${kind}</span>`,`<div class="note">${t==='file'?'파일은 SHA-256으로 제품 사이를 그대로 잇습니다(신뢰도 95).':t==='mail'?'메일함은 디렉터리의 mail 속성으로 사용자와 잇습니다.':'외부 대상은 등록 도메인·URL·외부 IP로 제품 사이를 그대로 잇습니다. 흔한 외부 대상(CDN 등)은 묶는 키에서 뺍니다.'}</div>`);
+}
+const viaTable=via=>`<table class="t" style="margin-top:10px"><tr><th>연결</th><th>근거</th><th class="num">신뢰도</th></tr>${via.map(v=>`<tr><td class="nw">${v[0]}</td><td>${esc(v[1])}</td><td class="num">${v[2]<50?`<span class="chip est">${v[2]} 추정</span>`:v[2]}</td></tr>`).join('')}</table>`;
+function entPanel(s){
+  return `<div class="callout">세 제품은 대상을 다르게 적습니다(MTA = 메일 주소, MDS = 파일·에이전트 호스트, NSM = IP). Manager가 이벤트마다 같은 사용자·PC로 바꿔 붙이고, 이 표는 그 근거입니다. 신뢰도 50 미만 연결은 "추정"으로만 묶고 통합 상관 알림에는 쓰지 않습니다.</div>
+   <div class="panel tw" style="margin-top:12px"><table class="t"><tr><th>사용자</th><th>메일함</th><th>PC</th><th>IP(그 시각)</th><th>연결 경로와 신뢰도</th></tr>
+   ${s.ent.users.map(uk=>{const u=USERS[uk],p=PCS[u.pc];return `<tr><td><b>${esc(u.name)}</b><span class="sub">${esc(uk)}</span></td><td class="mono">${u.mail}</td><td>${u.pc}${u.shared?' <span class="chip warn">공용 VDI</span>':''}</td><td class="mono">${p.ip}</td><td>${u.via.concat([p.ipvia]).map(v=>`<div class="nw">${v[0]}: ${esc(v[1])} · ${v[2]<50?`<span class="chip est">${v[2]} 추정</span>`:`<b>${v[2]}</b>`}</div>`).join('')}</td></tr>`}).join('')}</table></div>`;
+}
+function openEv(k){const e=EV[k];openDrawer(e[0],prod(e[1]),`<dl class="kv"><dt>시각</dt><dd>2026-11-18 ${e[2]}</dd><dt>제품</dt><dd>${e[1]}</dd><dt>공격 단계</dt><dd>${e[3]}</dd><dt>내용</dt><dd>${esc(e[4])}</dd><dt>PC</dt><dd>${e[5]}</dd><dt>사용자</dt><dd class="mono">${esc(e[6]||'-')}</dd><dt>등급</dt><dd>${sev(e[7])}</dd><dt>근거</dt><dd class="mono">${esc(e[8])}</dd></dl>
+  <div class="note" style="margin-top:10px">원본은 ${e[1]==='MTA'?'MTA 메일 판정':e[1]==='MDS'?'MDS 분석 결과':'NSM 탐지 상세(근거·같은 시간대 통신 기록)'} 화면에서 엽니다.</div>`)}
+function openXC(id){const x=XC.find(y=>y.id===id),r=RULES.find(y=>y.id===x.rule);
+  openDrawer(x.title,prod('XC')+' '+sev(x.sev),`<dl class="kv"><dt>탐지 ID</dt><dd class="mono">${x.id}</dd><dt>룰</dt><dd>${r.id} · ${esc(r.title)} <a onclick="goRule('${r.id}')">룰 보기</a></dd><dt>묶은 키</dt><dd class="mono">${esc(x.key)}</dd><dt>탐지 시각</dt><dd>2026-11-18 ${x.t}</dd>${x.est?'<dt>처리</dt><dd><span class="chip est">추정</span> 엔티티 연결 신뢰도가 낮아 알림 없이 표시</dd>':''}</dl>
+   <div style="margin-top:12px;font-weight:700">묶은 이벤트(순서)</div><table class="t" style="margin-top:6px"><tr><th>시각</th><th>제품</th><th>내용</th></tr>${x.evs.map(k=>`<tr class="click" onclick="openEv('${k}')"><td class="nw">${EV[k][2]}</td><td>${prod(EV[k][1])}</td><td>${esc(EV[k][4])}</td></tr>`).join('')}</table>
+   ${x.note?`<div class="callout" style="margin-top:10px">${esc(x.note)}</div>`:''}
+   <div style="margin-top:12px"><button class="btn" onclick="closeDrawer();openStory('${x.story}')">통합 스토리 보기</button> <button class="btn" onclick="toast('예외 만들기(목업): scope = ${x.rule}, 축 = host')">오탐으로 처리(예외 만들기)</button></div>`)}
+
+// =============================================================== 통합 상관 탐지 목록
+function renderXC(){
+  $('#t-xc').innerHTML=`<div class="callout" style="margin-bottom:12px">여러 제품·여러 센서를 잇는 상관 룰(관리 › 통합 상관 룰)이 맞으면 나오는 탐지입니다. NSM 센서의 킬체인 상관(Correlated_KillChain)과 겹치면 같은 사건으로 묶어 알림은 한 번만 보냅니다.</div>
+   <div class="panel tw"><table class="t"><tr><th>탐지 ID</th><th>룰</th><th>탐지명</th><th>묶은 키</th><th>묶은 이벤트</th><th>등급</th><th>처리</th><th>스토리</th><th>시각</th></tr>
+   ${XC.map(x=>`<tr class="click" data-x="${x.id}"><td class="mono nw">${x.id}</td><td><span class="chip ${x.est?'est':'xc'}">${x.rule}</span></td><td>${esc(x.title)}${x.late?' <span class="chip">늦은 판정으로 다시 평가</span>':''}</td><td class="mono">${esc(x.key)}</td><td class="nw">${x.evs.map(k=>prod(EV[k][1])).join(' → ')}</td><td>${sev(x.sev)}</td><td>${x.est?'<span class="chip est">추정 · 알림 없음</span>':'<span class="chip">알림</span>'}</td><td><a onclick="event.stopPropagation();openStory('${x.story}')">${x.story}</a></td><td class="nw">11-18 ${x.t}</td></tr>`).join('')}</table></div>`;
+  $$('#t-xc tr[data-x]').forEach(tr=>tr.onclick=()=>openXC(tr.dataset.x));
+}
+
+// =============================================================== 엔티티 연결
+function renderEnt(){
+  $('#t-ent').innerHTML=`<div class="callout" style="margin-bottom:12px">메일 주소 ↔ 계정 ↔ PC ↔ IP 연결 현황입니다. 연결은 이벤트가 들어올 때 계산하고 경로를 남깁니다. 공용 PC·VDI, NAT·프록시, DHCP 재할당은 신뢰도를 낮추거나 연결에서 뺍니다.</div>
+   <div class="grid g4" style="margin-bottom:12px">
+    <div class="panel kpi"><div class="k">메일함 → 사용자</div><div class="v">${Object.keys(USERS).length} / ${Object.keys(USERS).length}</div><div class="d">디렉터리(AD) 연동</div></div>
+    <div class="panel kpi"><div class="k">사용자 → PC</div><div class="v">4 <span style="font-size:13px;color:var(--obs)">+1 추정</span></div><div class="d">MDS Agent 로그인, NSM 로그온</div></div>
+    <div class="panel kpi"><div class="k">IP → PC</div><div class="v">${Object.keys(PCS).length}</div><div class="d">자산 판정의 IP 점유 구간</div></div>
+    <div class="panel kpi"><div class="k">연결에서 뺀 주소</div><div class="v">2</div><div class="d">프록시 10.10.0.15, NAT 게이트웨이 10.20.0.1</div></div></div>
+   <div class="panel tw"><table class="t"><tr><th>사용자</th><th>메일함</th><th>PC</th><th>IP</th><th>센서 구간</th><th>연결 경로</th><th class="num">가장 낮은 신뢰도</th></tr>
+   ${Object.entries(USERS).map(([uk,u])=>{const p=PCS[u.pc],m=Math.min(...u.via.map(v=>v[2]),p.ipvia[2]);return `<tr><td><b>${esc(u.name)}</b><span class="sub">${esc(uk)}</span></td><td class="mono">${u.mail}</td><td>${u.pc}${u.shared?' <span class="chip warn">공용 VDI</span>':''}</td><td class="mono">${p.ip}</td><td class="nw">${p.sensor}</td><td>${u.via.concat([p.ipvia]).map(v=>`<div class="nw note">${v[0]}: ${esc(v[1])}</div>`).join('')}</td><td class="num">${m<50?`<span class="chip est">${m} 추정</span>`:m}</td></tr>`}).join('')}</table></div>`;
+}
+
+// =============================================================== 관리 › 통합 상관 룰
+let selRule='C-01';
+function renderRules(){
+  const r=RULES.find(x=>x.id===selRule);
+  $('#admBody').innerHTML=`<div class="callout">여러 제품·여러 센서를 잇는 상관 룰입니다. 형식은 <b>Sigma 상관 룰</b>(temporal_ordered·temporal·event_count·value_count)이고, Sigma에 없는 피벗·늦은 판정 다시 평가·최소 연결 신뢰도·등급은 <span class="mono">x-nsm-*</span> 확장 키로 적습니다. 새 룰과 수정은 지난 이벤트로 <b>사전 검증</b>한 뒤 적용합니다.</div>
+   <div class="bar" style="margin-top:12px"><button class="btn pri" onclick="toast('Sigma 룰 추가(목업): 편집기 열림')">룰 추가</button><button class="btn" onclick="toast('Sigma YAML 파일 가져오기(목업)')">YAML 가져오기</button><span class="note" style="margin-left:auto">기본 제공 ${RULES.filter(x=>x.builtin).length}개 · 고객 정의 ${RULES.filter(x=>!x.builtin).length}개</span></div>
+   <div class="grid g21">
+    <div class="panel tw"><table class="t"><tr><th>사용</th><th>룰</th><th>유형</th><th>묶는 키</th><th>창</th><th>등급</th><th>최근 7일</th></tr>
+     ${RULES.map(x=>`<tr class="click ${x.id===selRule?'sel':''}" data-r="${x.id}"><td><span class="toggle ${x.on?'on':''}" data-tg="${x.id}"></span></td><td><b>${x.id}</b> ${esc(x.title)}<span class="sub">${x.builtin?'기본 제공':'고객 정의 · '+x.owner}</span></td><td class="mono">${x.type}</td><td class="mono">${esc(x.by)}</td><td class="nw">${x.span}</td><td>${sev(x.sev)}</td><td class="nw">${spark(x.hits)} ${x.hits.reduce((a,b)=>a+b,0)}건</td></tr>`).join('')}</table></div>
+    <div class="panel"><h3>${r.id} · ${esc(r.title)} <span class="r">${r.builtin?'기본 제공':'고객 정의'}</span></h3><div class="pbody">
+      <div class="flow">${r.steps.map((st,i)=>`${i?'<span class="ar">→</span>':''}<span class="st">${prod(st[0])} ${esc(st[1])}</span>`).join('')}</div>
+      <div class="note" style="margin:8px 0">같은 <b>${esc(r.by)}</b> · ${r.span} 안${r.type==='temporal_ordered'?' · 순서대로':''}${r.late?` · 늦은 판정 ${r.late} 다시 평가`:''}${r.conf?` · 연결 신뢰도 ${r.conf} 이상`:''}${r.pivot?' · 피벗(대상 → 다음 출발지)':''}</div>
+      <pre class="yaml">${YAML[r.id]}</pre>
+      <div class="bar" style="margin-top:10px"><button class="btn pri" id="bt">사전 검증(지난 14일)</button><button class="btn" onclick="toast('편집기(목업): 저장하면 사전 검증 후 적용')">수정</button><button class="btn" onclick="toast('예외(목업): scope = ${r.id}')">예외</button></div>
+    </div></div></div>`;
+  $$('#admBody tr[data-r]').forEach(tr=>tr.onclick=e=>{if(e.target.dataset.tg){const x=RULES.find(y=>y.id===e.target.dataset.tg);x.on=!x.on;toast(`${x.id} ${x.on?'사용':'사용 안 함'}(배포 전)`);renderRules();return}selRule=tr.dataset.r;renderRules()});
+  $('#bt').onclick=()=>backtest(r);
+}
+function spark(a){const m=Math.max(1,...a);return `<svg width="56" height="16" style="vertical-align:middle">${a.map((v,i)=>`<rect x="${i*8}" y="${16-Math.max(v?2:0,14*v/m)}" width="6" height="${Math.max(v?2:0,14*v/m)}" fill="#b71c1c" opacity=".7"/>`).join('')}</svg>`}
+function backtest(r){
+  openModal(`사전 검증 · ${r.id} ${r.title}`,`<div class="note">저장된 이벤트(ClickHouse)를 지난 14일 시간순으로 다시 흘려, 이 룰이 맞았을 건수와 예시를 봅니다. 결과를 보고 적용 여부를 정합니다.</div>
+   <div class="prog" style="margin:12px 0"><i id="bp"></i></div><div id="bout" class="note">이벤트 다시 흘리는 중…</div>`,'<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" id="bapply" disabled>적용</button>');
+  let w=0;const tk=setInterval(()=>{w+=20;$('#bp').style.width=w+'%';if(w>=100){clearInterval(tk);
+   const n=r.hits.reduce((a,b)=>a+b,0)*2+(r.id==='C-05'?9:0);
+   $('#bout').innerHTML=`<div class="grid g4" style="margin-top:4px"><div class="panel kpi"><div class="k">읽은 이벤트</div><div class="v">48,212</div><div class="d">MTA 31,904 · MDS 2,113 · NSM 14,195</div></div><div class="panel kpi"><div class="k">맞은 건수</div><div class="v">${n}</div><div class="d">하루 평균 ${(n/14).toFixed(1)}건</div></div><div class="panel kpi"><div class="k">추정 연결로만 맞음</div><div class="v">${r.conf?Math.round(n/5):0}</div><div class="d">신뢰도 50 미만(알림 없음)</div></div><div class="panel kpi"><div class="k">이미 다른 사건에 포함</div><div class="v">${Math.round(n/3)}</div><div class="d">NSM 상관과 같은 사건</div></div></div>
+    ${r.id==='C-05'?'<div class="callout warn" style="margin-top:10px">하루 평균이 높습니다. 대부분 스팸 차단 메일입니다. 조치가 "차단"인 메일은 빼는 조건을 기본 룰에 넣는 것을 권합니다.</div>':'<div class="oktxt" style="margin-top:10px">✔ 하루 평균이 적어 알림 피로 위험이 낮습니다.</div>'}
+    <table class="t" style="margin-top:10px"><tr><th>예시</th><th>묶은 키</th><th>이벤트</th></tr><tr><td class="nw">11-12 14:03</td><td class="mono">${esc(r.by.split(',')[0])} = PC-HR-02</td><td>${r.steps.map(s=>prod(s[0])).join(' → ')}</td></tr><tr><td class="nw">11-15 10:41</td><td class="mono">${esc(r.by.split(',')[0])} = PC-FN-11</td><td>${r.steps.map(s=>prod(s[0])).join(' → ')}</td></tr></table>`;
+   $('#bapply').disabled=false;$('#bapply').onclick=()=>{closeModal();toast(`${r.id} 적용했습니다(목업)`)}}},250);
+}
+function goRule(id){closeDrawer();selRule=id;$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.v==='admin'));$('#v-xa').classList.add('hidden');$('#v-other').classList.add('hidden');$('#v-admin').classList.remove('hidden');renderRules()}
+
+// =============================================================== 시작
+renderStories();
+</script>
+</body>
+</html>
