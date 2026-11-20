@@ -53,6 +53,7 @@ tests/
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
 ui/
   mockup/mdsm_nsm_mockup.html  # MDS Manager NSM 화면 목업(예시 데이터). 목업형 리포트의 템플릿(ui/README.md)
+  mockup/integrated_story_mockup.html  # 통합 공격 스토리·통합 상관 룰 목업(MDS·MTA·NSM, 예시 데이터)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종)
@@ -68,6 +69,7 @@ docs/
   LOG_SCHEMA_REVIEW.md      # 센서 로그 형식 검토(Manager 개발 관점: 등급 숫자, 센서 식별, 상관 갱신, 근거 필드)
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
   SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
+  INTEGRATED_CORRELATION_DESIGN.md # MDS·MTA·NSM 통합 공격 스토리와 Sigma 상관 룰 기반 통합 상관 설계안
   examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만), 기본 예외 목록(exceptions.proxy-beacon.tsv)
 ```
 

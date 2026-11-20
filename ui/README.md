@@ -11,6 +11,10 @@
 | 대응 현황 | 공격 스토리별 조치 현황 |
 | 관리 | 장비 목록·그룹, NSM 룰 정책(사용·위험도·기준·배포), NSM 예외(프록시 경유 기본 예외 목록 포함), 에이전트 정책, NSM 탐지 엔진 업데이트 |
 
+## 통합 상관 목업
+
+`mockup/integrated_story_mockup.html`은 MDS·MTA·NSM 탐지를 묶는 통합 공격 스토리와 통합 상관 룰(Sigma 상관 룰 형식) 화면 목업입니다. 설계는 [`docs/INTEGRATED_CORRELATION_DESIGN.md`](../docs/INTEGRATED_CORRELATION_DESIGN.md)에 있습니다. 이 목업은 통합 분석(통합 공격 스토리·통합 상관 탐지·엔티티 연결)과 관리 › 통합 상관 룰(사전 검증 포함)만 다루고, 나머지 메뉴는 `mdsm_nsm_mockup.html`과 같다고 봅니다. 리포트 템플릿으로는 쓰지 않습니다.
+
 ## PoC 리포트로 쓰기 (목업형 리포트)
 
 `tests/run_pcap.sh`(또는 `tests/report_pcap.py`)는 기존 통합 리포트(`<pcap 이름>_report.html`)와 함께 **같은 데이터를 이 목업 화면으로 그린 리포트**(`<pcap 이름>_report_mockup.html`)를 만듭니다. 목업 파일을 그대로 템플릿으로 쓰므로, 목업 화면을 고치면 다음에 만드는 리포트도 같이 바뀝니다.
