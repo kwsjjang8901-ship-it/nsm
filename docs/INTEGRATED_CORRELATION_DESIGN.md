@@ -91,6 +91,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | IP | 주소 + 시각 | → PC: 위 점유 구간 역조회 | NAT·프록시·VPN 뒤면 낮음 |
 | 파일 | SHA-256 | 제품 사이 그대로 일치 | 높음(95) |
 | 외부 대상 | 등록 도메인·URL·외부 IP | 제품 사이 그대로 일치(도메인은 등록 도메인으로도) | 도메인 90, IP 70(공유 호스팅·CDN) |
+| 연결 | `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)` | MDS 네트워크 장비가 본 연결(파일 다운로드 등) ↔ NSM 근거. **MDS에는 Community ID가 없어** 주소·포트·시각으로 맞춤(NSM 근거에 `src_port`·`dst_port` 필드 필요, [로그 형식 검토](LOG_SCHEMA_REVIEW.md) N5). Community ID는 Suricata 경보 ↔ Zeek 연결 조인에만 씀 | 같은 시각 창 안 유일하면 80, 프록시·NAT 뒤면 쓰지 않음 |
 
 연결은 이벤트를 받을 때 한 번 계산해 `host`·`user`·`entity_conf`로 붙이고, 연결 경로(`via: mailbox→user→host`)를 남겨 화면에서 보여 줍니다.
 
