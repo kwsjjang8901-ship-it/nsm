@@ -3,6 +3,7 @@
 - 검토일: 2026-11-20 · 기준: main `0fed325`(PR #120까지)
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
+- 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -190,3 +191,63 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | Q2 | 상관 갱신 방식 | 갈래를 합친 전체 + `revision` |
 | Q3 | `severity_id` 척도 | OCSF(1\~5), 단독 1·상관 3 |
 | Q4 | 선별 전송 필드 이름을 센서에서 바꿀지 | 바꿈(`orig_h` 계열) |
+
+---
+
+## 6. 통합 상관 관점에서 다시 본 결과 (2026-11-20 추가)
+
+[통합 상관·공격 스토리 설계안](INTEGRATED_CORRELATION_DESIGN.md)은 Manager가 MDS·MTA·NSM 탐지를 공통 이벤트 모델로 바꾸고, 같은 사용자·PC·파일·외부 대상으로 묶습니다. 이 관점에서 다시 보면 **1\~5장의 방향은 그대로**이고, 바뀌는 것은 두 가지입니다.
+
+1. 근거(evidence)에만 있던 값 일부가 **탐지 요약(nsm_detection) 단위**로 필요해집니다. 통합 상관의 입력은 탐지 이벤트이고, 근거 행을 일일이 읽지 않습니다.
+2. 제품 사이를 잇는 키(계정, 프록시 여부, 연결 식별자)의 **표기를 맞추는 일**이 새로 생깁니다.
+
+### 6.1 그대로인 것
+
+| 항목 | 이유 |
+| --- | --- |
+| JSON·epoch·배열(1장) | 공통 이벤트 모델로 바꾸는 쪽(Manager)에서 그대로 읽음 |
+| 센서는 Zeek JSON 그대로, OCSF 변환은 Manager | 제품마다 원래 형식이 달라 변환은 어차피 Manager가 함. 센서가 OCSF를 직접 내면 필드가 늘고 근거 원문이 줄어듦 |
+| `sensor_id`는 수집 에이전트가 붙임(D2) | 공통 모델의 `event_uid = 제품:센서:id`도 에이전트 값으로 충분 |
+| 선별 전송 필드 이름 통일(M1), 예외 로그(X1) | 우선순위 그대로 |
+
+### 6.2 우선순위가 올라가는 것
+
+| # | 항목 | 이유(통합 상관에서) | 바뀐 우선 |
+| --- | --- | --- | --- |
+| D2 | `sensor_id` | 상관 룰 C-04(다른 센서 구간으로 이어진 확산)가 `sensor_id`로 구분. 이벤트 고유 id의 일부 | P1 그대로, **가장 먼저** |
+| D3 | 상관 갱신 `revision`, 갈래 합치기 | Manager가 NSM 상관 결과를 통합 사건에 넣을 때 "이 행이 앞 행을 대신하는가"를 알아야 함 | P1 그대로, 통합 사건 묶기의 전제 |
+| D5 | `detection_id` 재시작 충돌 | 공통 모델의 `event_uid`가 겹치면 다른 제품 이벤트와 잘못 이어짐 | P2 → **P1** |
+| S1 | 센서 상태 로그 | 늦은 이벤트 판단에 센서 지연(`wall_time - network_time`)이 필요. 버전으로 해석 규칙 선택 | P2 그대로, 지연 값 추가(6.3 N6) |
+
+### 6.3 새로 필요한 것
+
+| # | 항목 | 지금 | 제안 | 우선 |
+| --- | --- | --- | --- | --- |
+| N1 | **탐지 단위 계정** | 계정은 근거 행의 `account`에만 있음 | `nsm_detection`에 `accounts`(배열, 최대 5) 추가. 근거·인증 맥락에서 모음. 사용자로 묶는 상관(메일 수신자 → 사용자)에 씀 | P1 |
+| N2 | **계정 표기 통일** | 같은 사람이 세 가지로 나옴: Kerberos 자산 신호 `realm\이름`, NTLM `도메인\이름`(NetBIOS), 근거 `이름@realm`(UPN) | 원문은 두고 `user_name`(소문자 이름)·`user_domain`(원래 표기)·`user_domain_type`(`netbios`·`dns`)으로 나눠 씀. NetBIOS ↔ DNS 도메인 대응은 Manager가 디렉터리로(센서는 관측한 도메인 쌍을 자산 신호 `domain`으로 이미 남김) | P1 |
+| N3 | **탐지 단위 목적지 이름** | 근거 `detail`의 `host=`·`sni=`(E1에서 근거 필드로 제안) | E1에 더해 `nsm_detection`에도 `dst_names`(배열). 피싱 URL 메일 → 같은 도메인 접속(C-02)처럼 도메인으로 묶는 상관에 씀 | P1 |
+| N4 | **중계 장비 표시** | 프록시 경유 탐지의 `victims`에 프록시 IP가 들어가고, 프록시라는 표시는 근거 `detail`의 `via_proxy=`에만 있음 | `nsm_detection`에 `relays`(배열: 프록시 `주소:포트`). Manager는 `victims`에서 이 주소를 엔티티로 쓰지 않음(모든 PC가 한 스토리로 묶이는 것을 막음). 센서가 배운 프록시는 자산 신호 `device=proxy`로도 남김 | P1 |
+| N5 | **연결 식별자 `community_id`** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미) | 근거에 `community_id` 추가(Zeek 내장 Community ID). 같은 연결을 보는 다른 장비(MDS 네트워크 장비, Suricata, 방화벽)와 연결 단위로 바로 조인 | P2 |
+| N6 | **센서 지연** | 없음 | S1 상태 로그에 `capture_lag_s`(벽시계 - 패킷 시각). Manager가 "아직 안 온 이벤트"를 기다릴 시간을 정함 | P2 |
+| N7 | **상관 행의 구성 탐지 id** | 상관 행의 `evidence_ids`가 구성 단독 탐지의 id와 같다는 것이 코드상 규칙일 뿐 문서·필드에 없음 | `member_detection_ids` 필드 추가(또는 SRS에 규칙 명시). 통합 사건이 "이 NSM 상관은 이 단독 탐지들을 포함"을 알게 함 | P2 |
+| N8 | **ATT&CK 전술 id** | 단계는 `killchain_stages` 이름(`Command and Control`) | `tactics`(예: `TA0011`) 추가. 제품마다 단계 이름이 달라도 전술 id로 맞춤 | P3 |
+| N9 | **파일 해시(평문 전송)** | 선별 전송에 HTTP·SMB로 받은 파일의 해시가 없음 | 평문 HTTP·SMB로 받은 실행·문서 파일만 `files_summary`(SHA-256, 받은 PC, 출처)로. HTTPS가 대부분이라 효과가 제한적이므로 MDS 연동 범위를 보고 결정 | P3 |
+
+### 6.4 바뀐 작업 순서
+
+| 순서 | 작업 |
+| --- | --- |
+| 1 | D1(`severity_id`)·D4(`rule`)·D5(id 충돌·`victim_count`)·N1(`accounts`)·N3(`dst_names`)·N4(`relays`): 탐지 요약에 필드 추가(하위 호환) |
+| 2 | N2: 계정 표기 나누기(근거·자산 신호) |
+| 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 |
+| 4 | E1·E2: 근거 공통 필드, N5 `community_id` |
+| 5 | M1·S1(+N6)·G1, X1 |
+| - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 |
+
+### 6.5 결정 필요 (추가)
+
+| # | 질문 | 제안 |
+| --- | --- | --- |
+| Q5 | 계정을 센서에서 나눠 쓸지(N2), Manager에서 원문을 파싱할지 | 센서에서 나눔. 표기 규칙은 프로토콜을 아는 쪽이 정확함 |
+| Q6 | `community_id`를 넣을지(N5) | MDS 네트워크 장비가 Community ID를 남기면 넣음. 아니면 Suricata 연동 때 함께 |
+
