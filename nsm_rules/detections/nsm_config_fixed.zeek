@@ -326,7 +326,7 @@ redef NSM::webupload_epoch               = 1hr;             # 누적 창
 # redef NSM::cloud_hosts                  += /(?i:.*mega\.nz)/;
 
 # =============================================================================
-# [10·12·14 공용] 명시적 프록시 인식 (proxy_common.zeek)
+# [10·12·14, 07·09·24·30·33 공용] 명시적 프록시 인식 (proxy_common.zeek)
 #   PC -> 프록시 연결의 CONNECT(·절대 URL) 로 실제 목적지를 알아내 유출 룰에 적용한다.
 #   내부 PC 의 CONNECT 에 2xx 로 답하고 이어서 TLS 가 시작된 (주소, 포트)는 자동으로 배운다. 아는 프록시가 있으면 nsm_config_custom.zeek 에 기록.
 # =============================================================================
@@ -335,6 +335,10 @@ redef NSM::webupload_epoch               = 1hr;             # 누적 창
 # redef NSM::proxy_learn_expire            = 24hr;
 # redef NSM::exfil_skip_proxy_source       = T;                # 프록시 -> 인터넷 구간은 유출 탐지에서 뺌
 # redef NSM::proxy_source_min_clients      = 3;                # 배운 프록시는 PC 이 수 이상이 쓸 때만 출발지 제외
+# redef NSM::proxy_aware_ai                = T;                # [33] 프록시 경유도 실제 목적지로 AI 업로드·서버 AI 접속 판정
+# redef NSM::proxy_aware_nonstd            = T;                # [24] 터널 안 프로토콜을 CONNECT 대상 포트로 판정
+# redef NSM::proxy_aware_enc_c2            = T;                # [09] 터널 안 TLS 를 실제 목적지 기준으로 판정
+# redef NSM::proxy_aware_beacon            = F;                # [07·30] 켜면 docs/examples/exceptions.proxy-beacon.tsv 를 예외 파일에 더함
 
 # =============================================================================
 # [14] Exfil_Volume_Aggregate  (T1041 · Exfil)
