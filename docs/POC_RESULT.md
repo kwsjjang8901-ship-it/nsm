@@ -417,6 +417,7 @@ Manager는 `nsm_detection.log`로 알림을 올리고, `evidence_id`로 `evidenc
 | `attacker`, `attacker_subnet`, `victims` | 공격 host와 대역, 피해 host 배열(최대 8개) |
 | `evidence_count`, `evidence_ids` | 근거 행 수와 키 배열 |
 | `incident_id`, `occurrence` | 같은 사건 묶기. 15분 안에 다시 나온 같은 탐지는 같은 사건, `occurrence` = 1일 때만 새 알림 |
+| `revision`, `member_detection_ids` | 상관 탐지만: 체인 갱신 번호와 구성 단독 탐지 id. 행마다 갈래를 합친 체인 전체라 같은 id는 `revision`이 가장 큰 행만 쓰면 됨 |
 | `disposition`, `exception_id` | `suppress` 예외에 맞은 탐지만. Manager는 알림을 올리지 않음 |
 
 ```json

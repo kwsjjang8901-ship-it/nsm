@@ -116,7 +116,7 @@
 | 룰별 테스트 | 각 룰의 탐지 host와 미탐 host(정상 유사 트래픽, 임계 미만, 예외 설정, 방향 다름). 목록은 부록 A |
 | `killchain-7-stages` | 공격자가 웹서버를 스캔·SQL 인젝션·웹쉘로 침투하고, 침해된 웹서버가 C2 비콘·Kerberoasting·SMB 확산을 하고, 확산 대상이 유출·랜섬웨어까지 가는 시나리오가 한 체인으로 7단계까지 이어짐 |
 | `correlation-ext-chain` | 실제 룰로 8단계 체인: 포트 스캔 → DGA → HTTP 비커닝 → Kerberoasting → DCSync → WinRM 확산 → 피해 host 유출 → 피해 host 랜섬웨어. 한 단계만 한 host는 상관 없음 |
-| `correlation-full-chain` | 5단계 체인이 피해 host 2대 × 유출 룰 2개로 4갈래. 순서 반대·시간 창 초과·확산 없는 유출은 상관 없음 |
+| `correlation-full-chain` | 5단계 체인이 피해 host 2대 × 유출 룰 2개로 4갈래. 탐지 요약은 갈래를 합친 한 체인(`revision` 1\~7). 순서 반대·시간 창 초과·확산 없는 유출은 상관 없음 |
 | `cluster/correlation-full-chain`, `correlation-cross-node` | 워커·매니저에 나뉜 탐지가 노드를 넘어 하나의 체인으로 |
 | `detection-incident` | 16분 이어진 무차별 대입은 5분 창마다 탐지가 나와도 같은 사건(`occurrence` 1·2·3), 40분 쉰 뒤 공격은 새 사건 |
 | `exception-engine`, `exception-migrated-*`, `cluster/exception-distribution` | 예외 파일 drop·suppress·검증·만료·적중 수, 집계형 쌍 예외, 기존 설정 호환, 다시 읽기, 클러스터 배포 |

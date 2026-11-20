@@ -179,6 +179,7 @@ export {
 
 type ChainState: record {
     stages:     vector of Notice::Type;   # 밟아온 단계(순서)
+    stage_ts:   vector of time;           # 각 단계 탐지 시각(stages 와 같은 순서)
     eids:       vector of string;         # 각 단계 evidence_id
     attacker:   addr   &default=0.0.0.0;  # 최초 기점 host
     started_at: time;
@@ -191,6 +192,32 @@ type ChainState: record {
 };
 
 global primes: table[addr, Notice::Type] of ChainState &write_expire=chain_max_expire;
+
+## 한 체인(chain_id)의 모든 갈래를 합친 상태. 탐지 요약(nsm_detection)은 이 값으로 쓴다.
+##   한 체인은 피해 host 별(DST_TO_SRC)·다음 단계별로 갈라지는데, 갈래마다 다른 내용을 같은
+##   detection_id 로 내면 Manager 가 덮어쓸 때 앞 갈래(예: 유출)가 사라진다. 그래서 갈래를 합친
+##   전체를 내고 revision(1부터)을 붙인다. Manager 는 detection_id 별 revision 이 가장 큰 행을 쓴다.
+type ChainAgg: record {
+    revision:   count &default=0;
+    attacker:   addr;
+    started_at: time;
+    last_seen:  time;
+    notes:      vector of Notice::Type;   # 단계(중복 없음, 처음 본 시각 순)
+    note_ts:    vector of time;           # 각 단계를 처음 본 시각
+    eids:       vector of string;         # 구성 탐지 id(처음 본 순서, 중복 없음)
+    victims:    set[addr];
+    last_host:  addr;
+    accounts:   set[string];
+    names:      set[string];
+    relays:     set[string];
+};
+
+## 갈래가 남아 있는 동안 유지한다. 합친 상태는 갈래(primes)를 만들 때마다 같이 갱신되므로
+##   갈래보다 먼저 만료되지 않는다(같은 만료 시간, 마지막 쓰기가 더 늦음).
+global chain_aggs: table[string] of ChainAgg &write_expire=chain_max_expire;
+
+## 합친 상태의 구성 탐지 id 상한(긴 체인에서 메모리 보호)
+const chain_agg_max_eids = 64;
 
 ## chain_rules + chain_group_rules 를 펼친 전이 색인: 출발 탐지 -> 전이 목록
 global transitions_from: table[Notice::Type] of vector of Transition;
@@ -318,7 +345,7 @@ function fresh_chain(note: Notice::Type, origin: addr, eid: string, ts: time): C
     local nam: set[string] = set();
     local rel: set[string] = set();
     # chain_id: kc-<시작 epoch>-<프로세스 값>-<번호>. 재시작·노드가 달라도 겹치지 않게 프로세스 값을 넣는다.
-    return [$stages=vector(note), $eids=eids,
+    return [$stages=vector(note), $stage_ts=vector(ts), $eids=eids,
             $attacker=origin, $started_at=ts,
             $expire_at=ts, $chain_id=fmt("kc-%d-%s-%d", double_to_count(time_to_double(ts)), kc_run, kc_counter),
             $victims=vic, $accounts=acc, $names=nam, $relays=rel];
@@ -412,72 +439,7 @@ function stage_tag(note: Notice::Type): string
     return note in stage_tag_map ? stage_tag_map[note] : cat(note);
     }
 
-function chain_stage_names(st: ChainState): vector of string
-    {
-    local out: vector of string = vector();
-    for ( _i, note in st$stages )
-        out += note in NSM::stage_name_map ? NSM::stage_name_map[note] : cat(note);
-    return out;
-    }
-
-# 탐지 요약(nsm_detection)의 techniques: 체인 순서대로 단계별 기법(중복 그대로)
-function chain_tids_vec(st: ChainState): vector of string
-    {
-    local out: vector of string = vector();
-    for ( _i, note in st$stages )
-        out += stage_technique(note);
-    return out;
-    }
-
-# 피해 host 목록 문자열 생성. last_host 를 앞에 두고 누적 victims 를 이어 붙이며
-#   최대 chain_max_victims 개까지만 표시한다(초과분은 생략).
-function victims_vec(st: ChainState, last_host: addr): vector of string
-    {
-    local out: vector of string = vector();
-    local seen: set[addr] = set();
-
-    # 마지막 단계의 host 를 우선 표시
-    out[|out|] = cat(last_host);
-    add seen[last_host];
-
-    for ( v in st$victims )
-        {
-        if ( |out| >= chain_max_victims )
-            break;
-        if ( v in seen )
-            next;
-        add seen[v];
-        out[|out|] = cat(v);
-        }
-
-    return out;
-    }
-
-# 피해 host 전체 수(victims_vec 이 잘라도 실제 수).
-function victims_total(st: ChainState, last_host: addr): count
-    {
-    return ( last_host in st$victims ) ? |st$victims| : |st$victims| + 1;
-    }
-
-# detection 의 evidence_ids 에 실릴 값들.
-#   계약: 여기 실린 모든 id 는 evidence.log 에서 조회 가능해야 한다.
-#   -> chain 자신의 요약 근거(chain_id)도 반드시 포함한다(기존 누락 지점).
-function chain_evidence_ids(st: ChainState): vector of string
-    {
-    local out: vector of string = vector(st$chain_id);
-    local seen: set[string] = set(st$chain_id);
-
-    for ( i in st$eids )
-        {
-        if ( st$eids[i] == "" || st$eids[i] in seen )
-            next;
-        add seen[st$eids[i]];
-        out[|out|] = st$eids[i];
-        }
-    return out;
-    }
-
-# 위 id 들의 실제 기록 건수를 합산한다(단계 수가 아니라 근거 행 수).
+# evidence_ids 의 실제 기록 건수를 합산한다(단계 수가 아니라 근거 행 수).
 function chain_evidence_count(eids: vector of string): count
     {
     local total = 0;
@@ -487,6 +449,183 @@ function chain_evidence_count(eids: vector of string): count
         total += ( c > 0 ) ? c : 1;
         }
     return total;
+    }
+
+# 단계 진행 순위(가장 많이 진행된 단계를 진단명 뒤쪽에 쓴다). 통합 리포트의 단계 순서와 같다.
+const stage_rank: table[string] of count = {
+    ["Recon"] = 1, ["InitialAccess"] = 2, ["C2"] = 3, ["CredentialAccess"] = 4,
+    ["Lateral"] = 5, ["Exfil"] = 6, ["Impact"] = 7,
+};
+
+# 갈래 st 를 체인의 합친 상태에 넣고 revision 을 올린다.
+function agg_merge(st: ChainState, last_host: addr, ts: time): ChainAgg
+    {
+    local agg: ChainAgg;
+    if ( st$chain_id in chain_aggs )
+        agg = chain_aggs[st$chain_id];
+    else
+        {
+        local nv: vector of Notice::Type = vector();
+        local tv: vector of time = vector();
+        local ev: vector of string = vector();
+        local vs: set[addr] = set();
+        local s1: set[string] = set();
+        local s2: set[string] = set();
+        local s3: set[string] = set();
+        agg = ChainAgg($attacker=st$attacker, $started_at=st$started_at, $last_seen=ts,
+                       $notes=nv, $note_ts=tv, $eids=ev, $victims=vs, $last_host=last_host,
+                       $accounts=s1, $names=s2, $relays=s3);
+        }
+
+    agg$revision += 1;
+    if ( st$started_at < agg$started_at )
+        agg$started_at = st$started_at;
+    if ( ts >= agg$last_seen )
+        {
+        agg$last_seen = ts;
+        agg$last_host = last_host;
+        }
+
+    # 단계: 처음 보는 단계를 시각 순 자리에 넣는다(같은 시각이면 뒤에).
+    for ( i, n in st$stages )
+        {
+        local seen = F;
+        for ( _j, an in agg$notes )
+            if ( an == n )
+                {
+                seen = T;
+                break;
+                }
+        if ( seen )
+            next;
+        local t = ( i < |st$stage_ts| ) ? st$stage_ts[i] : st$started_at;
+        local pos = |agg$notes|;
+        while ( pos > 0 && agg$note_ts[pos - 1] > t )
+            pos -= 1;
+        local nn: vector of Notice::Type = vector();
+        local nt: vector of time = vector();
+        for ( k, x in agg$notes )
+            {
+            if ( k == pos )
+                {
+                nn += n;
+                nt += t;
+                }
+            nn += x;
+            nt += agg$note_ts[k];
+            }
+        if ( pos == |agg$notes| )
+            {
+            nn += n;
+            nt += t;
+            }
+        agg$notes = nn;
+        agg$note_ts = nt;
+        }
+
+    for ( _e, eid in st$eids )
+        {
+        if ( eid == "" || |agg$eids| >= chain_agg_max_eids )
+            next;
+        local dup = F;
+        for ( _f, x2 in agg$eids )
+            if ( x2 == eid )
+                {
+                dup = T;
+                break;
+                }
+        if ( ! dup )
+            agg$eids += eid;
+        }
+
+    # 피해 host 에는 체인 출발지(공격자) 자신을 넣지 않는다(출발지에서 이어지는 단계의 last_host 는 출발지).
+    for ( v in st$victims )
+        if ( v != agg$attacker )
+            add agg$victims[v];
+    if ( last_host != agg$attacker )
+        add agg$victims[last_host];
+    absorb_set(agg$accounts, st$accounts);
+    absorb_set(agg$names, st$names);
+    absorb_set(agg$relays, st$relays);
+
+    chain_aggs[st$chain_id] = agg;    # 다시 써서 만료 시각을 늦춘다
+    return agg;
+    }
+
+# 진단명: NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>(같은 순위면 나중 단계)
+function agg_diagnosis(agg: ChainAgg): string
+    {
+    local first = stage_tag(agg$notes[0]);
+    local last = first;
+    local best = 0;
+    for ( _i, n in agg$notes )
+        {
+        local tg = stage_tag(n);
+        local r = ( tg in stage_rank ) ? stage_rank[tg] : 0;
+        if ( r >= best )
+            {
+            best = r;
+            last = tg;
+            }
+        }
+    return fmt("%s.%s.%s", NSM::diagnosis_map[Correlated_KillChain], first, last);
+    }
+
+function agg_tids_vec(agg: ChainAgg): vector of string
+    {
+    local out: vector of string = vector();
+    for ( _i, n in agg$notes )
+        out += stage_technique(n);
+    return out;
+    }
+
+# 킬체인 단계명: 처음 본 순서, 중복 없음(여러 탐지가 같은 단계면 한 번). techniques 는 탐지마다 하나.
+function agg_stage_names(agg: ChainAgg): vector of string
+    {
+    local out: vector of string = vector();
+    local seen: set[string] = set();
+    for ( _i, n in agg$notes )
+        {
+        local nm = n in NSM::stage_name_map ? NSM::stage_name_map[n] : cat(n);
+        if ( nm in seen )
+            next;
+        add seen[nm];
+        out += nm;
+        }
+    return out;
+    }
+
+# 피해 host: 가장 최근 단계의 host 를 앞에, 나머지는 주소 순. 최대 chain_max_victims 개.
+#   아직 피해 host 가 없으면(출발지에서만 이어진 단계들) 예전처럼 출발지를 표시한다.
+function agg_victims_vec(agg: ChainAgg): vector of string
+    {
+    if ( |agg$victims| == 0 )
+        return vector(cat(agg$attacker));
+    local rest: vector of addr = vector();
+    for ( v in agg$victims )
+        if ( v != agg$last_host )
+            rest += v;
+    sort(rest, function(a: addr, b: addr): int { return a < b ? -1 : ( a > b ? 1 : 0 ); });
+    local out: vector of string = vector();
+    if ( agg$last_host in agg$victims )
+        out += cat(agg$last_host);
+    for ( _i, r in rest )
+        {
+        if ( |out| >= chain_max_victims )
+            break;
+        out += cat(r);
+        }
+    return out;
+    }
+
+# evidence_ids: 체인 요약 근거(chain_id) + 구성 탐지 id
+function agg_evidence_ids(chain_id: string, agg: ChainAgg): vector of string
+    {
+    local out: vector of string = vector(chain_id);
+    for ( _i, e in agg$eids )
+        if ( e != chain_id )
+            out += e;
+    return out;
     }
 
 function emit_chain(st: ChainState, last_host: addr, ts: time)
@@ -517,38 +656,40 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
             $attack=chain_tids_csv(st),
             $evidence_id=st$chain_id]);
 
-    # chain 요약 근거를 적재한 뒤에 집계해야 count 에 포함된다.
-    local all_eids = chain_evidence_ids(st);
-
-    local first_note = st$stages[0];
-    local last_note  = st$stages[len-1];
-    local diag = fmt("%s.%s.%s", NSM::diagnosis_map[Correlated_KillChain],
-                     stage_tag(first_note), stage_tag(last_note));
+    # 갈래를 합친 상태로 탐지 요약을 쓴다(chain 요약 근거를 적재한 뒤라 count 에 포함된다).
+    local agg = agg_merge(st, last_host, ts);
+    local all_eids = agg_evidence_ids(st$chain_id, agg);
 
     local d = NSM::DetectionInfo(
         $ts               = network_time(),
         $detection_id     = st$chain_id,
-        $diagnosis        = diag,
+        $diagnosis        = agg_diagnosis(agg),
         $rule             = "Correlated_KillChain",
-        $techniques       = chain_tids_vec(st),
+        $techniques       = agg_tids_vec(agg),
         $category         = "Correlated",
-        $killchain_stages = chain_stage_names(st),
+        $killchain_stages = agg_stage_names(agg),
         $severity         = "Suspicious",
         $severity_id      = 3,
-        $first_seen       = st$started_at,
-        $last_seen        = ts,
-        $attacker         = st$attacker,
-        $attacker_subnet  = NSM::attacker_segment(st$attacker),
-        $victims          = victims_vec(st, last_host),
-        $victim_count     = victims_total(st, last_host),
+        $first_seen       = agg$started_at,
+        $last_seen        = agg$last_seen,
+        $attacker         = agg$attacker,
+        $attacker_subnet  = NSM::attacker_segment(agg$attacker),
+        $victims          = agg_victims_vec(agg),
+        $victim_count     = |agg$victims| > 0 ? |agg$victims| : 1,
         $evidence_count   = chain_evidence_count(all_eids),
-        $evidence_ids     = all_eids);
-    if ( |st$accounts| > 0 )
-        d$accounts = summary_vec(st$accounts);
-    if ( |st$names| > 0 )
-        d$dst_names = summary_vec(st$names);
-    if ( |st$relays| > 0 )
-        d$relays = summary_vec(st$relays);
+        $evidence_ids     = all_eids,
+        $revision         = agg$revision,
+        # 같은 사건 묶기 규칙을 단독 탐지와 맞춘다: 사건 = 체인, 횟수 = 갱신 번호
+        $incident_id      = st$chain_id,
+        $occurrence       = agg$revision);
+    if ( |agg$eids| > 0 )
+        d$member_detection_ids = agg$eids;
+    if ( |agg$accounts| > 0 )
+        d$accounts = summary_vec(agg$accounts);
+    if ( |agg$names| > 0 )
+        d$dst_names = summary_vec(agg$names);
+    if ( |agg$relays| > 0 )
+        d$relays = summary_vec(agg$relays);
     NSM::write_detection(d);
     }
 
@@ -599,6 +740,7 @@ function corr_process(cn: CorrNotice)
             # 확장
             local ext = copy(st);
             ext$stages[|ext$stages|] = m;
+            ext$stage_ts[|ext$stage_ts|] = cn$ts;
             if ( eid != "" )
                 ext$eids[|ext$eids|] = eid;
             # 이 단계에서 관측된 피해 host 누적(확산 대상 등)

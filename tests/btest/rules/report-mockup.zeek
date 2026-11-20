@@ -19,7 +19,7 @@ assert all(e["prod"] == "NSM" and e["t"] and e["d"] for e in ev)
 assert all(e["sev"] == ("Suspicious" if e.get("corr") else "Information") for e in ev), {(e["note"], e["sev"]) for e in ev}
 if sys.argv[2] == "kc":
     corr = [e for e in ev if e.get("corr")]
-    assert len(corr) == 1 and len(corr[0]["stages"]) == 6 and corr[0]["stages"][-1] == "Impact" and corr[0]["src"] == "172.16.0.66", corr
+    assert len(corr) == 1 and len(corr[0]["stages"]) == 7 and corr[0]["stages"][-1] == "Impact" and corr[0]["src"] == "172.16.0.66", corr
     notes = {e["note"] for e in ev if not e.get("corr")}
     assert {"Port_Scan", "SQL_Injection", "Webshell_Access", "HTTP_Beaconing", "Kerberoasting", "SMB_Admin_Share", "SMB_Ransomware"} <= notes, notes
     beacon = next(e for e in ev if e["note"] == "HTTP_Beaconing")

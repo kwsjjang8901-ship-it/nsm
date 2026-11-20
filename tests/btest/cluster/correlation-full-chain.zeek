@@ -25,6 +25,8 @@
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated diagnosis=NSM.Correlation.Recon.Exfil attacker=10.0.0.240
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 2 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041'
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 5 category=Correlated
+# 한 체인 = 한 detection_id, revision 1..5(매니저에서 갈래를 합침). 마지막 행은 피해 host 2대·구성 탐지 6개
+# @TEST-EXEC: python3 -c "import json;c=[json.loads(l) for l in open('manager/nsm_detection.log')];c=[d for d in c if d['category']=='Correlated'];assert len({d['detection_id'] for d in c})==1 and sorted(d['revision'] for d in c)==[1,2,3,4,5],c;last=max(c,key=lambda d:d['revision']);assert last['victim_count']==2 and len(last['member_detection_ids'])==6,last"
 #
 # 근거 요약: 워커-2 비콘 근거(목적지 이름·프록시)와 매니저 확산 근거(계정)가 상관 행에 모인다.
 #   근거는 쓴 노드에만 있으므로 단계마다 상관 이벤트에 실어 보낸다. 비콘 전(2단계) 상관 행에는 없다

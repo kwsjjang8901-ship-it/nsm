@@ -15,4 +15,7 @@
 # @TEST-EXEC: assert-rows nsm_detection.log ge 1 category=Correlated diagnosis=NSM.Correlation.Recon.InitialAccess attacker=172.16.0.66
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.C2 attacker=172.16.0.66
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Lateral attacker=172.16.0.66
-# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Impact attacker=172.16.0.66 'techniques=T1046,T1505.003,T1071.001,T1558.003,T1021.002,T1486'
+# 마지막 행(revision 8)이 갈래를 합친 전체: SQL 인젝션·웹셸 두 초기 침투, 유출 갈래(10·14)와 피해 갈래(21)가 한 행에. 7단계 모두
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated diagnosis=NSM.Correlation.Recon.Impact attacker=172.16.0.66 revision=8 'techniques=T1046,T1190,T1505.003,T1071.001,T1558.003,T1021.002,T1041,T1041,T1486'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated revision=8 'killchain_stages=Recon,Initial Access,Command and Control,Credential Access,Lateral Movement,Exfiltration,Impact'
+# @TEST-EXEC: python3 -c "import json;r=[json.loads(l) for l in open('nsm_detection.log')];c=[d for d in r if d['category']=='Correlated'];assert len({d['detection_id'] for d in c})==1 and [d['revision'] for d in c]==list(range(1,len(c)+1)) and all(d['incident_id']==d['detection_id'] and d['occurrence']==d['revision'] for d in c),c"

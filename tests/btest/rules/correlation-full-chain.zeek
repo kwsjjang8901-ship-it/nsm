@@ -17,8 +17,15 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.C2
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.Lateral
 # @TEST-EXEC: assert-rows nsm_detection.log eq 4 category=Correlated attacker=10.0.0.240 diagnosis=NSM.Correlation.Recon.Exfil
-# @TEST-EXEC: assert-rows nsm_detection.log eq 4 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041'
-# 5단계 갈래별 마지막 host 가 victims 맨 앞(host 마다 유출 룰 2개)
+# 상관 행은 갈래를 합친 체인 전체(revision 이 오를수록 커짐): 유출 룰 2개(10·14)는 기법이 같아 T1041 이 두 번
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated revision=4 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 3 category=Correlated 'techniques=T1046,T1568.002,T1071.001,T1021.002,T1041,T1041'
+# @TEST-EXEC: assert-rows nsm_detection.log eq 1 category=Correlated revision=7 'killchain_stages=Recon,Command and Control,Lateral Movement,Exfiltration' victim_count=2
+# 한 체인 = 한 detection_id, revision 1..7, 사건 묶기(incident_id·occurrence)와 같은 값
+# @TEST-EXEC: python3 -c "import json;r=[json.loads(l) for l in open('nsm_detection.log')];c=[d for d in r if d['category']=='Correlated'];assert len({d['detection_id'] for d in c})==1 and [d['revision'] for d in c]==list(range(1,len(c)+1)) and all(d['incident_id']==d['detection_id'] and d['occurrence']==d['revision'] for d in c),c"
+# 마지막 행의 구성 탐지: 스캔·DGA·비커닝·확산·피해 host 2대 x 유출 2개 = 8
+# @TEST-EXEC: python3 -c "import json;r=[json.loads(l) for l in open('nsm_detection.log')];last=max((x for x in r if x['category']=='Correlated'),key=lambda x:x['revision']);m=last['member_detection_ids'];s={x['detection_id'] for x in r if x['category']=='Single'};assert len(m)==8 and set(m)<=s and last['evidence_ids']==[last['detection_id']]+m,last"
+# 갈래별 마지막 host 가 victims 맨 앞(host 마다 유출 룰 2개)
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 diagnosis=NSM.Correlation.Recon.Exfil victims=10.0.0.241,10.0.0.242
 # @TEST-EXEC: assert-rows nsm_detection.log eq 2 diagnosis=NSM.Correlation.Recon.Exfil victims=10.0.0.242,10.0.0.241
 # @TEST-EXEC: assert-rows evidence.log eq 7 note=NSM::Correlated_KillChain src=10.0.0.240 operation=killchain

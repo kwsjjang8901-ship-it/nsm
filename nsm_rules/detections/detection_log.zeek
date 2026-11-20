@@ -47,6 +47,12 @@ export {
         ##   first_seen 은 사건의 첫 탐지 시각이다.
         incident_id:      string &log &optional;
         occurrence:       count  &log &optional;
+        ## 상관 탐지만: 같은 체인(detection_id)의 갱신 번호(1부터). 행마다 갈래를 합친 체인 전체를 담으므로
+        ##   Manager 는 detection_id 별 revision 이 가장 큰 행을 쓴다. 상관 행은 incident_id = detection_id,
+        ##   occurrence = revision 으로도 채워 단독 탐지와 같은 사건 규칙으로 처리할 수 있다.
+        revision:         count  &log &optional;
+        ## 상관 탐지만: 체인을 이루는 단독 탐지의 detection_id(처음 본 순서). evidence_ids 에서 체인 자신의 근거 id 를 뺀 것.
+        member_detection_ids: vector of string &log &optional;
     };
 
     ## 같은 (탐지 종류, 공격자, 피해 host)의 탐지가 이 간격 안에 다시 나오면 같은 사건으로 묶는다.
