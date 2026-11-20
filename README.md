@@ -49,7 +49,10 @@ tests/
                             #   디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행하고 결과 표·index.html 을 만든다
                             #   -x 예외 파일, -u OUI 파일(IEEE·maclookup 형식), -g Recog XML 폴더(리포트 자산 보강)
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
+  report_mockup.py          # 같은 데이터로 목업형 리포트(<pcap 이름>_report_mockup.html, ui/mockup/ 을 템플릿으로)
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
+ui/
+  mockup/mdsm_nsm_mockup.html  # MDS Manager NSM 화면 목업(예시 데이터). 목업형 리포트의 템플릿(ui/README.md)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종)

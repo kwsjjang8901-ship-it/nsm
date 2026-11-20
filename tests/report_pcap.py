@@ -1262,12 +1262,24 @@ def main():
     ap.add_argument("--nets", default="", help="내부 대역(쉼표 구분, run_pcap.sh -n 과 같음). 사설 대역은 항상 내부로 본다")
     ap.add_argument("--oui", action="append", help="IEEE OUI 목록 CSV(MA-L·MA-M·MA-S, 여러 번 줄 수 있음). MAC 제조사 표시")
     ap.add_argument("--recog", help="Recog 지문 xml 폴더(github.com/rapid7/recog 의 xml/). 배너·헤더로 제품·장비 종류 표시")
+    ap.add_argument("--mockup-out", help="목업형 리포트 경로(기본: -o 이름에 _mockup 을 붙임)")
+    ap.add_argument("--no-mockup", action="store_true", help="목업형 리포트를 만들지 않음")
     args = ap.parse_args()
     data = collect(args.zeek_dir, args.assets, args)
     blob = json.dumps(data, ensure_ascii=False, default=list).replace("</", "<\\/")
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(PAGE.replace("__DATA__", blob))
     print(f"통합 리포트: {args.out} (탐지 {len(data['detections'])}건, 자산 {len(data['assets'])}개, 공격 스토리 {len(data['stories'])}개)")
+    if not args.no_mockup:
+        # 같은 데이터를 MDS Manager 목업 화면으로(ui/mockup/mdsm_nsm_mockup.html 을 템플릿으로)
+        import report_mockup
+        mo = args.mockup_out or re.sub(r"(\.html?)?$", "_mockup.html", args.out, count=1)
+        if os.path.exists(report_mockup.TEMPLATE):
+            mock = report_mockup.build(data, args.zeek_dir, args.tz)
+            report_mockup.render(mock, mo)
+            print(f"목업형 리포트: {mo} (탐지 {len(mock['ev'])}건, 공격 스토리 {len(mock['stories'])}개, 자산 {len(mock['assets'])}개)")
+        else:
+            print(f"  경고: 목업 템플릿이 없어 목업형 리포트를 건너뜀({report_mockup.TEMPLATE})")
     ei = data.get("enrich") or {}
     if ei.get("oui_empty"):
         print(f"  경고: OUI 파일에서 제조사를 한 줄도 읽지 못함({', '.join(ei['oui_empty'])}). 접두어·제조사 열이 있는 CSV 인지 확인")

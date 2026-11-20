@@ -1,0 +1,1564 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDS Manager NSM 목업</title>
+<style>
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --line:#e1e5eb; --line2:#eef1f5; --ink:#1f2733; --ink2:#5b6676; --ink3:#8a94a3;
+  --top:#1c2230; --top2:#262e3f; --accent:#2f6fde; --accent-bg:#e9f0fd; --new:#7c3aed; --new-bg:#f1eafe;
+  --crit:#c62828; --crit-bg:#fdecec; --high:#e65100; --high-bg:#fff1e5; --med:#a67c00; --med-bg:#fff8db; --low:#2e7d32; --low-bg:#e8f5e9;
+  --ok:#2e7d32; --warn:#e65100; --bad:#c62828; --chg:#fff7d6; --obs:#7c3aed;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.55 "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",system-ui,sans-serif}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent);text-decoration:none;cursor:pointer}
+a:hover{text-decoration:underline}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.sys{background:#11151e;color:#9aa4b5;font-size:11px;padding:3px 16px}
+.top{background:var(--top);color:#dfe5ef;display:flex;align-items:center;height:48px;padding:0 16px;gap:4px;position:sticky;top:0;z-index:20}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;color:#fff;margin-right:22px;white-space:nowrap}
+.logo i{display:inline-block;width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#3b82f6,#1d4ed8)}
+.nav{display:flex;gap:2px;overflow-x:auto}
+.nav button{background:none;border:0;color:#c3cad6;padding:0 13px;height:48px;white-space:nowrap}
+.nav button:hover{color:#fff;background:var(--top2)}
+.nav button.on{color:#fff;box-shadow:inset 0 -3px 0 #4c8dff}
+.nav .tag{display:inline-block;margin-left:5px;vertical-align:1px;font-size:10px;line-height:15px;padding:0 5px;border-radius:7px;background:var(--new);color:#fff}
+.nav .tag.ext{background:#2f6fde}
+.topr{margin-left:auto;display:flex;gap:14px;align-items:center;color:#c3cad6;white-space:nowrap}
+.bell{position:relative}.bell b{position:absolute;top:-6px;right:-8px;background:#e53935;color:#fff;font-size:9px;border-radius:7px;padding:0 4px}
+.page{padding:14px 18px 40px;max-width:1500px;margin:0 auto}
+.crumb{color:var(--ink3);font-size:12px;margin-bottom:8px}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.bar h1{font-size:17px;margin:0 8px 0 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.panel>h3{margin:0;padding:10px 14px;border-bottom:1px solid var(--line2);font-size:13px;display:flex;align-items:center;gap:8px}
+.panel>h3 .r{margin-left:auto;font-weight:400;color:var(--ink3);font-size:12px}
+.pbody{padding:12px 14px}
+.grid{display:grid;gap:12px}
+.grid>*,.adm>*{min-width:0}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}.g6{grid-template-columns:repeat(6,1fr)}
+.g21{grid-template-columns:2fr 1fr}.g12{grid-template-columns:1fr 2fr}.g13{grid-template-columns:340px 1fr}
+@media(max-width:1100px){.g4,.g6{grid-template-columns:repeat(2,1fr)}.g3,.g21,.g12,.g2,.g13{grid-template-columns:1fr}}
+.kpi{padding:12px 14px}.kpi .k{color:var(--ink2);font-size:12px}.kpi .v{font-size:24px;font-weight:700;margin-top:2px}.kpi .d{font-size:12px;color:var(--ink3)}
+.kpi.sm .v{font-size:17px}
+.up{color:var(--bad)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:4px;padding:5px 10px;color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:#b9c3d1}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.sm{padding:2px 8px;font-size:12px}
+.inp{border:1px solid var(--line);border-radius:4px;padding:5px 8px;background:#fff;min-width:0}
+.inp.err{border-color:var(--bad);background:#fff7f7}
+.sel{border:1px solid var(--line);border-radius:4px;padding:5px 6px;background:#fff}
+textarea.inp{width:100%;resize:vertical}
+.newbox{outline:2px dashed var(--new);outline-offset:2px;border-radius:6px}
+.pill{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;line-height:18px;white-space:nowrap}
+.pnew{background:var(--new-bg);color:var(--new);border:1px solid #ddd0fb}
+.pchg{background:var(--chg);color:#8a6700;border:1px solid #f0dc8f}
+.sev{display:inline-block;min-width:62px;text-align:center;font-size:11px;font-weight:700;border-radius:3px;padding:1px 6px}
+.sev.Critical{background:var(--crit-bg);color:var(--crit)}.sev.High{background:var(--high-bg);color:var(--high)}
+.sev.Medium{background:var(--med-bg);color:var(--med)}.sev.Low{background:var(--low-bg);color:var(--low)}
+.prod{display:inline-block;font-size:11px;font-weight:700;border-radius:3px;padding:0 6px;color:#fff}
+.prod.MDS{background:#2f6fde}.prod.MTA{background:#00897b}.prod.NSM{background:var(--new)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.note{color:var(--ink3);font-size:12px}
+.muted{color:var(--ink3)}
+.errtxt{color:var(--bad);font-size:12px}
+.oktxt{color:var(--ok);font-size:12px}
+.warntxt{color:#8a3b00;font-size:12px}
+table.t{width:100%;border-collapse:collapse}
+.t th{background:#f7f9fb;color:var(--ink2);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:12px}
+.t td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+.t tr.click:hover td{background:#f5f8fd;cursor:pointer}
+.t tr.sel td{background:#eef3fd}
+.t tr.chg td{background:#fffbea}
+.t tr.dim td{color:var(--ink3)}
+.t .num{text-align:right;font-variant-numeric:tabular-nums}
+.nw,.t td.nw{white-space:nowrap}
+.tw{overflow-x:auto}
+.sub{display:block;font-size:11px;color:var(--ink3);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.chip{display:inline-block;background:#eef1f5;border-radius:3px;padding:0 5px;font-size:11px;color:var(--ink2);margin:1px 2px 1px 0;white-space:nowrap}
+.chip.warn{background:var(--high-bg);color:var(--high)}.chip.bad{background:var(--crit-bg);color:var(--crit)}.chip.ok{background:var(--low-bg);color:var(--low)}.chip.sup{background:var(--med-bg);color:#8a6700}.chip.obs{background:var(--new-bg);color:var(--obs)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs button{background:none;border:0;padding:8px 14px;color:var(--ink2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+.seg{display:inline-flex;background:#e9edf3;border-radius:16px;padding:3px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:5px 16px;border-radius:14px;color:var(--ink2)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12);font-weight:700}
+.hbar{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;margin:5px 0}
+.hbar .b{height:10px;background:#e6ebf2;border-radius:5px;overflow:hidden}.hbar .b i{display:block;height:100%;background:var(--accent)}
+.stack{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#e6ebf2}
+.leg{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--ink2)}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.drawer{position:fixed;top:0;right:0;width:min(680px,100%);height:100%;background:#fff;box-shadow:-6px 0 24px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:40;display:flex;flex-direction:column}
+.drawer.on{transform:none}
+.drawer header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.drawer header h2{font-size:15px;margin:0}
+.drawer .body{padding:14px 16px;overflow:auto;flex:1}
+.drawer footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.shade{position:fixed;inset:0;background:rgba(15,20,30,.3);z-index:30;display:none}.shade.on{display:block}
+.modal{position:fixed;left:50%;top:6vh;transform:translateX(-50%);width:min(760px,96vw);max-height:88vh;background:#fff;border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.25);z-index:50;display:none;flex-direction:column}
+.modal.on{display:flex}
+.modal header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.modal header h2{font-size:15px;margin:0}
+.modal .body{padding:14px 16px;overflow:auto}
+.modal footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.mshade{position:fixed;inset:0;background:rgba(15,20,30,.35);z-index:45;display:none}.mshade.on{display:block}
+.form{display:grid;grid-template-columns:130px 1fr;gap:8px 12px;align-items:start}
+.form>label{color:var(--ink2);padding-top:5px;font-size:12.5px}
+.form .help{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:12.5px}
+.kv dt{color:var(--ink3)}.kv dd{margin:0;word-break:break-all}
+.sec{margin:14px 0 6px;font-weight:700;font-size:13px;display:flex;gap:6px;align-items:center}
+details.tech{margin-top:10px}details.tech summary{cursor:pointer;color:var(--ink3);font-size:12px}
+pre.json{background:#0f172a;color:#d6e2f5;padding:10px 12px;border-radius:6px;overflow:auto;font-size:11.5px;margin:6px 0 0;white-space:pre}
+pre.diff{background:#f7f9fb;border:1px solid var(--line);padding:10px 12px;border-radius:6px;overflow:auto;font-size:11.5px;margin:6px 0 0}
+pre.diff span{display:block}pre.diff .a{color:#1b7f3b;background:#e9f7ee}pre.diff .d{color:#b42318;background:#fdecec}
+.infog{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.infog div{border:1px solid var(--line);border-radius:5px;padding:8px 10px}
+.infog b{display:block;font-size:11px;color:var(--ink3);font-weight:400}
+.adm{display:grid;grid-template-columns:210px 1fr;gap:12px}
+@media(max-width:900px){.adm{grid-template-columns:1fr}}
+.tree{padding:6px 0;align-self:start}
+.tree .g{padding:6px 14px;color:var(--ink2);font-weight:600;font-size:12px}
+.tree a{display:block;padding:5px 14px 5px 26px;color:var(--ink);text-decoration:none}
+.tree a.on{background:var(--accent-bg);color:var(--accent);font-weight:700}
+.tree a.dis{color:var(--ink3)}
+.toggle{width:30px;height:16px;border-radius:8px;background:#cfd6e0;position:relative;display:inline-block;vertical-align:middle;cursor:pointer;flex:none}
+.toggle.on{background:var(--accent)}.toggle::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle.on::after{left:16px}
+.callout{background:#eef4fe;border:1px solid #cfdcf8;color:#1e3a8a;border-radius:6px;padding:8px 12px;font-size:12.5px;margin-bottom:12px}
+.callout.warn{background:#fff6ec;border-color:#f7d3ad;color:#8a3b00}
+.pending{position:sticky;bottom:0;background:#fffbea;border:1px solid #f0dc8f;border-radius:6px;padding:8px 12px;display:flex;gap:8px;align-items:center;margin-top:12px;z-index:5}
+.hidden{display:none!important}
+.svgt text{font-size:11px;fill:var(--ink2)}
+.steps{display:flex;margin:4px 0 14px}
+.steps div{flex:1;text-align:center;font-size:12px;color:var(--ink3);padding:6px 4px;border-bottom:3px solid var(--line)}
+.steps div.on{color:var(--accent);border-color:var(--accent);font-weight:700}
+.steps div.done{color:var(--ok);border-color:var(--ok)}
+.prog{height:8px;background:#e6ebf2;border-radius:4px;overflow:hidden;min-width:120px}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.prog.ok i{background:var(--ok)}.prog.bad i{background:var(--bad)}
+.toast{position:fixed;right:18px;bottom:18px;background:#1f2733;color:#fff;padding:10px 14px;border-radius:6px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:420px;opacity:0;transform:translateY(8px);transition:all .2s;pointer-events:none}
+.toast.on{opacity:1;transform:none}
+.ioc{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:12px;padding:1px 8px;margin:2px 4px 2px 0;font-size:12px}
+.ioc b{font-weight:600;color:var(--ink3);margin-right:4px;font-size:11px}
+.spark{display:inline-block;vertical-align:middle}
+/* 공격 스토리 */
+.stg{display:inline-flex;gap:2px;vertical-align:middle}
+.stg i{display:inline-block;width:16px;height:8px;border-radius:2px;background:#e6ebf2}
+.stg i.on{background:#5b8def}.stg i.on.last{background:#c62828}
+.board{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.board>div{border:1px solid var(--line);border-radius:6px;padding:8px;min-height:92px;background:#fafbfd}
+.board>div.on{background:#eef3fd;border-color:#bcd0f5}.board>div.last{background:#fdecec;border-color:#f2b8b8}
+.board h4{margin:0 0 6px;font-size:12px}
+.nbadge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#2f6fde;color:#fff;font-size:11px;font-weight:700;margin:2px;cursor:pointer}
+.nbadge.cand{background:#9db8ef}
+.narr{list-style:none;margin:0;padding:0}
+.narr li{display:grid;grid-template-columns:52px 30px 1fr;gap:6px;padding:8px 6px;border-bottom:1px solid var(--line2)}
+.narr li.obs{background:#faf7ff}
+.narr li.hl{background:#fff8db}
+.narr .tm{color:var(--ink3);font-variant-numeric:tabular-nums}
+.narr .ev{font-size:12px;color:var(--ink3);margin-top:2px}
+.ssum{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.ssum>div{border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff}
+.ssum b{display:block;font-size:11px;color:var(--ink3);font-weight:400}
+.ssum span{font-size:15px;font-weight:700}
+@media(max-width:1100px){.ssum{grid-template-columns:repeat(3,1fr)}.board{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<div class="sys">MDS Manager · 웹 UI 목업 v4 (NSM 화면 스펙 초안 반영) · 화면의 데이터는 모두 예시입니다</div>
+<div class="top">
+  <div class="logo"><i></i>MDS Manager</div>
+  <nav class="nav" id="nav">
+    <button data-v="dash">대시보드<span class="tag ext">확장</span></button>
+    <button data-v="events">탐지 현황</button>
+    <button data-v="devices">장비 현황<span class="tag ext">확장</span></button>
+    <button data-v="nsm">NSM 분석<span class="tag">신규</span></button>
+    <button data-v="resp">대응 현황</button>
+    <button data-v="report">보고서</button>
+    <button data-v="logs">로그</button>
+    <button data-v="admin">관리<span class="tag ext">확장</span></button>
+  </nav>
+  <div class="topr"><span class="bell">🔔<b>7</b></span><span>admin</span></div>
+</div>
+
+<!-- 대시보드 -->
+<div class="page view" id="v-dash">
+  <div class="crumb">대시보드</div>
+  <div class="bar">
+    <h1>대시보드</h1>
+    <select class="sel newbox"><option>네트워크 보안(NSM)</option><option>전체 현황</option><option>파일 분석(MDS)</option><option>메일(MTA)</option></select>
+    <span class="pill pnew">NSM 대시보드 추가</span>
+    <span style="margin-left:auto" class="note">기간</span>
+    <select class="sel"><option>오늘(24시간)</option><option>최근 7일</option><option>최근 30일</option></select>
+    <button class="btn">↻</button>
+  </div>
+  <div class="grid g3" id="kpis"></div>
+  <div class="panel" style="margin-top:12px"><h3>진행 중인 공격 스토리 <span class="r">여러 단계로 이어진 공격 · 누르면 상세</span></h3><div class="tw"><table class="t" id="dashStories"></table></div></div>
+  <div class="panel" style="margin-top:12px"><h3>자산 현황 <span class="r">네트워크에서 보인 자산 · 누르면 NSM 분석 › 자산 현황</span></h3><div class="pbody" id="dashAssets" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"></div></div>
+  <div class="grid g21" style="margin-top:12px">
+    <div class="panel"><h3>시간대별 탐지 <span class="r">위험도별로 쌓은 막대</span></h3><div class="pbody"><div id="trend"></div></div></div>
+    <div class="panel"><h3>위험도별 탐지 <span class="r">먼저 확인할 것</span></h3><div class="pbody" id="sevbox"></div></div>
+  </div>
+  <div class="grid g3" style="margin-top:12px">
+    <div class="panel"><h3>많이 나온 탐지 <span class="r">상위 8개</span></h3><div class="pbody" id="types"></div></div>
+    <div class="panel"><h3>공격 단계별 탐지 <span class="r">공격이 어디까지 진행됐나</span></h3><div class="pbody" id="stages"></div></div>
+    <div class="panel"><h3>센서 상태 <span class="r">패킷 수집과 기록 전송</span></h3><div class="pbody" id="sensorMini"></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="panel"><h3>탐지가 많은 PC·서버 <span class="r">상위 10대</span></h3><div class="tw"><table class="t" id="topAssets"></table></div></div>
+    <div class="panel"><h3>최근 위험 탐지 <span class="r">Critical·High</span></h3><div class="tw"><table class="t" id="recent"></table></div></div>
+  </div>
+</div>
+
+<!-- 탐지 현황 (MDS·MTA) -->
+<div class="page view hidden" id="v-events">
+  <div class="crumb">탐지 현황 › 탐지 목록</div>
+  <div class="tabs"><button class="on">탐지 목록</button><button>파일</button><button>메일</button><button>URL</button></div>
+  <div class="bar">
+    <select class="sel" id="fProd"><option value="">제품 전체</option><option>MDS</option><option>MTA</option></select>
+    <select class="sel" id="fSev"><option value="">위험도 전체</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+    <input class="inp" id="fq" placeholder="탐지명·IP·파일·이벤트 ID" style="width:240px">
+    <span style="margin-left:auto" class="note" id="evCount"></span><button class="btn">내보내기</button>
+  </div>
+  <div class="callout">이 화면은 기존처럼 파일·메일(MDS·MTA) 탐지만 보여 줍니다. 네트워크(NSM) 탐지는 <a data-go="nsm-det">NSM 분석 › NSM 탐지</a>에서 확인하세요.</div>
+  <div class="panel tw"><table class="t" id="evTable"></table></div>
+</div>
+
+<!-- 장비 현황 -->
+<div class="page view hidden" id="v-devices">
+  <div class="crumb">장비 현황</div>
+  <div class="bar"><h1>장비 현황</h1><input class="inp" placeholder="장비 이름·IP" style="width:220px"><span style="margin-left:auto" class="note">30초마다 새로고침</span></div>
+  <div class="tabs" id="devTabs"><button data-t="mta">MTA</button><button data-t="mir">Mirroring</button><button data-t="nsm" class="on">NSM <span class="pill pnew">신규</span></button></div>
+  <div id="devBody"></div>
+</div>
+
+<!-- NSM 분석 -->
+<div class="page view hidden" id="v-nsm">
+  <div class="crumb" id="nsmCrumb">NSM 분석</div>
+  <div class="bar"><h1>NSM 분석</h1>
+    <div class="seg" id="nsmSeg"><button data-t="story">공격 스토리</button><button data-t="det" class="on">NSM 탐지</button><button data-t="assets">자산 현황</button><button data-t="retro">과거 기록 검색</button></div>
+    <span class="pill pnew">신규 메뉴</span></div>
+
+  <!-- 공격 스토리 -->
+  <div id="nsmStory" class="hidden">
+    <div id="storyList">
+      <div class="callout">공격 스토리는 한 공격자가 여러 단계를 거쳐 진행한 공격을 하나로 묶어 보여 줍니다. 예를 들면 웹서버 침투 → 공격자 서버와 연락 → 계정 탈취 → 다른 PC로 확산 → 파일 암호화로 이어지는 흐름입니다. 탐지 한 건씩 보는 것보다 먼저 확인하세요.</div>
+      <div class="bar">
+        <select class="sel" id="sSt"><option value="">상태 전체</option><option>신규</option><option>조사 중</option><option>종료</option></select>
+        <select class="sel" id="sSev"><option value="">위험도 전체</option><option>Critical</option><option>High</option><option>Medium</option></select>
+        <label class="note"><input type="checkbox" id="sSingle"> 탐지 1건뿐인 스토리도 보기</label>
+        <span class="note" style="margin-left:auto" id="sCnt"></span>
+      </div>
+      <div class="panel tw"><table class="t" id="storyTable"></table></div>
+      <div class="note" style="margin-top:6px">기본 목록은 단계가 2개 이상이거나, 여러 단계가 이어진 것이 확인됐거나, Critical 탐지가 들어 있는 스토리만 보여 줍니다. 마지막 탐지 후 24시간 동안 새 탐지가 없으면 자동으로 "종료"됩니다.</div>
+    </div>
+    <div id="storyDetail" class="hidden"></div>
+  </div>
+
+  <!-- NSM 탐지 -->
+  <div id="nsmDet">
+    <div class="bar">
+      <select class="sel" id="dSevF"><option value="">위험도 전체</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+      <select class="sel" id="dStageF"></select>
+      <select class="sel" id="dTypeF"></select>
+      <select class="sel" id="dDispF"><option value="">처리 전체</option><option value="alert">알림</option><option value="suppressed">알림 끔(예외)</option></select>
+      <input class="inp" id="dq" placeholder="탐지명·IP·계정·이벤트 ID" style="width:220px">
+      <label class="note"><input type="checkbox" id="dCorr"> 여러 단계로 이어진 공격만</label>
+      <span style="margin-left:auto" class="note" id="detCount"></span><button class="btn">내보내기</button>
+    </div>
+    <div class="panel tw"><table class="t" id="detTable"></table></div>
+  </div>
+
+  <!-- PC·서버 -->
+  <div id="nsmAssets" class="hidden">
+    <div class="grid g4" id="aCards"></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="panel"><h3>장비 유형별 자산 <span class="r">통신·지문으로 판정 · 누르면 목록에 적용</span></h3><div class="pbody" id="aRoles"></div></div>
+      <div class="panel"><h3>식별 품질 <span class="r">무엇으로 알아냈나</span></h3><div class="pbody" id="aQual"></div></div>
+    </div>
+    <div class="bar" style="margin-top:12px">
+      <input class="inp" id="aq" placeholder="IP·이름·MAC" style="width:240px">
+      <select class="sel" id="aRole"></select>
+      <label class="note"><input type="checkbox" id="aDet"> 탐지가 있는 것만</label>
+      <span id="aFilt"></span>
+      <span class="note" style="margin-left:auto">행을 누르면 상세 정보</span>
+    </div>
+    <div class="panel tw"><table class="t" id="assetTable"></table><div class="pbody note" id="aPage" style="text-align:right"></div></div>
+  </div>
+  <div id="nsmEntity" class="hidden"></div>
+
+  <!-- 과거 기록 검색 -->
+  <div id="nsmRetro" class="hidden">
+    <div id="retroSearch">
+      <div class="callout">새로 받은 위협 정보(악성 IP·도메인 등)가 <b>과거에 우리 네트워크에서 보였는지</b> 찾습니다. 최근 90일은 몇 초 안에 결과가 나옵니다.</div>
+      <div class="grid g13">
+        <div class="panel" style="align-self:start"><h3>찾을 대상</h3><div class="pbody">
+          <textarea class="inp mono" id="iocIn" rows="9" placeholder="한 줄에 하나씩&#10;IP, 도메인, 계정 이름,&#10;파일 해시 등"></textarea>
+          <div id="iocChips" style="margin:6px 0"></div>
+          <div class="form" style="grid-template-columns:70px 1fr">
+            <label>기간</label><select class="sel" id="rPeriod"><option value="90">최근 90일</option><option value="365">최근 1년</option><option value="30">최근 30일</option></select>
+            <label>센서</label><select class="sel"><option>전체 센서</option><option>본사 센서</option><option>지사 센서</option></select>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn pri" id="rGo">검색</button><button class="btn" id="rSample">예시 넣기</button></div>
+        </div></div>
+        <div>
+          <div class="grid g3" id="rKpi"></div>
+          <div class="panel tw" style="margin-top:12px"><h3>검색 결과 <span class="r">누르면 상세</span></h3><table class="t" id="rTable"><tr><td class="muted" style="padding:30px;text-align:center">찾을 대상을 넣고 검색을 누르세요.</td></tr></table></div>
+          <div class="panel" style="margin-top:12px"><h3 id="rDetailH">상세</h3><div class="pbody" id="rDetail"><span class="muted">결과를 누르면 어느 PC·서버가 언제 접속했는지 보입니다.</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 관리 -->
+<div class="page view hidden" id="v-admin">
+  <div class="crumb" id="admCrumb">관리</div>
+  <div class="adm">
+    <div class="panel tree" id="tree">
+      <div class="g">시스템</div><a class="dis">환경 설정</a><a class="dis">계정</a>
+      <div class="g">장비</div><a data-a="devlist" class="on">장비 목록</a><a data-a="group">그룹 관리</a>
+      <div class="g">탐지/대응</div><a class="dis">정책 관리(MDS·MTA)</a><a data-a="rules">NSM 룰 정책 <span class="pill pnew">신규</span></a><a data-a="exc">NSM 예외 <span class="pill pnew">신규</span></a>
+      <div class="g">자산</div><a data-a="agentpol">에이전트 정책 <span class="pill pnew">신규</span></a>
+      <div class="g">업데이트</div><a class="dis">제품 업데이트</a><a data-a="engine">NSM 탐지 엔진 <span class="pill pnew">신규</span></a>
+      <div class="g">연동</div><a class="dis">외부 연동</a>
+    </div>
+    <div id="admBody"></div>
+  </div>
+</div>
+
+<div class="page view hidden" id="v-placeholder"><div class="panel"><div class="pbody muted" style="padding:60px;text-align:center">이 메뉴는 기존 화면 그대로입니다(목업 범위 밖).</div></div></div>
+
+<div class="shade" id="shade"></div>
+<aside class="drawer" id="drawer"><header><h2 id="dTitle"></h2><span id="dBadge"></span><button class="btn" style="margin-left:auto" id="dClose">닫기</button></header><div class="body" id="dBody"></div><footer id="dFoot"></footer></aside>
+<div class="mshade" id="mshade"></div>
+<div class="modal" id="modal"><header><h2 id="mTitle"></h2><button class="btn" style="margin-left:auto" onclick="closeModal()">✕</button></header><div class="body" id="mBody"></div><footer id="mFoot"></footer></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// =============================================================== 공통
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let REPORT=null,DAY='11-18';let isInt=ip=>/^10\./.test(ip);   // 리포트 모드(applyReport)에서 바뀜
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SEV=['Critical','High','Medium','Low'];
+const SEVC={Critical:'#c62828',High:'#e65100',Medium:'#d4a106',Low:'#43a047'};
+const STAGE_KO={'Recon':'정찰','Initial Access':'초기 침투','Command and Control':'외부 연락(C2)','Credential Access':'계정 탈취','Lateral Movement':'내부 확산','Exfiltration':'정보 유출','Impact':'피해(암호화 등)'};
+const STAGE_SHORT={'Recon':'정찰','Initial Access':'침투','Command and Control':'C2','Credential Access':'계정','Lateral Movement':'확산','Exfiltration':'유출','Impact':'피해'};
+const STAGES=['Recon','Initial Access','Command and Control','Credential Access','Lateral Movement','Exfiltration','Impact'];
+const sev=s=>`<span class="sev ${s}">${s}</span>`;
+const prod=p=>`<span class="prod ${p}">${p}</span>`;
+const nowHM=()=>new Date().toTimeString().slice(0,5);
+function toast(m){const t=$('#toast');t.innerHTML=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
+function openDrawer(title,badge,body,foot=''){$('#dTitle').textContent=title;$('#dBadge').innerHTML=badge;$('#dBody').innerHTML=body;$('#dBody').scrollTop=0;$('#dFoot').innerHTML=foot;$('#dFoot').classList.toggle('hidden',!foot);$('#drawer').classList.add('on');$('#shade').classList.add('on')}
+function closeDrawer(){$('#drawer').classList.remove('on');$('#shade').classList.remove('on')}
+$('#dClose').onclick=$('#shade').onclick=closeDrawer;
+function openModal(title,body,foot){$('#mTitle').textContent=title;$('#mBody').innerHTML=body;$('#mFoot').innerHTML=foot;$('#modal').classList.add('on');$('#mshade').classList.add('on')}
+function closeModal(){$('#modal').classList.remove('on');$('#mshade').classList.remove('on')}
+$('#mshade').onclick=closeModal;
+const spark=(arr,c='#5b8def',w=70,h=18)=>{const m=Math.max(1,...arr),bw=w/arr.length,hh=v=>v?Math.max(3,h*v/m):0;return `<svg class="spark" width="${w}" height="${h}">${arr.map((v,i)=>`<rect x="${i*bw+.5}" y="${h-hh(v)}" width="${Math.max(2,bw-1)}" height="${hh(v)}" fill="${c}"><title>${v}</title></rect>`).join('')}<line x1="0" x2="${w}" y1="${h-.5}" y2="${h-.5}" stroke="#e1e5eb"/></svg>`};
+
+// =============================================================== 탐지 룰
+// [룰 번호, 탐지 유형, 이름, 단계, ATT&CK, 위험도(제안), 기준 요약, 모아서 판단]
+const RULES=[
+ ['01','Port_Scan','포트 스캔','Recon','T1046','Low','5분 안에 한 서버의 포트 25개 이상',1],
+ ['02','Host_Scan','호스트 스캔','Recon','T1018','Low','5분 안에 같은 포트로 25대 이상',1],
+ ['34','AD_Enumeration','AD 정보 수집','Recon','T1087.002','Medium','5분 안에 10대 이상에 로그온·관리자 조회',1],
+ ['03','SQL_Injection','SQL Injection','Initial Access','T1190','High','웹 요청에 SQL 공격 문장',0],
+ ['04','Webshell_Access','웹쉘 접근','Initial Access','T1505.003','Critical','웹쉘 파일·명령 실행 요청',0],
+ ['28','Cross_Site_Scripting','XSS','Initial Access','T1190','Medium','웹 요청에 실행되는 스크립트',0],
+ ['27','TLS_Heartbleed','Heartbleed','Initial Access','T1190','High','서버 메모리를 빼내는 요청 1건',0],
+ ['33','AI_Service_Exploit','AI 서버 관리 기능 악용','Initial Access','T1190','High','AI 서버 관리·실행 요청 1건',0],
+ ['05','NTLM_Spray','NTLM 비밀번호 대입(여러 계정)','Credential Access','T1110.003','Medium','10분 안에 10개 계정 로그인 실패',1],
+ ['17','Kerberos_Spray','도메인 비밀번호 대입(여러 계정)','Credential Access','T1110.003','Medium','10분 안에 10개 계정 로그인 실패',1],
+ ['17','Kerberos_Bruteforce','도메인 비밀번호 대입(한 계정)','Credential Access','T1110.001','Medium','10분 안에 한 계정 20번 실패',1],
+ ['26','SSH_Bruteforce','SSH 비밀번호 대입','Credential Access','T1110.001','Medium','5분 안에 실패한 접속 20번',1],
+ ['26','FTP_Bruteforce','FTP 비밀번호 대입','Credential Access','T1110.001','Medium','5분 안에 로그인 실패 10번',1],
+ ['29','HTTP_Bruteforce','웹 로그인 비밀번호 대입','Credential Access','T1110.001','Medium','5분 안에 서로 다른 비밀번호 20가지',1],
+ ['18','Kerberoasting','서비스 계정 티켓 탈취','Credential Access','T1558.003','High','10분 안에 약한 암호 티켓 5종류',1],
+ ['18','ASREP_Roasting','사전 인증 없는 계정 공격','Credential Access','T1558.004','High','약한 암호 로그인 응답 1건',0],
+ ['19','NTLM_Credential_Leak','외부로 Windows 로그인 정보 전송','Credential Access','T1187','Medium','외부 서버로 NTLM 인증 1건',0],
+ ['22','Name_Poisoning','이름 응답 위조','Credential Access','T1557.001','High','10분 안에 남의 이름 5개에 응답',1],
+ ['32','Machine_Account_Misuse','남의 PC 계정 사용','Credential Access','T1557.001','High','10분 안에 PC 계정 2개 이상 사용',1],
+ ['23','DCSync','DC 계정 정보 복제(DCSync)','Credential Access','T1003.006','Critical','DC가 아닌 장비의 복제 요청 1건',0],
+ ['34','Coerced_Authentication','강제 인증 유도','Credential Access','T1187','High','강제 인증 호출 1건',0],
+ ['34','Remote_Registry_Dump','원격 계정 DB 저장','Credential Access','T1003.002','Critical','레지스트리 계정 DB 원격 저장 1건',0],
+ ['34','Zerologon_Attempt','Zerologon','Credential Access','T1210','Critical','1분 안에 DC 인증 20번',1],
+ ['06','SMB_Admin_Share','관리 공유 접근 확산','Lateral Movement','T1021.002','Medium','1분 안에 2대 이상 관리 공유',1],
+ ['15','RDP_Lateral','원격 데스크톱 확산','Lateral Movement','T1021.001','Medium','1분 안에 3대 이상',1],
+ ['16','SSH_Lateral','SSH 확산','Lateral Movement','T1021.004','Medium','1분 안에 3대 이상',1],
+ ['20','WinRM_Lateral','PowerShell 원격 확산','Lateral Movement','T1021.006','Medium','5분 안에 3대 이상',1],
+ ['20','DCOM_Lateral','DCOM 원격 확산','Lateral Movement','T1021.003','Medium','5분 안에 3대 이상',1],
+ ['31','Remote_Service_Creation','원격 서비스 생성','Lateral Movement','T1569.002','High','다른 PC에 서비스 생성 1건',0],
+ ['31','Remote_Task_Creation','원격 예약 작업 등록','Lateral Movement','T1053.005','High','다른 PC에 예약 작업 1건',0],
+ ['31','Remote_WMI_Execution','원격 프로그램 실행(WMI)','Lateral Movement','T1047','High','다른 PC에 프로그램 실행 1건',0],
+ ['07','HTTP_Beaconing','주기적 외부 접속(HTTP)','Command and Control','T1071.001','High','같은 서버에 일정 간격 12번',0],
+ ['30','TLS_Beaconing','주기적 외부 접속(HTTPS)','Command and Control','T1071.001','High','일정 간격·같은 크기, 30분 이상',0],
+ ['08','DNS_Tunneling','DNS 터널링','Command and Control','T1071.004','High','5분 안에 무작위 이름 50개 조회',0],
+ ['09','Encrypted_C2','수상한 암호화 통신','Command and Control','T1573.002','High','자체 서명 인증서 등 점수 3점',0],
+ ['13','DGA_Domain','무작위 도메인 조회(DGA)','Command and Control','T1568.002','High','10분 안에 없는 도메인 50개',0],
+ ['24','Nonstandard_Port','엉뚱한 포트 사용','Command and Control','T1571','Medium','웹·SSH를 표준이 아닌 포트로',0],
+ ['24','Long_Connection','오래 유지되는 외부 연결','Command and Control','T1572','Medium','외부 연결 6시간 이상',0],
+ ['25','Unknown_Protocol','알 수 없는 통신','Command and Control','T1095','High','정체 모를 통신으로 1MB·30분',0],
+ ['35','IOC_Match','IOC 일치','Command and Control','T1071','High','위협 정보의 IP·도메인·URL과 통신 1건',0],
+ ['33','AI_API_From_Server','서버의 AI 서비스 접속','Command and Control','T1102','Medium','서버가 AI API에 접속 1건',0],
+ ['08','Exfil_DNS','DNS로 정보 유출','Exfiltration','T1048.003','High','5분 안에 DNS로 256KB',0],
+ ['10','Exfil_Large_Transfer','대용량 외부 전송','Exfiltration','T1041','High','연결 하나로 50MB 넘게 업로드',0],
+ ['12','Exfil_Web_Upload','클라우드로 업로드','Exfiltration','T1567.002','High','한 클라우드 서비스에 1시간 동안 합계 50MB',1],
+ ['14','Exfil_Volume_Aggregate','짧은 시간 대량 전송','Exfiltration','T1041','High','1분 안에 합계 50MB',1],
+ ['19','Outbound_SMB','외부 파일 공유 연결','Exfiltration','T1048','Medium','외부 445·139 포트 연결 1건',0],
+ ['33','AI_Service_Upload','AI 서비스에 대량 업로드','Exfiltration','T1567','Medium','1시간 안에 10MB',1],
+ ['21','SMB_Ransomware','랜섬웨어 의심(파일 대량 변경)','Impact','T1486','Critical','1분 안에 확장자 변경 30개',1],
+];
+const R={};RULES.forEach(r=>R[r[1]]={file:r[0],note:r[1],ko:r[2],stage:r[3],tech:r[4],sev:r[5],cond:r[6],agg:!!r[7]});
+// 쉬운 설명 · 확인할 것
+const GUIDE={
+ Port_Scan:['어떤 서비스가 열려 있는지 포트를 하나씩 두드려 봅니다.','출발지가 점검 장비인지 확인하고, 아니면 같은 장비의 다른 탐지를 함께 봅니다.'],
+ Host_Scan:['같은 포트로 여러 장비를 두드려 살아 있는 서버를 찾습니다.','445·3389 같은 관리 포트면 확산 준비일 수 있습니다.'],
+ SQL_Injection:['웹 입력값에 데이터베이스 명령을 끼워 넣어 정보를 빼내려 합니다.','웹서버 응답과 같은 출발지의 이후 요청을 확인합니다.'],
+ Webshell_Access:['웹서버에 몰래 올린 파일로 서버 명령을 실행합니다.','이미 침투된 상태일 수 있습니다. 서버에서 해당 파일을 찾으세요.'],
+ TLS_Beaconing:['감염된 장비가 공격자 서버에 일정한 간격으로 접속해 명령을 받습니다.','접속 도메인이 처음 보는 곳인지, 사용자가 모르는 프로그램인지 확인합니다.'],
+ HTTP_Beaconing:['감염된 장비가 공격자 서버에 일정한 간격으로 접속합니다.','광고·뉴스 사이트의 자동 새로고침일 수도 있습니다. 도메인을 확인하세요.'],
+ Kerberoasting:['서비스 계정의 로그인 티켓을 약한 암호로 받아 가 비밀번호를 풀려고 합니다.','해당 서비스 계정 비밀번호를 길고 복잡하게 바꾸세요.'],
+ SMB_Admin_Share:['관리용 공유 폴더(ADMIN$, C$)로 여러 PC에 들어갑니다.','사용된 계정의 주인이 한 작업인지 확인합니다.'],
+ Remote_Service_Creation:['다른 PC에 원격으로 서비스를 만들어 프로그램을 실행합니다(PsExec 등).','대상 PC에서 새로 만들어진 서비스를 확인합니다.'],
+ Exfil_Large_Transfer:['모은 데이터를 외부로 한 번에 보냅니다.','목적지가 업무용 서비스인지 확인합니다.'],
+ SMB_Ransomware:['파일 서버의 파일을 암호화하며 이름을 바꾸고 협박 안내 파일을 만듭니다.','최우선 대응: 출발지 PC를 즉시 네트워크에서 분리하고 백업을 확인합니다.'],
+ SSH_Bruteforce:['SSH 비밀번호를 계속 바꿔 가며 접속을 시도합니다.','대상 서버에 성공한 로그인이 있는지 확인합니다.'],
+ Nonstandard_Port:['방화벽을 피하려고 웹·SSH 통신을 엉뚱한 포트로 합니다.','목적지가 업무용 외부 서비스인지 확인합니다.'],
+ Exfil_DNS:['DNS 조회 이름에 데이터를 잘게 담아 외부로 내보냅니다. 방화벽이 DNS는 잘 막지 않는 점을 노립니다.','같은 도메인의 DNS 터널링 탐지가 있는지 보고, 도메인을 차단한 뒤 출발지 PC를 점검합니다.'],
+ AI_Service_Upload:['직원이 AI 서비스에 문서·데이터를 올렸습니다(섀도 AI).','회사 AI 사용 정책에 따라 사용자에게 확인합니다.'],
+ IOC_Match:['위협 정보(IOC)에 있는 악성 IP·도메인·URL과 통신했습니다.','연결이 성립했는지(DNS 조회만인지) 근거를 보고, 같은 IOC에 접속한 다른 PC를 과거 기록에서 찾습니다.'],
+ AI_API_From_Server:['서버가 AI 서비스에 접속했습니다. AI로 명령을 만드는 악성코드일 수 있습니다.','승인된 AI 연동 서버인지 확인합니다.'],
+ Encrypted_C2:['공격자 서버가 자주 쓰는 수상한 인증서로 암호화 통신을 합니다.','목적지가 사내 장비인지, 처음 보는 외부 서버인지 확인합니다.'],
+ DNS_Tunneling:['DNS 조회 이름에 데이터를 숨겨 외부와 통신합니다.','해당 도메인을 차단하고 출발지 PC의 프로그램을 확인합니다.'],
+ Long_Connection:['외부와의 연결 하나를 몇 시간씩 유지합니다(원격 제어 등).','VPN·메신저 같은 업무 서비스인지 확인합니다.'],
+ NTLM_Spray:['흔한 비밀번호를 여러 계정에 하나씩 대 봅니다.','실패한 계정 중 이후 로그인에 성공한 계정이 있는지 확인합니다.'],
+};
+// 룰 정책 화면의 조정 항목 [설정 이름, 기본값, 종류, 설명]
+const PARAMS={
+ Port_Scan:[['scan_interval','5min','interval','몇 분 동안 세는지'],['port_scan_threshold','25','count','두드린 포트 수 기준'],['port_scan_local_only','T','bool','내부 장비가 출발지일 때만'],['port_scan_count_nosyn','T','bool','변형 스캔(FIN·NULL 등)도 셈'],['port_scan_count_udp','T','bool','UDP 스캔도 셈']],
+ Host_Scan:[['host_scan_threshold','25','count','두드린 장비 수 기준'],['host_scan_exclude_ports','80/tcp, 443/tcp, 53/tcp, 53/udp, 7680/tcp','ports','세지 않을 포트']],
+ AD_Enumeration:[['ad_enum_epoch','5min','interval','몇 분 동안 세는지'],['ad_enum_threshold','10','count','조회한 장비 수 기준']],
+ SQL_Injection:[['web_attack_local_servers_only','T','bool','내부 웹서버로 들어오는 요청만'],['web_attack_body_max','4096','bytes','검사할 요청 본문 크기(바이트)']],
+ NTLM_Spray:[['ntlm_interval','10min','interval','몇 분 동안 세는지'],['ntlm_user_threshold','10','count','실패한 계정 수 기준']],
+ Kerberos_Spray:[['krb_spray_interval','10min','interval','몇 분 동안 세는지'],['krb_spray_user_threshold','10','count','실패한 계정 수 기준']],
+ Kerberos_Bruteforce:[['krb_bruteforce_threshold','20','count','한 계정의 실패 횟수 기준']],
+ SSH_Bruteforce:[['svc_bf_epoch','5min','interval','몇 분 동안 세는지'],['ssh_bf_threshold','20','count','실패한 접속 수 기준']],
+ FTP_Bruteforce:[['ftp_bf_threshold','10','count','로그인 실패 수 기준']],
+ HTTP_Bruteforce:[['web_bf_threshold','20','count','서로 다른 비밀번호 수 기준'],['web_bf_basic_threshold','20','count','기본 인증 실패 수 기준']],
+ Kerberoasting:[['krb_roast_interval','10min','interval','몇 분 동안 세는지'],['krb_roast_service_threshold','5','count','약한 티켓을 받은 서비스 수 기준']],
+ Name_Poisoning:[['poisoning_interval','10min','interval','몇 분 동안 세는지'],['poisoning_name_threshold','5','count','응답한 남의 이름 수 기준']],
+ Machine_Account_Misuse:[['machine_acct_epoch','10min','interval','몇 분 동안 세는지'],['machine_acct_threshold','2','count','사용한 PC 계정 수 기준']],
+ DCSync:[['dcsync_domain_controllers','','addrs','DC 주소 목록(꼭 입력)'],['dcsync_learn_dcs','T','bool','DC를 자동으로 찾기']],
+ Zerologon_Attempt:[['zerologon_epoch','1min','interval','몇 분 동안 세는지'],['zerologon_threshold','20','count','인증 시도 수 기준']],
+ SMB_Admin_Share:[['smb_lm_epoch','1min','interval','몇 분 동안 세는지'],['smb_lm_thresholds','2','count','접근한 장비 수 기준'],['exclude_ipc_share','T','bool','IPC$ 공유는 세지 않음']],
+ RDP_Lateral:[['rdp_lm_thresholds','3','count','접속한 장비 수 기준']],
+ SSH_Lateral:[['ssh_lm_thresholds','3','count','접속한 장비 수 기준']],
+ WinRM_Lateral:[['lm_mgmt_epoch','5min','interval','몇 분 동안 세는지'],['winrm_lm_threshold','3','count','접속한 장비 수 기준'],['lm_mgmt_allowlist','','addrs','관리 서버 주소(꼭 입력)']],
+ DCOM_Lateral:[['dcom_lm_threshold','3','count','접속한 장비 수 기준']],
+ HTTP_Beaconing:[['beacon_min_interval','3sec','interval','가장 짧은 간격'],['beacon_max_interval','3600sec','interval','가장 긴 간격'],['beacon_jitter','0.25','ratio','간격이 흔들려도 되는 정도'],['beacon_min_hits','12','count','연속 접속 횟수 기준'],['beacon_max_missed','2','count','빠져도 되는 횟수'],['proxy_aware_beacon','F','bool','프록시를 거친 접속도 보기(HTTP·HTTPS 공통, 켜면 기본 예외 목록이 함께 적용됨)']],
+ TLS_Beaconing:[['tls_beacon_size_tolerance','0.25','ratio','크기가 달라도 되는 정도'],['tls_beacon_max_duration','2min','interval','이보다 긴 접속은 제외'],['tls_beacon_min_span','30min','interval','패턴이 이어져야 하는 시간'],['proxy_aware_beacon','F','bool','프록시를 거친 접속도 보기(HTTP·HTTPS 공통, 켜면 기본 예외 목록이 함께 적용됨)']],
+ DNS_Tunneling:[['dnstun_interval','5min','interval','몇 분 동안 세는지'],['dnstun_unique_sub','50','count','무작위 이름 수 기준'],['dnstun_suspicious_ratio','0.5','ratio','수상한 이름 비율'],['dns_tunnel_resolvers','','addrs','내부 DNS 서버 주소(출발지에서 제외)']],
+ Exfil_DNS:[['dnsexfil_bytes','262144','bytes','DNS로 보낸 양 기준(바이트)']],
+ Encrypted_C2:[['enc_c2_score_threshold','3','count','탐지 점수 기준'],['enc_c2_w_selfsigned','2','count','자체 서명 인증서 점수'],['enc_c2_w_nosni','1','count','도메인 이름 없음 점수'],['proxy_aware_enc_c2','T','bool','프록시를 거친 암호화 통신도 보기']],
+ DGA_Domain:[['dga_interval','10min','interval','몇 분 동안 세는지'],['dga_nxdomain_threshold','50','count','없는 도메인 조회 수 기준'],['dga_ratio_threshold','0.8','ratio','없는 도메인 비율'],['dga_like_ratio','0.5','ratio','무작위 모양 비율']],
+ Nonstandard_Port:[['nonstd_port_allowed_ports','','ports','허용할 외부 포트'],['proxy_aware_nonstd','T','bool','프록시를 거친 연결은 요청한 목적지 포트로 판단']],
+ Long_Connection:[['long_conn_duration','6hr','interval','오래된 연결 기준 시간']],
+ Unknown_Protocol:[['unknown_proto_min_bytes','1000000','bytes','보낸 양 기준(바이트)'],['unknown_proto_min_duration','30min','interval','지속 시간 기준']],
+ Exfil_Large_Transfer:[['exfil_bytes_threshold','52428800','bytes','업로드 크기 기준(바이트)']],
+ Exfil_Web_Upload:[['webupload_epoch','1hr','interval','몇 시간 동안 더하는지'],['webupload_bytes','52428800','bytes','합계 업로드 크기 기준(바이트)']],
+ Exfil_Volume_Aggregate:[['exfil_epoch','1min','interval','몇 분 동안 세는지'],['exfil_thresholds','52428800','bytes','합계 크기 기준(바이트)']],
+ AI_Service_Upload:[['ai_upload_epoch','1hr','interval','몇 시간 동안 세는지'],['ai_upload_bytes','10000000','bytes','업로드 크기 기준(바이트)'],['proxy_aware_ai','T','bool','프록시를 거친 AI 서비스 접속도 보기']],
+ AI_API_From_Server:[['ai_server_nets','','addrs','서버 대역(직접 지정)'],['proxy_aware_ai','T','bool','프록시를 거친 AI 서비스 접속도 보기']],
+ IOC_Match:[['ioc_match_inbound','F','bool','외부 IOC 주소가 들어온 연결도 탐지'],['ioc_match_dns','T','bool','DNS 조회 이름도 맞춤']],
+ SMB_Ransomware:[['ransomware_interval','1min','interval','몇 분 동안 세는지'],['ransomware_rename_threshold','30','count','확장자 바꾼 파일 수 기준'],['ransomware_note_threshold','5','count','안내 파일을 만든 폴더 수 기준']],
+};
+const PROFILES=['기본 정책','본사 센서','지사 센서'];
+const POLICY={};let curProfile='본사 센서';
+PROFILES.forEach(p=>{POLICY[p]={};RULES.forEach(r=>{POLICY[p][r[1]]={on:true,sev:r[5],params:{},deployed:{on:true,sev:r[5],params:{}},hist:[]}})});
+[['본사 센서','HTTP_Beaconing','proxy_aware_beacon','T'],['본사 센서','TLS_Beaconing','proxy_aware_beacon','T'],['본사 센서','Long_Connection','long_conn_duration','12hr'],['본사 센서','WinRM_Lateral','lm_mgmt_allowlist','10.10.0.40'],['본사 센서','DCSync','dcsync_domain_controllers','10.10.10.10'],['지사 센서','Port_Scan','port_scan_threshold','40']].forEach(([p,n,k,v])=>{POLICY[p][n].params[k]=v;POLICY[p][n].deployed.params[k]=v;POLICY[p][n].hist.push(['2026-11-12 14:20','admin',`${paramLabel(n,k)} = ${v}`,'배포됨'])});
+POLICY['지사 센서'].AI_Service_Upload.on=false;POLICY['지사 센서'].AI_Service_Upload.deployed.on=false;
+const RULESET={'기본 정책':'POL-2026.11.17-r3','본사 센서':'POL-2026.11.17-r3','지사 센서':'POL-2026.11.12-r2'};
+function paramLabel(n,k){const p=(PARAMS[n]||[]).find(x=>x[0]===k);return p?p[3]:k}
+
+// =============================================================== PC·서버
+const ASSETS=[
+ {ip:'10.10.10.5',host:'WEB-SERVER-01',role:'웹 서버',os:'Linux',mac:'00:11:22:33:44:55',agent:[],key:['호스트 이름',80],last:'11-18 10:50',svc:['tcp/80','tcp/443','tcp/22']},
+ {ip:'10.10.10.8',host:'PC-08',role:'업무 PC',os:'Windows 11',mac:'00:11:22:33:44:08',agent:['V3','MDS Agent'],key:['도메인 컴퓨터 계정',90],last:'11-18 10:49',svc:[]},
+ {ip:'10.10.10.20',host:'DB-01',role:'DB 서버',os:'Windows Server 2019',mac:'00:11:22:33:44:20',agent:['V3','MDS Agent'],key:['도메인 컴퓨터 계정',90],last:'11-18 10:48',svc:['tcp/1433']},
+ {ip:'10.10.10.10',host:'DC-01',role:'도메인 컨트롤러',os:'Windows Server 2022',mac:'00:11:22:33:44:10',agent:['V3','MDS Agent'],key:['도메인 컴퓨터 계정',90],last:'11-18 10:50',svc:['tcp/88','tcp/389','udp/53','tcp/445']},
+ {ip:'10.10.10.30',host:'FS-01',role:'파일 서버',os:'Windows Server 2019',mac:'00:11:22:33:44:30',agent:['V3','MDS Agent'],key:['도메인 컴퓨터 계정',90],last:'11-18 10:47',svc:['tcp/445']},
+ {ip:'10.10.10.31',host:'PC-31',role:'업무 PC',os:'Windows 10',mac:'00:11:22:33:44:31',agent:['V3'],key:['DHCP 정보',85],last:'11-18 10:41',svc:[]},
+ {ip:'10.10.10.32',host:'PC-32',role:'업무 PC',os:'Windows 10',mac:'00:11:22:33:44:32',agent:['V3','MDS Agent'],key:['DHCP 정보',85],last:'11-18 10:44',svc:[]},
+ {ip:'10.10.10.40',host:'DEV-LNX-02',role:'개발 서버',os:'Ubuntu 22.04',mac:'00:11:22:33:44:40',agent:[],key:['SSH 정보',60],last:'11-18 10:30',svc:['tcp/22','tcp/8080']},
+ {ip:'10.10.10.50',host:'',role:'',os:'',mac:'00:11:22:33:44:50',agent:[],key:['MAC 주소',40],last:'11-18 10:33',svc:[]},
+ {ip:'10.10.10.60',host:'MDS-01',role:'AhnLab MDS',os:'',mac:'00:11:22:33:44:60',agent:[],key:['장비 인증서',80],last:'11-18 10:50',svc:['tcp/8291','tcp/8293','tcp/50007']},
+ {ip:'10.10.10.70',host:'AI-GPU-01',role:'AI 서버',os:'Ubuntu 22.04',mac:'00:11:22:33:44:70',agent:[],key:['호스트 이름',80],last:'11-18 10:45',svc:['tcp/8265','tcp/11434']},
+ {ip:'10.10.10.80',host:'PC-80',role:'업무 PC',os:'macOS 15',mac:'00:11:22:33:44:80',agent:[],key:['호스트 이름',70],last:'11-18 10:46',svc:[]},
+ {ip:'10.10.10.91',host:'raspberrypi',role:'',os:'Linux',mac:'b8:27:eb:12:34:91',agent:[],key:['호스트 이름',70],last:'11-18 10:40',svc:['tcp/22']},
+ {ip:'10.10.0.15',host:'PROXY-01',role:'프록시',os:'Linux',mac:'00:11:22:33:00:15',agent:[],key:['호스트 이름',70],last:'11-18 10:50',svc:['tcp/3128']},
+ {ip:'10.10.10.1',host:'CORE-SW-01',role:'',os:'Cisco IOS 15.2',mac:'00:1b:54:3c:10:01',agent:[],key:['SNMP 장비 이름',70],last:'11-18 10:50',svc:['udp/161','tcp/22']},
+ {ip:'10.10.10.100',host:'PRN-3F-01',role:'프린터',os:'',mac:'3c:2a:f4:51:00:64',agent:[],key:['SNMP 장비 이름',70],last:'11-18 10:42',svc:['tcp/9100','udp/161','tcp/80']},
+ {ip:'10.10.10.95',host:'iPhone',role:'',os:'iOS 17',mac:'a6:3e:91:0d:22:95',agent:[],key:['DHCP 정보',85],last:'11-18 10:38',svc:[]},
+];
+// 장비 유형·제조사·지문 (Manager 후처리: SPEC 4.11 OUI·Recog·TCP SYN, 4.12 장비 유형)
+//   dc: [유형, 근거, 신뢰도], vendor: OUI 제조사('' 없음, 'local' 로컬·랜덤 MAC), fp: [[입력 출처, 지문 결과]], tcp: TCP SYN 계열, osSrc: OS 출처
+const DEVX={
+ '10.10.0.15':{dc:['서버','역할 프록시','높음'],vendor:'Dell Inc.',fp:[['HTTP 응답','프록시·중계 추정(서로 다른 Server 값 3개 이상)']],tcp:'Linux·Unix 계열'},
+ '10.10.10.5':{dc:['서버','역할 웹 서버','높음'],vendor:'Dell Inc.',fp:[['HTTP Server','Apache HTTPD 2.4.52 · Ubuntu Linux'],['SSH 배너','OpenSSH 8.9p1 · Ubuntu Linux']],tcp:'Linux·Unix 계열'},
+ '10.10.10.8':{dc:['PC','OS Windows 11','보통'],vendor:'LG Electronics',fp:[],tcp:'Windows 계열'},
+ '10.10.10.20':{dc:['서버','OS Windows Server 2019 · 역할 DB 서버','높음'],vendor:'Dell Inc.',fp:[],tcp:'Windows 계열'},
+ '10.10.10.10':{dc:['서버','역할 도메인 컨트롤러','높음'],vendor:'Dell Inc.',fp:[],tcp:'Windows 계열'},
+ '10.10.10.30':{dc:['서버','OS Windows Server 2019 · 역할 파일 서버','높음'],vendor:'Hewlett Packard Enterprise',fp:[],tcp:'Windows 계열'},
+ '10.10.10.31':{dc:['PC(데스크톱)','DHCP 호스트 이름 DESKTOP-4F7K2QX (Windows 기본 이름)','보통'],vendor:'LG Electronics',fp:[],tcp:'Windows 계열'},
+ '10.10.10.32':{dc:['PC','OS Windows 10','보통'],vendor:'Samsung Electronics',fp:[],tcp:'Windows 계열'},
+ '10.10.10.40':{dc:['서버','역할 개발 서버','높음'],vendor:'Super Micro Computer',fp:[['SSH 배너','OpenSSH 9.6p1 · Ubuntu Linux']],tcp:'Linux·Unix 계열'},
+ '10.10.10.50':{dc:['알 수 없음(Linux 계열)','TCP SYN 모양만 보임','낮음'],vendor:'',fp:[],tcp:'Linux·Unix 계열',osSrc:'TCP SYN 추정'},
+ '10.10.10.60':{dc:['보안 장비','장비 인증서 AhnLab MDS','높음'],vendor:'',fp:[],tcp:'Linux·Unix 계열'},
+ '10.10.10.70':{dc:['서버','역할 AI 서버','높음'],vendor:'Super Micro Computer',fp:[],tcp:'Linux·Unix 계열'},
+ '10.10.10.80':{dc:['PC(노트북)','DHCP 호스트 이름 MacBook-Pro-80 (기기 모델)','보통'],vendor:'Apple',fp:[],tcp:'macOS·iOS·BSD 계열'},
+ '10.10.10.91':{dc:['서버(추정)','OS Linux · SSH(22) 응답','낮음'],vendor:'Raspberry Pi Foundation',fp:[['SSH 배너','Dropbear SSH 2022.83']],tcp:'Linux·Unix 계열'},
+ '10.10.10.1':{dc:['네트워크 장비','SNMP sysDescr 지문: Switch','높음'],vendor:'Cisco Systems',fp:[['SNMP sysDescr','Cisco IOS 15.2(7)E8 [Switch]']],tcp:'네트워크 장비 계열',osSrc:'지문(Recog)'},
+ '10.10.10.100':{dc:['프린터','SNMP sysDescr 지문: Printer · 9100 응답','높음'],vendor:'HP Inc.',fp:[['SNMP sysDescr','HP LaserJet M507 [Printer]'],['HTTP Server','HP HTTP Server']],tcp:'Linux·Unix 계열'},
+ '10.10.10.95':{dc:['모바일(스마트폰)','User-Agent(iPhone)','높음'],vendor:'local',fp:[],tcp:'macOS·iOS·BSD 계열'},
+};
+const dx=a=>DEVX[a.ip]||{dc:['알 수 없음','','낮음'],vendor:'',fp:[]};
+const dcChip=a=>{const d=dx(a).dc;return `<span class="chip${d[2]==='낮음'?'':''}" style="${d[2]==='낮음'?'font-style:italic;':''}" title="${esc(d[1]+' · 신뢰도 '+d[2])}">${esc(d[0])}</span>`};
+const vendorTxt=a=>{const v=dx(a).vendor;return v==='local'?'로컬·랜덤 MAC':v};
+const DCGROUP=d=>/^PC/.test(d)?'PC':/^모바일/.test(d)?'모바일':/^서버/.test(d)?'서버':d.startsWith('알 수 없음')?'알 수 없음':d;
+const A={};ASSETS.forEach(a=>A[a.ip]=a);
+const who=ip=>{const a=A[ip];return `<span class="mono">${esc(ip)}</span>${a&&a.host?` <span class="muted">${esc(a.host)}</span>`:''}`};
+const nm=ip=>A[ip]&&A[ip].host?A[ip].host:ip;
+// 프록시를 거친 탐지: 대상 주소는 프록시(중계 장비), 실제 목적지는 근거의 host
+const dstCell=e=>e.via?`<span class="mono">${esc(e.host||'목적지 확인 안 됨')}</span> <span class="chip" title="${esc('프록시 '+e.via+' 경유')}">프록시 경유</span>`:who(e.dst);
+const dstName=e=>e.via?(e.host||'목적지 확인 안 됨'):nm(e.dst);
+const conf=c=>c>=85?'높음':c>=60?'보통':'낮음';
+
+// =============================================================== 탐지 데이터
+let seq=1024;const EV=[];
+function nsm(t,note,src,dst,extra={}){const r=R[note];EV.push(Object.assign({id:'NSM-2611180'+(seq++),prod:'NSM',t,note,name:r.ko,diag:'NSM.'+note,stage:r.stage,tech:r.tech,sev:r.sev,src,dst,sensor:'NSM-SENSOR-01',occ:1},extra))}
+function other(prod,t,name,src,dst,sev,extra={}){EV.push(Object.assign({id:prod+'-2611180'+(seq++),prod,t,name,src,dst,sev,sensor:prod==='MDS'?'MDS-01':'MTA-01'},extra))}
+nsm('09:02','Port_Scan','198.51.100.23','10.10.10.5',{proto:'tcp',port:'-',ev:[['포트 스캔','두드린 포트 31개(22, 80, 443, 8080 …), 응답 없음·거부']]});
+nsm('09:06','SQL_Injection','198.51.100.23','10.10.10.5',{proto:'tcp',port:80,ev:[['웹 요청',"GET /item.php?id=1' union select user,pass from users--"]]});
+nsm('09:11','Webshell_Access','198.51.100.23','10.10.10.5',{proto:'tcp',port:80,ev:[['웹 요청','/uploads/shell.php?cmd=whoami (명령 실행)']]});
+nsm('09:25','TLS_Beaconing','10.10.10.5','203.0.113.40',{proto:'tcp',port:443,occ:3,sni:'update-check.example',ev:[['주기 접속','60초 간격 31번 연속, 30분 이상, 접속 도메인 update-check.example, 매번 약 2.1KB']]});
+nsm('09:58','Kerberoasting','10.10.10.5','10.10.10.10',{proto:'tcp',port:88,account:'svc_web',ev:[['티켓 요청','약한 암호(RC4) 티켓 6종류, 예: MSSQLSvc/db01.corp.example']]});
+nsm('10:07','SMB_Admin_Share','10.10.10.5','10.10.10.31',{proto:'tcp',port:445,account:'CORP\\svc_sql',victims:['10.10.10.31','10.10.10.32'],ev:[['관리 공유 접근','\\\\10.10.10.31\\ADMIN$ (계정 CORP\\svc_sql)'],['관리 공유 접근','\\\\10.10.10.32\\C$ (계정 CORP\\svc_sql)']]});
+nsm('10:09','Remote_Service_Creation','10.10.10.5','10.10.10.32',{proto:'tcp',port:445,account:'CORP\\svc_sql',ev:[['원격 서비스 생성','서비스 이름 PSEXESVC']]});
+nsm('10:18','Exfil_Large_Transfer','10.10.10.31','203.0.113.77',{proto:'tcp',port:443,sni:'files.transfer-host.example',ev:[['대용량 업로드','184.2MB, 접속 도메인 files.transfer-host.example, 6분 12초']]});
+nsm('10:26','SMB_Ransomware','10.10.10.32','10.10.10.30',{proto:'tcp',port:445,account:'CORP\\svc_sql',ev:[['확장자 변경','파일 212개, 예: report.docx → report.docx.lockd'],['협박 안내 파일','README_DECRYPT.txt, 폴더 9곳']]});
+EV.push({id:'NSM-2611180'+(seq++),prod:'NSM',t:'10:26',note:'Correlated_KillChain',name:'여러 단계로 이어진 공격(7단계)',diag:'NSM.Correlation.KillChain',stage:'Impact',stages:STAGES.slice(),tech:'T1046→T1190→T1505.003→T1071.001→T1558.003→T1021.002→T1041→T1486',sev:'Critical',src:'198.51.100.23',dst:'10.10.10.32',victims:['10.10.10.32','10.10.10.31','10.10.10.5'],sensor:'NSM-SENSOR-01',corr:true,proto:'-',port:'-',occ:1,ev:[['연결된 단계','정찰 → 초기 침투 → 외부 연락 → 계정 탈취 → 내부 확산 → 정보 유출 → 피해, 탐지 9건']]});
+nsm('08:14','HTTP_Beaconing','10.10.10.80','203.0.113.91',{proto:'tcp',port:80,host:'ad-refresh.example',disp:'suppressed',exc:'X-ad-refresh',ev:[['주기 접속','300초 간격 12번, 도메인 ad-refresh.example']]});
+nsm('08:40','SSH_Bruteforce','10.10.10.50','10.10.10.40',{proto:'tcp',port:22,occ:4,ev:[['로그인 실패','5분 동안 25번 실패, 프로그램 libssh2']]});
+nsm('09:30','Nonstandard_Port','10.10.10.8','203.0.113.15',{proto:'tcp',port:8081,ev:[['비표준 포트','HTTPS를 8081 포트로, 도메인 portal.partner.example']]});
+nsm('09:44','AI_Service_Upload','10.10.10.8','10.10.0.15',{proto:'tcp',port:443,via:'10.10.0.15:3128',host:'chat.openai.com',ev:[['AI 업로드','1시간 동안 14.6MB, chat.openai.com'],['프록시 경유','PC → 프록시 10.10.0.15:3128, 요청한 목적지 chat.openai.com:443']]});
+nsm('10:02','AI_API_From_Server','10.10.10.20','api.openai.com',{proto:'tcp',port:443,ev:[['서버의 AI 접속','DB 서버(1433 포트 응답)로 판단, api.openai.com']]});
+nsm('10:33','Host_Scan','10.10.10.50','10.10.10.0/24',{proto:'tcp',port:445,ev:[['호스트 스캔','445 포트로 48대']]});
+nsm('10:41','Encrypted_C2','10.10.10.40','203.0.113.120',{proto:'tcp',port:443,ev:[['수상한 인증서','자체 서명(2점) + 도메인 이름 없음(1점) = 3점']]});
+nsm('10:36','DNS_Tunneling','10.10.10.80','tun.example-c2.net',{proto:'udp',port:53,ev:[['DNS 터널','무작위 이름 86개, 수상한 비율 91%']]});
+nsm('10:44','Exfil_DNS','10.10.10.80','tun.example-c2.net',{proto:'udp',port:53,ev:[['DNS로 보낸 양','5분 동안 조회 이름에 담아 412KB, 도메인 tun.example-c2.net']]});
+(function(){let x=7;const rnd=()=>(x=(x*1103515245+12345)%2147483648)/2147483648;
+ const kinds=[['Port_Scan',4],['Host_Scan',3],['Nonstandard_Port',5],['HTTP_Beaconing',4],['TLS_Beaconing',3],['SSH_Bruteforce',2],['Long_Connection',2],['Encrypted_C2',1],['NTLM_Spray',1]];
+ const pool=[];kinds.forEach(k=>{for(let i=0;i<k[1];i++)pool.push(k[0])});
+ const srcs=['10.10.10.8','10.10.10.31','10.10.10.40','10.10.10.50','10.10.10.80','10.10.10.20'];
+ for(let i=0;i<46;i++){const h=rnd()<0.75?7+Math.floor(rnd()*4):Math.floor(rnd()*7),m=Math.floor(rnd()*(h===10?50:60));
+  const note=pool[Math.floor(rnd()*pool.length)],src=srcs[Math.floor(rnd()*srcs.length)];
+  const dst=note.includes('Scan')||note==='NTLM_Spray'?'10.10.10.'+(10+Math.floor(rnd()*30)):'203.0.113.'+(100+Math.floor(rnd()*90));
+  nsm(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),note,src,dst,{proto:'tcp',port:note==='Nonstandard_Port'?[8081,8443,2222,4443][Math.floor(rnd()*4)]:note.includes('Scan')?'-':443,ev:[['-','평시 탐지 예시']]})}})();
+other('MDS','09:52','악성 파일(동적 분석) Trojan/Win.Agent','203.0.113.50','10.10.10.8','Critical',{file:'invoice_2026.exe',action:'차단'});
+other('MDS','10:15','의심 문서(매크로)','203.0.113.51','10.10.10.31','High',{file:'quote_v2.docm',action:'격리'});
+other('MDS','07:41','PUP 설치 파일','203.0.113.52','10.10.10.80','Low',{file:'setup_free.exe',action:'탐지'});
+other('MDS','10:47','악성 스크립트(PowerShell)','203.0.113.53','10.10.10.32','High',{file:'update.ps1',action:'차단'});
+other('MTA','08:55','악성 메일 첨부','203.0.113.60','user31@corp.example','High',{file:'payment.zip',action:'격리'});
+other('MTA','09:20','피싱 URL','203.0.113.61','user08@corp.example','Medium',{file:'-',action:'태그'});
+other('MTA','10:40','스팸 대량 발송','203.0.113.62','다수','Low',{file:'-',action:'차단'});
+EV.sort((a,b)=>b.t.localeCompare(a.t));
+const nsmEv=()=>EV.filter(e=>e.prod==='NSM');
+const evOf=(note,src)=>EV.find(e=>e.note===note&&e.src===src&&e.ev&&e.ev[0][0]!=='-');
+
+// 통신 기록(선별 메타데이터) — 같은 시간대 통신
+const META=[
+ ['10:26:03','smb_files','10.10.10.32','10.10.10.30','파일 이름 변경 report.docx → report.docx.lockd'],
+ ['10:25:40','smb_mapping','10.10.10.32','10.10.10.30','공유 폴더 연결 \\\\FS-01\\share'],
+ ['10:18:22','flow_summary','10.10.10.31','203.0.113.77','443 포트 3번 연결, 보냄 193.1MB'],
+ ['10:17:58','ssl','10.10.10.31','203.0.113.77','HTTPS 접속 files.transfer-host.example'],
+ ['10:09:11','dce_rpc','10.10.10.5','10.10.10.32','원격 호출 svcctl::CreateServiceW'],
+ ['10:07:30','ntlm','10.10.10.5','10.10.10.31','Windows 로그인 CORP\\svc_sql'],
+ ['09:58:02','kerberos','10.10.10.5','10.10.10.10','티켓 요청 svc_web → MSSQLSvc/db01 (RC4)'],
+ ['09:30:00','flow_summary','10.10.10.5','203.0.113.40','443 포트 31번 연결, 보냄 66KB'],
+ ['09:25:12','ssl','10.10.10.5','203.0.113.40','HTTPS 접속 update-check.example'],
+ ['09:11:40','http','198.51.100.23','10.10.10.5','웹 접속 GET /uploads/shell.php → 200'],
+ ['09:06:12','http','198.51.100.23','10.10.10.5','웹 접속 GET /item.php → 500'],
+ ['08:40:00','ssh','10.10.10.50','10.10.10.40','SSH 접속 실패 3번(libssh2)'],
+];
+const LOGKO={smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
+const tmin=t=>+t.slice(0,2)*60+ +t.slice(3,5);
+function metaFor(e){if(e.meta)return e.meta;const t=tmin(e.t),v=e.victims||[e.dst];return META.filter(m=>m[2]===e.src&&v.includes(m[3])&&Math.abs(tmin(m[0])-t)<=10)}
+
+// =============================================================== 공격 스토리
+// steps: [번호, 탐지(note, src), 시각, 단계, 출발, 대상, 쉬운 문장, 확정 여부]
+const STORIES=[
+ {id:'ST-0118-01',title:'외부에서 웹서버 침투 → 내부 확산 → 랜섬웨어',seed:'198.51.100.23',sev:'Critical',status:'조사 중',owner:'김보안',
+  first:'08:51',firstDet:'09:02',last:'10:26',dwell:'11분',
+  steps:[
+   [1,['Port_Scan','198.51.100.23'],'09:02','Recon','198.51.100.23','10.10.10.5','외부 198.51.100.23이 웹서버(WEB-SERVER-01)의 열린 포트를 찾았습니다(31개 두드림).',1],
+   [2,['SQL_Injection','198.51.100.23'],'09:06','Initial Access','198.51.100.23','10.10.10.5','웹서버의 상품 페이지에 SQL 공격 문장을 보냈습니다.',1],
+   [3,['Webshell_Access','198.51.100.23'],'09:11','Initial Access','198.51.100.23','10.10.10.5','웹서버에 올린 웹쉘로 명령(whoami)을 실행했습니다. 이때부터 웹서버가 공격자의 손에 넘어갔습니다.',1],
+   [4,['TLS_Beaconing','10.10.10.5'],'09:25','Command and Control','10.10.10.5','203.0.113.40','웹서버가 update-check.example(203.0.113.40)에 60초마다 접속하기 시작했습니다(공격자 서버와 연락).',1],
+   [5,['Kerberoasting','10.10.10.5'],'09:58','Credential Access','10.10.10.5','10.10.10.10','웹서버가 DC에 서비스 계정 티켓 6종류를 약한 암호로 요청했습니다(비밀번호 탈취 시도, 계정 svc_web).',1],
+   [6,['SMB_Admin_Share','10.10.10.5'],'10:07','Lateral Movement','10.10.10.5','10.10.10.31','웹서버가 svc_sql 계정으로 PC-31·PC-32의 관리 공유에 들어갔습니다.',1],
+   [7,['Remote_Service_Creation','10.10.10.5'],'10:09','Lateral Movement','10.10.10.5','10.10.10.32','웹서버가 PC-32에 원격 서비스(PSEXESVC)를 만들어 프로그램을 실행했습니다.',1],
+   [8,['Exfil_Large_Transfer','10.10.10.31'],'10:18','Exfiltration','10.10.10.31','203.0.113.77','PC-31이 외부 files.transfer-host.example로 184MB를 올렸습니다.',1],
+   [9,['SMB_Ransomware','10.10.10.32'],'10:26','Impact','10.10.10.32','10.10.10.30','PC-32가 파일 서버(FS-01)의 파일 212개 이름을 .lockd로 바꾸고 협박 안내 파일을 만들었습니다.',1],
+  ],
+  obs:[
+   ['08:51','외부 198.51.100.23이 웹서버의 웹 페이지에 처음 접속했습니다(첫 흔적).','first'],
+   ['10:12','웹서버가 DC-01에 계정·그룹 목록을 조회했습니다(탐지 기준 아래).','move'],
+   ['11-02 14:11','16일 전 PC-80도 같은 공격자 서버(203.0.113.40)에 접속한 기록이 있습니다.','infra'],
+  ],
+  infra:[['update-check.example (203.0.113.40)',[['10.10.10.5','스토리 안','11-18 09:25 ~ 10:50','134회'],['10.10.10.80','통신 기록으로만 확인','11-02 14:11 ~ 14:40','12회']],0],['files.transfer-host.example (203.0.113.77)',[['10.10.10.31','스토리 안','11-18 10:17 ~ 10:18','3회']],0]],
+  moves:[['10.10.10.5','10.10.10.10','원격 호출 samr(계정·그룹 조회)','10:12','관리 접속'],['10.10.10.32','10.10.10.20','445 포트 2번 연결','10:22','연결']],
+  skipped:{prior:2,common:1},
+  ext:['203.0.113.40','203.0.113.77'],obsHosts:['10.10.10.80','10.10.10.20'],
+ },
+ {id:'ST-0118-02',title:'PC-80의 DNS 터널링 → DNS로 정보 유출',seed:'10.10.10.80',sev:'Critical',status:'신규',owner:'',first:'08:14',firstDet:'10:36',last:'10:44',dwell:'2시간 22분',
+  steps:[
+   [1,['HTTP_Beaconing','10.10.10.80'],'08:14','Command and Control','10.10.10.80','203.0.113.91','PC-80이 ad-refresh.example에 5분마다 접속했습니다. 광고 사이트로 확인 중이라 알림이 꺼져 있어 스토리의 시작점은 아니고, 같은 PC의 탐지라 함께 보여 줍니다.',1],
+   [2,['DNS_Tunneling','10.10.10.80'],'10:36','Command and Control','10.10.10.80','tun.example-c2.net','PC-80이 tun.example-c2.net 아래 무작위 이름 86개를 조회했습니다(DNS로 외부와 통신). 이 탐지에서 스토리가 시작됐습니다.',1],
+   [3,['Exfil_DNS','10.10.10.80'],'10:44','Exfiltration','10.10.10.80','tun.example-c2.net','PC-80이 같은 도메인으로 5분 동안 조회 이름에 담아 412KB를 내보냈습니다(DNS로 정보 유출).',1],
+  ],obs:[],infra:[],moves:[],skipped:{prior:0,common:0},ext:['203.0.113.91','tun.example-c2.net'],obsHosts:[]},
+ {id:'ST-0118-03',title:'이름 없는 장비(10.10.10.50)의 SSH 비밀번호 대입과 스캔',seed:'10.10.10.50',sev:'Medium',status:'신규',owner:'',first:'08:40',firstDet:'08:40',last:'10:33',dwell:'0분',
+  steps:[
+   [1,['SSH_Bruteforce','10.10.10.50'],'08:40','Credential Access','10.10.10.50','10.10.10.40','10.10.10.50이 개발 서버(DEV-LNX-02)에 SSH 비밀번호를 계속 바꿔 넣었습니다(4번 반복).',1],
+   [2,['Host_Scan','10.10.10.50'],'10:33','Recon','10.10.10.50','10.10.10.0/24','10.10.10.50이 445 포트로 48대를 두드렸습니다.',1],
+  ],obs:[],infra:[],moves:[],skipped:{prior:0,common:0},ext:[],obsHosts:[]},
+ {id:'ST-0118-04',title:'DEV-LNX-02의 수상한 암호화 통신',seed:'10.10.10.40',sev:'High',status:'신규',owner:'',first:'10:41',firstDet:'10:41',last:'10:41',dwell:'0분',single:true,
+  steps:[[1,['Encrypted_C2','10.10.10.40'],'10:41','Command and Control','10.10.10.40','203.0.113.120','DEV-LNX-02가 자체 서명 인증서를 쓰는 외부 서버와 암호화 통신을 했습니다.',1]],obs:[],infra:[],moves:[],skipped:{prior:0,common:0},ext:['203.0.113.120'],obsHosts:[]},
+];
+let SINGLE_HIDDEN=11;
+STORIES.forEach(s=>{s.steps.forEach(x=>{const e=evOf(x[1][0],x[1][1]);x.push(e?e.id:null)});s.reached=[...new Set(s.steps.map(x=>STAGES.indexOf(x[3])))].sort((a,b)=>a-b);s.hosts=[...new Set(s.steps.flatMap(x=>[x[4],x[5]]).filter(ip=>isInt(ip)&&!ip.includes('/')))]});
+const storyOf=id=>STORIES.find(s=>s.steps.some(x=>x[8]===id))||(EV.find(e=>e.id===id&&e.corr)?STORIES[0]:null);
+const stg=s=>`<span class="stg">${STAGES.map((_,i)=>`<i class="${s.reached.includes(i)?'on':''} ${i===Math.max(...s.reached)?'last':''}" title="${STAGE_KO[STAGES[i]]}"></i>`).join('')}</span>`;
+
+// =============================================================== 센서·엔진
+const SENSORS=[
+ {name:'NSM-SENSOR-01',ip:'10.10.0.11',grp:'본사 센서',st:'ok',hb:'10:50:12',cpu:38,mem:61,disk:44,ifc:'eth5 (SPAN)',pps:'182K',bps:'1.42 Gbps',sig:'2026.11.17',ioc:'2026.07.22',loss:0.02,zeek:'실행 중',suri:'실행 중',lag:'12초',send:'정상',eng:'2026.11.17-r3',zv:'9.0.1'},
+ {name:'NSM-SENSOR-02',ip:'10.20.0.11',grp:'본사 센서',st:'warn',hb:'10:49:58',cpu:71,mem:83,disk:79,ifc:'eth3 (TAP)',pps:'96K',bps:'0.81 Gbps',sig:'2026.11.17',ioc:'2026.07.22',loss:1.84,zeek:'실행 중',suri:'사용 안 함',lag:'4분 10초',send:'지연',eng:'2026.11.17-r3',zv:'9.0.1'},
+ {name:'NSM-SENSOR-03',ip:'10.30.0.11',grp:'지사 센서',st:'bad',hb:'09:12:40',cpu:0,mem:0,disk:52,ifc:'eth1 (SPAN)',pps:'-',bps:'-',sig:'2026.11.10',ioc:'2026.07.22',loss:0,zeek:'응답 없음',suri:'응답 없음',lag:'1시간 38분',send:'실패',eng:'2026.11.10-r1',zv:'8.0.9'},
+];
+const ENGINE={cur:'2026.11.17-r3',latest:'2026.11.24-r1',hist:[['2026-11-17 22:10','네트워크 행위 룰 2026.11.17-r3 · 시그니처 룰 2026.11.17','본사 센서','완료','admin'],['2026-11-10 22:05','네트워크 행위 룰 2026.11.10-r1','지사 센서','완료','admin'],['2026-11-10 21:40','네트워크 행위 룰 2026.11.10-r1','본사 센서','자동 되돌림(시작 경고)','admin']]};
+
+// =============================================================== 화면 전환
+function show(v){$$('.view').forEach(x=>x.classList.add('hidden'));($('#v-'+v)||$('#v-placeholder')).classList.remove('hidden');$$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));window.scrollTo(0,0)}
+$('#nav').onclick=e=>{const b=e.target.closest('button');if(!b)return;show(b.dataset.v);if(b.dataset.v==='dash')renderDash()};
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(!g)return;e.preventDefault();const k=g.dataset.go;
+  if(k==='nsm-det'){closeDrawer();show('nsm');nsmTab('det')}
+  if(k==='asset'){closeDrawer();show('nsm');openEntity(g.dataset.ip)}
+  if(k==='det'){openDet(g.dataset.id)}
+  if(k==='story'){closeDrawer();closeModal();show('nsm');nsmTab('story');openStory(g.dataset.id,g.dataset.n,g.dataset.tab)}
+  if(k==='retro'){closeDrawer();show('nsm');nsmTab('retro');$('#iocIn').value=g.dataset.q;runRetro()}
+  if(k==='rule'){closeDrawer();if(typeof closeModal==='function')closeModal();show('admin');adm('rules');openRule(g.dataset.n)}
+  if(k==='exc-new'){closeDrawer();excForm(null,JSON.parse(g.dataset.pre))}
+});
+
+// =============================================================== 대시보드
+function renderDash(){renderAssetStrip();
+  const ns=nsmEv(),act=ns.filter(e=>e.disp!=='suppressed'),bySev=Object.fromEntries(SEV.map(s=>[s,act.filter(e=>e.sev===s).length]));
+  const open=STORIES.filter(s=>!s.single&&s.status!=='종료');
+  const kp=[REPORT?['캡처 구간 네트워크 탐지',act.length,`알림 끈 탐지 ${ns.length-act.length}건 제외 · ${REPORT.span}`]:['오늘 네트워크 탐지',act.length,`알림 끈 탐지 ${ns.length-act.length}건 제외 · 어제보다 38% 많음`],['먼저 확인할 탐지',bySev.Critical+bySev.High,'위험도 Critical·High'],['진행 중인 공격 스토리',open.length,'여러 단계로 이어진 공격']];
+  $('#kpis').innerHTML=kp.map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  $('#dashStories').innerHTML=`<tr><th>공격 스토리</th><th>어디까지 왔나</th><th>시작</th><th>마지막 활동</th><th class="num">관련 PC·서버</th><th>위험도</th><th>상태</th><th>대응</th></tr>`+open.map(s=>`<tr class="click" data-go="story" data-id="${s.id}"><td><b>${esc(s.title)}</b></td><td class="nw">${stg(s)} <span class="note">${STAGE_KO[STAGES[Math.max(...s.reached)]]}</span></td><td class="nw">${s.d||DAY} ${s.first}</td><td class="nw">${s.d2||s.d||DAY} ${s.last}</td><td class="num">${s.hosts.length}</td><td>${sev(s.sev)}</td><td><span class="chip ${s.status==='조사 중'?'warn':''}">${s.status}</span></td><td><a data-go="story" data-id="${s.id}" data-tab="resp">${respCell(s)}</a></td></tr>`).join('');
+  const tot=act.length||1;
+  $('#sevbox').innerHTML=`<div class="stack">${SEV.map(s=>`<i style="width:${100*bySev[s]/tot}%;background:${SEVC[s]}"></i>`).join('')}</div><div class="leg">${SEV.map(s=>`<span><i style="background:${SEVC[s]}"></i>${s} <b>${bySev[s]}</b></span>`).join('')}</div>
+   <div class="note" style="margin-top:10px">네트워크 탐지는 원래 위험도가 없어서 탐지 종류마다 위험도를 정해 둡니다. <a onclick="show('admin');adm('rules')">관리 › NSM 룰 정책</a>에서 바꿀 수 있습니다. Suricata 탐지는 Suricata가 정한 위험도를 그대로 씁니다.</div>`;
+  const W=640,H=170,pl=28,pb=20,bw=(W-pl-8)/24,series=[...Array(24)].map(()=>[0,0,0,0]);act.forEach(e=>series[+e.t.slice(0,2)][SEV.indexOf(e.sev)]++);
+  const mx=Math.max(4,...series.map(s=>s.reduce((a,b)=>a+b,0)));let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" class="svgt">`;
+  for(let i=0;i<=4;i++){const y=8+(H-pb-8)*i/4;svg+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" stroke="#eef1f5"/><text x="${pl-4}" y="${y+4}" text-anchor="end">${Math.round(mx*(1-i/4))}</text>`}
+  series.forEach((s,h)=>{let y=H-pb;[3,2,1,0].forEach(i=>{const hh=(H-pb-8)*s[i]/mx;y-=hh;if(hh>0)svg+=`<rect x="${pl+h*bw+2}" y="${y}" width="${bw-4}" height="${hh}" fill="${SEVC[SEV[i]]}" rx="1"><title>${h}시 ${SEV[i]} ${s[i]}건</title></rect>`});if(h%3===0)svg+=`<text x="${pl+h*bw+bw/2}" y="${H-5}" text-anchor="middle">${h}시</text>`});
+  $('#trend').innerHTML=svg+'</svg><div class="leg">'+SEV.map(s=>`<span><i style="background:${SEVC[s]}"></i>${s}</span>`).join('')+'</div>';
+  const tc={};act.filter(e=>!e.corr).forEach(e=>tc[e.name]=(tc[e.name]||0)+(e.occ||1));const top=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,8),tm=Math.max(...top.map(x=>x[1]));
+  $('#types').innerHTML=top.map(([k,v])=>`<div class="hbar"><span>${esc(k)}</span><span class="b"><i style="width:${100*v/tm}%"></i></span><span class="num">${v}</span></div>`).join('');
+  const sc={};act.filter(e=>!e.corr).forEach(e=>sc[e.stage]=(sc[e.stage]||0)+1);const sm=Math.max(...Object.values(sc));
+  $('#stages').innerHTML=STAGES.map(s=>`<div class="hbar"><span>${STAGE_KO[s]}</span><span class="b"><i style="width:${100*(sc[s]||0)/sm}%;background:${s==='Impact'?'#c62828':'#5b8def'}"></i></span><span class="num">${sc[s]||0}</span></div>`).join('');
+  $('#sensorMini').innerHTML=SENSORS.map(s=>`<div style="display:flex;gap:8px;align-items:center;margin:6px 0"><span class="dot ${s.st}"></span><b style="width:120px">${s.name}</b><span class="note">패킷 누락 ${s.loss}% · 마지막 전송 ${s.lag} 전</span></div>`).join('')+`<a onclick="show('devices')" class="note">장비 현황에서 보기 →</a>`;
+  const ac={};act.forEach(e=>[e.src,...(e.victims||[e.dst])].forEach(ip=>{if(A[ip]){ac[ip]=ac[ip]||{n:0,s:3};ac[ip].n++;ac[ip].s=Math.min(ac[ip].s,SEV.indexOf(e.sev))}}));
+  $('#topAssets').innerHTML=`<tr><th>이름</th><th>IP</th><th>역할</th><th class="num">탐지</th><th>가장 높은 위험도</th></tr>`+Object.entries(ac).sort((a,b)=>a[1].s-b[1].s||b[1].n-a[1].n).slice(0,10).map(([ip,v])=>`<tr class="click" data-go="asset" data-ip="${ip}"><td><b>${esc(A[ip].host||'(이름 없음)')}</b></td><td class="mono">${ip}</td><td>${esc(A[ip].role)}</td><td class="num">${v.n}</td><td>${sev(SEV[v.s])}</td></tr>`).join('');
+  $('#recent').innerHTML=`<tr><th>시각</th><th>탐지</th><th>출발지 → 목적지</th><th>위험도</th></tr>`+act.filter(e=>e.sev==='Critical'||e.sev==='High').sort((x,y)=>SEV.indexOf(x.sev)-SEV.indexOf(y.sev)||y.t.localeCompare(x.t)).slice(0,8).map(e=>`<tr class="click" data-go="det" data-id="${e.id}"><td>${e.t}</td><td>${esc(e.name)}</td><td>${who(e.src)} → ${dstCell(e)}</td><td>${sev(e.sev)}</td></tr>`).join('');
+}
+
+// =============================================================== 탐지 현황(MDS·MTA)
+function renderEvents(){
+  const p=$('#fProd').value,s=$('#fSev').value,q=$('#fq').value.toLowerCase();
+  const rows=EV.filter(e=>e.prod!=='NSM'&&(!p||e.prod===p)&&(!s||e.sev===s)&&(!q||JSON.stringify(e).toLowerCase().includes(q)));
+  $('#evCount').textContent=`전체 ${rows.length}건`;
+  $('#evTable').innerHTML=`<tr><th><input type="checkbox"></th><th>이벤트 ID</th><th>제품</th><th>위험도</th><th>탐지명</th><th>출발지</th><th>대상</th><th>파일</th><th>조치</th><th>장비</th><th>탐지 시각</th></tr>`+rows.map(e=>`<tr><td><input type="checkbox"></td><td class="mono nw">${e.id}</td><td>${prod(e.prod)}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}</td><td class="mono">${esc(e.src)}</td><td>${who(e.dst)}</td><td class="mono">${esc(e.file)}</td><td>${esc(e.action)}</td><td>${esc(e.sensor)}</td><td class="nw">2026-11-18 ${e.t}</td></tr>`).join('');
+}
+
+// =============================================================== NSM 분석: 탭
+function nsmTab(t){
+  $$('#nsmSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  $('#nsmStory').classList.toggle('hidden',t!=='story');$('#nsmDet').classList.toggle('hidden',t!=='det');$('#nsmAssets').classList.toggle('hidden',t!=='assets');$('#nsmRetro').classList.toggle('hidden',t!=='retro');$('#nsmEntity').classList.add('hidden');
+  $('#nsmCrumb').textContent='NSM 분석 › '+{story:'공격 스토리',det:'NSM 탐지',assets:'자산 현황',retro:'과거 기록 검색'}[t];
+  if(t==='det')renderDet();
+  if(t==='story'){$('#storyList').classList.remove('hidden');$('#storyDetail').classList.add('hidden');renderStories()}
+}
+$('#nsmSeg').onclick=e=>{const b=e.target.closest('button');if(b)nsmTab(b.dataset.t)};
+
+// ---- 공격 스토리 목록·상세
+function renderStories(){
+  const st=$('#sSt').value,sv=$('#sSev').value,single=$('#sSingle').checked;
+  const rows=STORIES.filter(s=>(!st||s.status===st)&&(!sv||s.sev===sv)&&(single||!s.single));
+  $('#sCnt').textContent=`${rows.length}개${single?'':` · 탐지 1건뿐인 스토리 ${SINGLE_HIDDEN+STORIES.filter(s=>s.single).length}개는 접혀 있음`}`;
+  $('#storyTable').innerHTML=`<tr><th>공격 스토리</th><th>시작 공격자</th><th>어디까지 왔나</th><th>기간</th><th class="num">관련 PC·서버</th><th class="num">외부 대상</th><th>위험도</th><th>상태</th><th>대응</th><th>담당자</th></tr>`+
+   rows.map(s=>`<tr class="click" data-go="story" data-id="${s.id}"><td><b>${esc(s.title)}</b><span class="sub">${s.id} · 탐지 ${s.steps.length}건</span></td><td>${who(s.seed)}${isInt(s.seed)?'':' <span class="chip warn">외부</span>'}</td><td class="nw">${stg(s)}<div class="note">${STAGE_KO[STAGES[Math.max(...s.reached)]]}까지</div></td><td class="nw">${s.d||DAY} ${s.first} ~ ${s.d2&&s.d2!==s.d?s.d2+' ':''}${s.last}</td><td class="num">${s.hosts.length}</td><td class="num">${s.ext.length}</td><td>${sev(s.sev)}</td><td><span class="chip ${s.status==='조사 중'?'warn':s.status==='종료'?'':'bad'}">${s.status}</span></td><td><a data-go="story" data-id="${s.id}" data-tab="resp">${respCell(s)}</a></td><td>${esc(s.owner||'-')}</td></tr>`).join('');
+}
+['#sSt','#sSev','#sSingle'].forEach(s=>$(s).onchange=renderStories);
+let showCand=true,showObs=true,stTab='flow';
+function openStory(id,hl,tab){
+  const s=STORIES.find(x=>x.id===id);if(!s)return;
+  if(tab)stTab=tab;else if(hl)stTab='flow';
+  $('#storyList').classList.add('hidden');const el=$('#storyDetail');el.classList.remove('hidden');
+  $('#nsmCrumb').innerHTML=`<a onclick="nsmTab('story')">NSM 분석 › 공격 스토리</a> › ${esc(s.id)}`;
+  const lastStage=Math.max(...s.reached),obsN=s.obs.length;
+  const board=STAGES.map((st,i)=>{const ns=s.steps.filter(x=>x[3]===st);return `<div class="${ns.length?'on':''} ${i===lastStage?'last':''}"><h4>${STAGE_KO[st]}</h4>${ns.map(x=>`<span class="nbadge" title="${esc(x[6])}" onclick="hlStep(${x[0]})">${x[0]}</span>`).join('')||'<span class="note">-</span>'}</div>`}).join('');
+  // 내러티브: 탐지 + 관측을 시간순
+  const items=[...s.steps.map(x=>({t:x[2],step:x})),...(showObs?s.obs.map(o=>({t:o[0].length>5?'00:00'+o[0]:o[0],obs:o})):[])].sort((a,b)=>a.t.localeCompare(b.t));
+  const narr=items.map(it=>it.step?`<li id="sn${it.step[0]}" ${String(hl)===String(it.step[0])?'class="hl"':''}><span class="tm">${it.step[2]}</span><span><span class="nbadge">${it.step[0]}</span></span><span>${esc(it.step[6])} <span class="chip">${STAGE_KO[it.step[3]]}</span><div class="ev">${(evById(it.step[8])||{ev:[]}).ev.map(v=>esc(v[0]+': '+v[1])).join(' · ')} ${it.step[8]?`· <a data-go="det" data-id="${it.step[8]}">탐지 상세</a>`:''}</div></span></li>`:
+   `<li class="obs"><span class="tm">${esc(it.obs[0].length>5?it.obs[0]:it.obs[0])}</span><span><span class="chip obs">관측</span></span><span>${esc(it.obs[1])}<div class="ev">통신 기록으로 본 내용입니다(탐지는 아님).</div></span></li>`).join('');
+  el.innerHTML=`<div class="panel"><div class="pbody">
+   <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap"><div><div style="font-size:18px;font-weight:700">${esc(s.title)}</div><div class="note">${s.id} · 시작 공격자 ${esc(s.seed)} · ${sev(s.sev)}</div></div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="note">상태</span><select class="sel" id="stStatus">${['신규','조사 중','종료'].map(x=>`<option ${x===s.status?'selected':''}>${x}</option>`).join('')}</select><span class="note">담당자</span><select class="sel" id="stOwner">${['','김보안','이관제','박대응'].map(x=>`<option ${x===s.owner?'selected':''}>${x||'(없음)'}</option>`).join('')}</select>
+     <button class="btn" id="stCase">대응 현황에 사건 등록</button><button class="btn" onclick="toast('보고서(PDF)로 내보냈습니다(목업)')">보고서로 내보내기</button><button class="btn" onclick="nsmTab('story')">목록</button></div></div>
+   <div class="ssum" style="margin-top:12px">
+    <div><b>기간</b><span>${s.first} ~ ${s.last}</span></div>
+    <div><b>탐지</b><span>${s.steps.length}건</span></div>
+    <div><b>탐지로 확인된 PC·서버</b><span>${s.hosts.length}대</span><div class="note">${s.hosts.map(nm).join(', ')}</div></div>
+    <div><b>통신 기록으로만 보인 PC·서버</b><span>${s.obsHosts.length}대</span><div class="note">${s.obsHosts.map(nm).join(', ')||'-'}</div></div>
+    <div><b>외부 대상</b><span>${s.ext.length}곳</span><div class="note">${s.ext.join(', ')||'-'}</div></div>
+   </div>
+  </div></div>
+  <div class="tabs" id="stTabs" style="margin-top:12px"><button data-t="flow" class="${stTab==='flow'?'on':''}">공격 흐름</button><button data-t="resp" class="${stTab==='resp'?'on':''}">대응 <span class="pill pchg" id="stRespPill"></span></button></div>
+  <div id="stFlow" class="${stTab==='flow'?'':'hidden'}">
+  <div class="bar" style="margin:0"><label class="note"><input type="checkbox" id="stObs" ${showObs?'checked':''}> 통신 기록으로 본 내용도 보기(보라색)</label></div>
+  <div class="panel" style="margin-top:8px"><h3>어느 단계까지 왔나 <span class="r">번호를 누르면 아래 설명으로 이동</span></h3><div class="pbody"><div class="board">${board}</div></div></div>
+  <div class="panel" style="margin-top:12px"><h3>어디서 어디로 퍼졌나 <span class="r">실선 = 탐지, 보라 점선 = 확인이 필요한 내부 접속(통신 기록)</span></h3><div class="pbody svgt" style="overflow-x:auto">${storyGraph(s)}</div></div>
+  <div class="panel" style="margin-top:12px"><h3>무슨 일이 있었나 <span class="r">시간 순서</span></h3><div class="pbody"><ol class="narr">${narr}</ol></div></div>
+  ${showObs&&(s.infra.length||s.moves.length)?`<div class="grid g2" style="margin-top:12px">
+   <div class="panel tw"><h3>같은 공격자 서버에 접속한 PC·서버 <span class="r">앞뒤 24시간 · 과거 기록</span></h3><table class="t"><tr><th>공격자 서버</th><th>PC·서버</th><th>구분</th><th>시간</th><th class="num">횟수</th></tr>${s.infra.flatMap(x=>x[1].map((h,i)=>`<tr><td>${i?'':esc(x[0])}</td><td>${who(h[0])}</td><td>${h[1]==='스토리 안'?'<span class="chip">스토리 안</span>':'<span class="chip obs">통신 기록으로만</span>'}</td><td class="nw">${h[2]}</td><td class="num">${h[3]}</td></tr>`)).join('')}</table></div>
+   <div class="panel tw"><h3>확인이 필요한 내부 접속 <span class="r">탐지 기준에는 못 미친 관리 접속 · 통신 기록으로 찾음</span></h3><table class="t"><tr><th>출발</th><th>대상</th><th>내용</th><th>시각</th></tr>${s.moves.map(m=>`<tr><td>${who(m[0])}</td><td>${who(m[1])}</td><td>${esc(m[2])}</td><td>${m[3]}</td></tr>`).join('')}</table><div class="pbody note">평소에도 하던 통신 ${s.skipped.prior}건, 다른 PC들도 하는 통신 ${s.skipped.common}건은 공격과 관련 없는 것으로 보고 뺐습니다.</div></div></div>`:''}
+  <div class="callout" style="margin-top:12px">공격 스토리는 탐지를 시간·대상으로 이어서 만든 것입니다. "관측" 줄과 보라 점선은 탐지가 아니라 같은 시간대 통신 기록으로 추정한 내용이라, 실제 공격과 관련이 있는지 확인이 필요합니다.</div></div>
+  <div id="stResp" class="${stTab==='resp'?'':'hidden'}"></div>`;
+  renderResp(s);
+  $('#stTabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;stTab=b.dataset.t;$$('#stTabs button').forEach(x=>x.classList.toggle('on',x===b));$('#stFlow').classList.toggle('hidden',stTab!=='flow');$('#stResp').classList.toggle('hidden',stTab!=='resp')};
+  $('#stObs').onchange=e=>{showObs=e.target.checked;openStory(id)};
+  $('#stStatus').onchange=e=>{const from=s.status;s.status=e.target.value;addLog(s,'admin','상태 변경','스토리',`${from} → ${s.status}`,'');renderResp(s);toast(`상태를 "${s.status}"(으)로 바꿨습니다`)};
+  $('#stOwner').onchange=e=>{s.owner=e.target.value==='(없음)'?'':e.target.value;addLog(s,'admin','상태 변경','스토리',`담당자 ${s.owner||'(없음)'}`,'');renderResp(s);toast('담당자를 지정했습니다')};
+  $('#stCase').onclick=()=>openModal('대응 현황에 사건 등록',`<div class="form"><label>사건 제목</label><input class="inp" value="${esc(s.title)}"><label>위험도</label><div>${sev(s.sev)}</div><label>담당자</label><select class="sel"><option>${esc(s.owner||'김보안')}</option><option>이관제</option></select><label>포함 내용</label><div class="note">탐지 ${s.steps.length}건, 관련 PC·서버 ${s.hosts.length}대, 외부 대상 ${s.ext.length}곳, 내러티브</div></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" onclick="closeModal();toast('대응 현황에 사건 INC-2026-0412 를 등록했습니다')">등록</button>`);
+  if(hl)setTimeout(()=>hlStep(hl),50);
+}
+// =============================================================== 공격 스토리 · 대응
+// 대응 탭 = 조치 추천·가이드 / 조치 현황 / 조치 내역
+// how: agent(MDS Agent로 분리), agentscan(MDS Agent로 점검), fw(방화벽 차단), dns(DNS 차단), nac(NAC 차단), ticket(요청서), manual(직접 조치), retro(과거 기록 검색)
+const HOWL={agent:'MDS Agent로 분리',agentscan:'MDS Agent로 점검',fw:'방화벽 차단',dns:'DNS 차단',nac:'NAC 차단',ticket:'담당 부서에 요청',manual:'직접 조치',retro:'과거 기록 검색'};
+const HOWBTN={agent:'분리 요청',agentscan:'점검 요청',fw:'차단 요청',dns:'차단 요청',nac:'차단 요청',ticket:'요청서 만들기',manual:'결과 기록',retro:'검색하기'};
+const GROUPS=[['즉시','확산과 피해를 먼저 멈춥니다'],['외부 연락 끊기','공격자가 다시 명령하거나 자료를 가져가지 못하게 합니다'],['계정','탈취된 계정을 못 쓰게 합니다'],['범위 확인','다른 장비에도 퍼졌는지 확인합니다'],['복구','업무를 정상으로 되돌립니다']];
+const ACTST=['할 일','진행 중','완료','해당 없음'];
+const LOGC={'실행':'ok','요청':'warn','상태 변경':'','결과 기록':'','확인 경고':'bad','확인':'ok','조치 추가':'','재발 방지':'','종료':'ok'};
+const act=(grp,text,target,how,why,st='할 일',owner='',at='',note='')=>({grp,text,target,how,why,st,owner,at,note});
+const RESP={
+ 'ST-0118-01':{
+  acts:[
+   act('즉시','PC-32를 네트워크에서 분리','10.10.10.32','agent','파일 서버를 암호화한 PC입니다. 연결을 끊어 암호화가 더 퍼지는 것을 막습니다.','완료','김보안','10:38','MDS Agent가 분리함(Manager 통신만 유지)'),
+   act('즉시','WEB-SERVER-01을 네트워크에서 분리','10.10.10.5','manual','공격자가 처음 들어온 서버이자 다른 PC로 퍼뜨린 출발점입니다.','진행 중','인프라팀','10:41','MDS Agent가 없어 서버 담당자에게 요청함'),
+   act('즉시','웹쉘 파일(/uploads/shell.php) 제거와 웹서버 점검','10.10.10.5','ticket','웹쉘이 남아 있으면 공격자가 언제든 다시 들어옵니다. 취약한 페이지(item.php)도 함께 점검합니다.'),
+   act('외부 연락 끊기','공격자 서버 update-check.example (203.0.113.40) 차단','203.0.113.40','fw','공격자가 웹서버에 명령을 내리던 서버입니다.','완료','김보안','10:40','본사 방화벽 정책 #4412'),
+   act('외부 연락 끊기','업로드 대상 files.transfer-host.example (203.0.113.77) 차단','203.0.113.77','fw','자료를 올린 곳입니다. 추가 유출을 막습니다.'),
+   act('외부 연락 끊기','처음 공격한 198.51.100.23 차단','198.51.100.23','fw','처음 공격한 주소입니다. 다시 들어오지 못하게 합니다.'),
+   act('계정','svc_sql 비밀번호 변경(PC로 퍼질 때 쓰인 계정)','CORP\\svc_sql','ticket','다른 PC에 들어갈 때 쓰인 계정이라 공격자가 비밀번호를 알고 있습니다.'),
+   act('계정','svc_web 비밀번호 변경, 약한 암호(RC4) 티켓 사용 중지','CORP\\svc_web','ticket','약한 암호 티켓을 받아 갔으므로 비밀번호가 풀릴 수 있습니다.'),
+   act('범위 확인','PC-31 점검(외부로 184MB를 올린 PC)','10.10.10.31','manual','외부로 자료를 올린 PC라 악성코드가 남아 있을 수 있습니다.','할 일','','','MDS Agent 없음 · 직접 점검'),
+   act('범위 확인','PC-80 점검(16일 전 같은 공격자 서버에 접속)','10.10.10.80','manual','같은 공격자 서버에 접속한 적이 있어 이미 감염됐을 수 있습니다.','할 일','','','MDS Agent 없음 · 직접 점검'),
+   act('범위 확인','DB-01 점검(PC-32가 연결한 기록이 있음)','10.10.10.20','agentscan','감염된 PC-32가 접속한 서버입니다.'),
+   act('복구','FS-01 백업 확인, 암호화된 파일 212개 복구','10.10.10.30','manual','암호화된 파일을 백업에서 되돌립니다.'),
+   act('복구','유출된 184MB가 무엇인지 확인(업로드 서비스에 문의)','files.transfer-host.example','manual','어떤 자료가 나갔는지 알아야 신고·통지 여부를 정할 수 있습니다.'),
+  ],
+  verify:[
+   {name:'PC-32',target:'10.10.10.32',act:'네트워크 분리',at:'10:38',seen:'분리 후 통신 없음',st:'watch'},
+   {name:'203.0.113.40',target:'203.0.113.40',act:'방화벽 차단',at:'10:40',seen:'10:46 PC-80이 접속 시도 2번(방화벽에서 막힘)',st:'warn',fix:'10.10.10.80',other:'ST-0118-02'},
+  ],
+  prev:[
+   {text:'웹서버의 SQL Injection 취약점 패치(item.php)',kind:'ticket',to:'웹 담당(개발팀)'},
+   {text:'웹서버가 외부로 나가는 접속은 필요한 곳만 허용',kind:'ticket',to:'인프라팀'},
+   {text:'서비스 계정 비밀번호를 25자 이상으로 바꾸고 정기 변경',kind:'ticket',to:'AD 담당(인프라팀)'},
+   {text:'도메인 전체에서 약한 암호(RC4) 티켓 사용 중지',kind:'ticket',to:'AD 담당(인프라팀)'},
+   {text:'MDS Agent가 없는 장비 3대(WEB-SERVER-01, PC-31, PC-80)에 설치',kind:'ticket',to:'보안팀'},
+   {text:'공격자 주소 4개로 과거 기록을 다시 검색(다른 PC가 접속했는지)',kind:'retro',iocs:['198.51.100.23','203.0.113.40','203.0.113.77','files.transfer-host.example']},
+   {text:'서비스 계정 티켓 탈취 탐지 기준 검토(이번에는 6종류로 탐지됨, 기준 5종류)',kind:'rule',n:'Kerberoasting'},
+  ],
+  log:[
+   ['10:31','김보안','상태 변경','스토리','신규 → 조사 중, 담당자 김보안',''],
+   ['10:38','김보안','실행','PC-32','MDS Agent로 네트워크 분리','완료'],
+   ['10:40','김보안','실행','203.0.113.40','방화벽 차단(본사 방화벽 정책 #4412)','완료'],
+   ['10:41','김보안','요청','WEB-SERVER-01','인프라팀에 네트워크 분리 요청','진행 중'],
+   ['10:46','시스템','확인 경고','203.0.113.40','차단 뒤 PC-80이 접속 시도 2번(방화벽에서 막힘)','경고'],
+  ]},
+ 'ST-0118-02':{
+  acts:[
+   act('즉시','PC-80을 네트워크에서 분리','10.10.10.80','manual','DNS로 외부와 몰래 통신하며 데이터를 내보내고 있습니다.','할 일','','','MDS Agent가 없어 스위치 포트를 막아야 함'),
+   act('외부 연락 끊기','tun.example-c2.net 조회 차단','tun.example-c2.net','dns','공격자와 통신하는 도메인입니다.'),
+   act('외부 연락 끊기','ad-refresh.example 다시 확인(지금은 "알림만 끔" 예외 X-ad-refresh)','ad-refresh.example','manual','알림만 끈 예외가 실제 공격을 가리고 있을 수 있습니다.'),
+   act('범위 확인','PC-80에서 나간 데이터 확인(10:39~10:44, DNS로 약 412KB)','10.10.10.80','manual','무엇이 나갔는지 알아야 신고·통지 범위를 정할 수 있습니다.'),
+   act('범위 확인','다른 PC도 tun.example-c2.net을 조회했는지 과거 기록 검색','tun.example-c2.net','retro','같은 도메인을 조회한 다른 PC를 찾습니다.'),
+  ],verify:[],
+  prev:[{text:'PC-80에 MDS Agent 설치',kind:'ticket',to:'보안팀'},{text:'내부 DNS 서버에서 외부 무작위 이름 조회 제한',kind:'ticket',to:'인프라팀'}],log:[]},
+ 'ST-0118-03':{
+  acts:[
+   act('즉시','10.10.10.50 장비 주인 찾기(MAC 00:11:22:33:44:50, 연결된 스위치 포트 확인)','10.10.10.50','manual','이름 없는 장비라 누구 것인지부터 알아야 합니다.'),
+   act('즉시','10.10.10.50 네트워크 차단','10.10.10.50','nac','비밀번호 대입과 스캔을 계속하고 있습니다.'),
+   act('범위 확인','DEV-LNX-02에 성공한 SSH 로그인이 있는지 확인','10.10.10.40','manual','대입이 성공했으면 서버가 이미 넘어갔을 수 있습니다.'),
+  ],verify:[],
+  prev:[{text:'DEV-LNX-02는 비밀번호 로그인을 끄고 키 로그인만 허용',kind:'ticket',to:'개발팀'}],log:[]},
+ 'ST-0118-04':{acts:[act('범위 확인','203.0.113.120이 업무용 서버인지 확인','203.0.113.120','manual','처음 보는 서버라면 공격자 서버일 수 있습니다.')],verify:[],prev:[],log:[]},
+};
+let mclk=51;const mnow=()=>'10:'+String(Math.min(59,mclk++));
+let respSub='guide';
+function addLog(s,who,kind,target,text,result=''){const r=RESP[s.id];if(r)r.log.push([mnow(),who,kind,target,text,result])}
+function respStat(s){const r=RESP[s.id];if(!r)return null;const done=r.acts.filter(a=>a.st==='완료'||a.st==='해당 없음').length;
+  return {tot:r.acts.length,done,warn:r.verify.filter(v=>v.st==='warn').length,watch:r.verify.filter(v=>v.st==='watch').length,urgent:r.acts.filter(a=>a.grp==='즉시'&&a.st!=='완료'&&a.st!=='해당 없음').length}}
+function respCell(s){const k=respStat(s);if(!k)return '-';return `<span class="nw"><span class="prog ${k.done===k.tot?'ok':''}" style="display:inline-block;width:60px;min-width:60px;vertical-align:middle"><i style="width:${100*k.done/k.tot}%"></i></span> ${k.done}/${k.tot}</span>${k.warn?` <span class="chip bad">확인 경고 ${k.warn}</span>`:''}`}
+function tgtCell(t){const a=A[t];if(!a)return `<span class="mono">${esc(t)}</span>`;return `${who(t)}${a.agent.includes('MDS Agent')?'':' <span class="chip warn">MDS Agent 없음</span>'}`}
+const tgtName=t=>A[t]&&A[t].host?A[t].host:t;
+const remain=at=>{const m=Math.max(0,1440-Math.max(0,650-tmin(at)));return `${Math.floor(m/60)}시간 ${m%60}분`};
+const stChip=st=>`<span class="chip ${st==='완료'?'ok':st==='진행 중'?'warn':''}">${st}</span>`;
+function renderResp(s){
+  const r=RESP[s.id],el=$('#stResp');if(!r){el.innerHTML='<div class="note">대응 항목이 없습니다.</div>';return}
+  const k=respStat(s);
+  $('#stRespPill').innerHTML=`${k.done}/${k.tot}${k.warn?' · 경고 '+k.warn:''}`;
+  el.innerHTML=`<div class="seg" id="respSeg" style="margin-bottom:12px">${[['guide','조치 추천·가이드'],['status',`조치 현황 ${k.done}/${k.tot}`],['log',`조치 내역 ${r.log.length}`]].map(x=>`<button data-t="${x[0]}" class="${respSub===x[0]?'on':''}">${x[1]}</button>`).join('')}</div><div id="respBody"></div>`;
+  $('#respSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;respSub=b.dataset.t;renderResp(s)};
+  ({guide:respGuide,status:respStatus,log:respLog})[respSub](s,r,k);
+}
+// ---- 조치 추천·가이드
+function respGuide(s,r,k){
+  let n=0;
+  $('#respBody').innerHTML=`<div class="callout">이 공격 스토리에 나온 장비·계정·주소로 <b>해야 할 조치를 순서대로 추천</b>합니다. 위에서부터 진행하세요. 실행 버튼은 관리자가 승인해야 동작하며 자동으로 막지 않습니다. <span class="note">(목업: MDS Agent 분리·방화벽 연동은 실제 가능 여부를 확인하기 전 가정입니다)</span></div>
+  ${GROUPS.map(([g,d])=>{const rows=r.acts.map((a,i)=>[a,i]).filter(([a])=>a.grp===g);if(!rows.length)return '';
+   return `<div class="panel" style="margin-bottom:12px"><h3>${g} <span class="r">${d}</span></h3><div class="pbody" style="padding-top:4px">${rows.map(([a,i])=>{const fin=a.st==='완료'||a.st==='해당 없음';n++;
+    return `<div style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2);${fin?'opacity:.6':''}"><span class="nbadge" style="${fin?'background:#2e7d32':''}">${fin?'✓':n}</span>
+     <div>${a.hl?'<span class="chip bad">추가 확인 필요</span> ':''}<b>${esc(a.text)}</b><div style="margin-top:3px">대상 ${tgtCell(a.target)}</div><div class="note" style="margin-top:3px"><b style="color:var(--ink2);font-weight:600">왜</b> ${esc(a.why)}</div><div class="note"><b style="color:var(--ink2);font-weight:600">방법</b> ${HOWL[a.how]}${a.note?' · '+esc(a.note):''}</div></div>
+     <div style="text-align:right">${stChip(a.st)}<div style="margin-top:6px">${fin?'':`<button class="btn sm ${g==='즉시'?'pri':''}" data-run="${i}">${HOWBTN[a.how]}</button>`}</div></div></div>`}).join('')}</div></div>`}).join('')}
+  <div class="panel"><h3>재발 방지 권고 <span class="r">이번 공격에서 드러난 약점</span></h3><div class="pbody">${r.prev.map((p,i)=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line2)"><span style="width:16px">${p.done?'<span class="oktxt">✔</span>':'○'}</span><span style="flex:1;${p.done?'color:var(--ink3)':''}">${esc(p.text)}${p.done?`<div class="note">${esc(p.done)}</div>`:''}</span>${p.done?'':p.kind==='ticket'?`<button class="btn sm" data-prev="${i}">요청서 만들기</button>`:p.kind==='retro'?`<button class="btn sm" data-prev="${i}">과거 기록 검색</button>`:`<a data-go="rule" data-n="${p.n}" class="nw">탐지 기준 보기</a>`}</div>`).join('')||'<div class="note">없음</div>'}</div></div>`;
+  $$('#respBody [data-run]').forEach(b=>b.onclick=()=>runAct(s,+b.dataset.run));
+  $$('#respBody [data-prev]').forEach(b=>b.onclick=()=>{const p=r.prev[+b.dataset.prev];
+    if(p.kind==='retro'){p.done=`과거 기록 검색 실행(${mnow()})`;addLog(s,'admin','재발 방지','-',`과거 기록 검색: ${p.iocs.join(', ')}`,'실행');show('nsm');nsmTab('retro');$('#iocIn').value=p.iocs.join('\n');runRetro();return}
+    ticketModal(p.text,p.to,s,to=>{p.done=`${to}에 요청함`;addLog(s,'admin','재발 방지','-',`${p.text} → ${to}에 요청`,'요청');renderResp(s)})});
+}
+// ---- 조치 현황
+function respStatus(s,r,k){
+  const conds=[[k.done===k.tot,`해야 할 조치를 모두 끝냄 (${k.done}/${k.tot})`],[k.watch===0,`조치 후 24시간 동안 다시 보이지 않음 (지켜보는 중 ${k.watch}건)`],[k.warn===0,`조치 후 확인 경고 없음 (${k.warn}건)`]],ok=conds.every(c=>c[0]);
+  $('#respBody').innerHTML=`<div class="grid g4">
+   <div class="panel kpi"><div class="k">조치 진행</div><div class="v">${k.done} / ${k.tot}</div><div class="prog ${k.done===k.tot?'ok':''}" style="margin-top:4px"><i style="width:${100*k.done/k.tot}%"></i></div></div>
+   <div class="panel kpi"><div class="k">먼저 할 조치 남음</div><div class="v" style="color:${k.urgent?'#c62828':''}">${k.urgent}</div><div class="d">"즉시" 항목 중 끝나지 않은 것</div></div>
+   <div class="panel kpi"><div class="k">조치 후 확인</div><div class="v">${k.warn?`<span style="color:#c62828">경고 ${k.warn}</span>`:'경고 없음'}</div><div class="d">지켜보는 중 ${k.watch}건</div></div>
+   <div class="panel kpi"><div class="k">종료 조건</div><div class="v">${conds.filter(c=>c[0]).length} / 3</div><div class="d">${ok?'스토리를 종료할 수 있습니다':'아직 종료할 수 없습니다'}</div></div>
+  </div>
+  <div class="panel tw" style="margin-top:12px"><h3>조치별 진행 <span class="r">상태·담당을 바꾸면 조치 내역에 남습니다</span><button class="btn sm" id="actAdd">조치 추가</button></h3>
+   <table class="t"><tr><th>상태</th><th>구분</th><th>조치</th><th>대상</th><th>방법</th><th>담당</th><th>시각</th><th>결과·메모</th></tr>
+   ${r.acts.map((a,i)=>{const fin=a.st==='완료'||a.st==='해당 없음';return `<tr class="${fin?'dim':''} ${a.hl?'chg':''}"><td><select class="sel ast" data-i="${i}" style="padding:1px 4px">${ACTST.map(x=>`<option ${x===a.st?'selected':''}>${x}</option>`).join('')}</select></td><td class="nw">${a.grp}</td><td>${esc(a.text)}</td><td>${tgtCell(a.target)}</td><td class="nw">${HOWL[a.how]}</td><td>${esc(a.owner||'-')}</td><td>${a.at||'-'}</td><td class="note">${esc(a.note||'')}</td></tr>`}).join('')}</table></div>
+  <div class="panel tw" style="margin-top:12px"><h3>조치 후 확인 <span class="r">조치한 대상을 24시간 동안 네트워크에서 지켜봅니다</span><a class="note" id="vSkip">(목업) 24시간 지난 것으로 보기</a></h3>
+   ${r.verify.length?`<table class="t"><tr><th>대상</th><th>조치</th><th>조치 시각</th><th>조치 후 보인 통신</th><th>판단</th><th></th></tr>${r.verify.map((v,i)=>`<tr ${v.st==='warn'?'style="background:#fdf3f3"':''}><td>${A[v.target]?who(v.target):`<span class="mono">${esc(v.name)}</span>`}</td><td>${v.act}</td><td>${v.at}</td><td>${esc(v.seen)}${v.other&&v.st==='warn'?`<div class="note">PC-80은 다른 공격 스토리 <a data-go="story" data-id="${v.other}">${v.other}</a>에도 있습니다</div>`:''}</td><td class="nw">${v.st==='watch'?`<span class="chip">지켜보는 중</span><div class="note">남은 시간 ${remain(v.at)}</div>`:v.st==='ok'?'<span class="chip ok">확인 완료</span>':v.st==='handled'?'<span class="chip warn">조치를 추가함</span>':'<span class="chip bad">경고</span><div class="errtxt">차단은 됐지만 다른 장비가 감염됐을 수 있음</div>'}</td><td class="nw">${v.st==='warn'?`<button class="btn sm pri" data-vfix="${i}">${nm(v.fix)} 점검을 즉시로 올리기</button><br><button class="btn sm" data-vack="${i}" style="margin-top:4px">문제없음으로 확인</button>`:''}</td></tr>`).join('')}</table>`:'<div class="pbody note">아직 조치한 대상이 없습니다. 분리·차단을 실행하면 여기에서 지켜봅니다.</div>'}
+   <div class="pbody note" style="padding-top:6px">분리한 PC가 다시 통신하거나, 차단한 주소에 어느 장비든 접속을 시도하면 경고합니다.</div></div>
+  <div class="panel" style="margin-top:12px"><h3>종료</h3><div class="pbody">${conds.map(c=>`<div class="${c[0]?'oktxt':'note'}" style="font-size:13px;margin:4px 0">${c[0]?'✔':'○'} ${c[1]}</div>`).join('')}
+    <div style="display:flex;gap:6px;margin-top:10px"><button class="btn" id="rptPrev">종료 보고서 미리보기</button><button class="btn pri" id="stClose" ${ok&&s.status!=='종료'?'':'disabled'}>${s.status==='종료'?'종료됨':'스토리 종료'}</button></div>
+    <div class="note" style="margin-top:6px">종료하면 보고서가 만들어지고 조치 내역에 남습니다.</div></div></div>`;
+  $$('#respBody .ast').forEach(x=>x.onchange=()=>{const a=r.acts[+x.dataset.i],from=a.st;a.st=x.value;a.at=mnow();if(!a.owner&&x.value!=='할 일')a.owner='admin';addLog(s,'admin','상태 변경',tgtName(a.target),`${a.text}: ${from} → ${x.value}`,x.value);renderResp(s);renderStoriesSoft()});
+  $$('#respBody [data-vfix]').forEach(b=>b.onclick=()=>{const v=r.verify[+b.dataset.vfix],a=r.acts.find(x=>x.target===v.fix);if(a){a.grp='즉시';a.hl=true;a.note=`차단한 공격자 서버(${v.name})에 ${v.seen.slice(0,5)} 접속 시도 → 감염 의심`}v.st='handled';addLog(s,'admin','확인',nm(v.fix),`확인 경고 처리: ${nm(v.fix)} 점검을 "즉시"로 올림`,'조치 추가');renderResp(s);toast(`${nm(v.fix)} 점검을 "즉시"로 올렸습니다`)});
+  $$('#respBody [data-vack]').forEach(b=>b.onclick=()=>{const v=r.verify[+b.dataset.vack];v.st='handled';addLog(s,'admin','확인',v.name,'확인 경고를 문제없음으로 처리','확인');renderResp(s);toast('확인했습니다')});
+  $('#vSkip').onclick=()=>{r.verify.forEach(v=>{if(v.st==='watch'){v.st='ok';addLog(s,'시스템','확인',v.name,`${v.act} 후 24시간 동안 다시 보이지 않음`,'확인 완료')}});renderResp(s)};
+  $('#actAdd').onclick=()=>{openModal('조치 추가',`<div class="form"><label>구분</label><select class="sel" id="naG">${GROUPS.map(g=>`<option>${g[0]}</option>`).join('')}</select><label>조치</label><input class="inp" id="naT" placeholder="무엇을 할지"><label>대상</label><input class="inp mono" id="naD" placeholder="IP·도메인·계정"><label>이유</label><input class="inp" id="naW" placeholder="왜 필요한지"><label>방법</label><select class="sel" id="naH">${Object.entries(HOWL).filter(([k])=>k!=='retro').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="naOk">추가</button>`);
+    $('#naOk').onclick=()=>{const t=$('#naT').value.trim();if(!t){toast('조치를 적어 주세요');return}r.acts.push(act($('#naG').value,t,$('#naD').value.trim(),$('#naH').value,$('#naW').value.trim()||'관리자가 추가한 조치입니다.'));addLog(s,'admin','조치 추가',$('#naD').value.trim()||'-',t,'');closeModal();renderResp(s)}};
+  $('#rptPrev').onclick=()=>report(s);
+  $('#stClose').onclick=()=>{s.status='종료';$('#stStatus').value='종료';addLog(s,'admin','종료','스토리','종료 조건을 모두 만족해 스토리를 종료, 종료 보고서 작성','종료');renderResp(s);toast(`${s.id}를 종료했습니다. 종료 보고서를 만들었습니다`);report(s)};
+}
+// ---- 조치 내역
+function respLog(s,r,k){
+  const kinds=[...new Set(r.log.map(l=>l[2]))];
+  const draw=()=>{const f=$('#lgK').value;const rows=r.log.slice().reverse().filter(l=>!f||l[2]===f);
+    $('#lgT').innerHTML=`<tr><th>시각</th><th>작업자</th><th>구분</th><th>대상</th><th>내용</th><th>결과</th></tr>`+(rows.map(l=>`<tr><td class="nw">11-18 ${l[0]}</td><td>${esc(l[1])}</td><td><span class="chip ${LOGC[l[2]]||''}">${l[2]}</span></td><td>${esc(l[3])}</td><td>${esc(l[4])}</td><td class="nw">${esc(l[5])}</td></tr>`).join('')||'<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">아직 조치 내역이 없습니다.</td></tr>')};
+  $('#respBody').innerHTML=`<div class="bar"><select class="sel" id="lgK"><option value="">구분 전체</option>${kinds.map(x=>`<option>${x}</option>`).join('')}</select><span class="note">누가 언제 무엇을 했는지 모두 남습니다(실행·요청·상태 변경·확인·종료).</span><button class="btn" style="margin-left:auto" onclick="toast('조치 내역을 CSV로 내려받았습니다(목업)')">내보내기</button></div><div class="panel tw"><table class="t" id="lgT"></table></div>`;
+  $('#lgK').onchange=draw;draw();
+}
+function renderStoriesSoft(){if(!$('#storyList').classList.contains('hidden'))renderStories()}
+function ticketModal(text,to,s,done){
+  openModal('조치 요청서 만들기',`<div class="form"><label>받는 부서</label><select class="sel" id="tkTo">${['인프라팀','AD 담당(인프라팀)','웹 담당(개발팀)','개발팀','보안팀'].map(x=>`<option ${x===to?'selected':''}>${x}</option>`).join('')}</select><label>요청 내용</label><textarea class="inp" rows="6" id="tkBody">[${s.id}] ${s.title}\n\n요청: ${text}\n\n배경: 공격 스토리에서 이 조치가 필요하다고 판단했습니다. 완료되면 회신 바랍니다.</textarea><label>기한</label><select class="sel"><option>오늘 안</option><option>3일 안</option><option>1주 안</option></select><label>보내는 방법</label><select class="sel"><option>메일</option><option>업무 요청 시스템(연동 시)</option></select></div>`,
+   `<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="tkOk">요청 보내기</button>`);
+  $('#tkOk').onclick=()=>{const t=$('#tkTo').value;closeModal();toast(`${t}에 요청서 REQ-2026-${300+mclk}를 보냈습니다`);done(t)}}
+function runAct(s,i){
+  const r=RESP[s.id],a=r.acts[i],t=a.target,name=tgtName(t);
+  const finish=(note,ver)=>{a.st='완료';a.at=mnow();a.owner=a.owner||'admin';a.note=note;if(ver)r.verify.push(Object.assign({name,target:t,at:a.at,st:'watch'},ver));addLog(s,'admin','실행',name,`${HOWL[a.how]}: ${a.text}`,'완료');renderResp(s);renderStoriesSoft()};
+  if(a.how==='retro'){a.st='진행 중';a.at=mnow();addLog(s,'admin','실행',name,`과거 기록 검색: ${t}`,'진행 중');closeModal();show('nsm');nsmTab('retro');$('#iocIn').value=t;runRetro();return}
+  if(a.how==='ticket'){ticketModal(a.text,'인프라팀',s,to=>{a.st='진행 중';a.owner=to;a.at=mnow();a.note=`${to}에 요청함`;addLog(s,'admin','요청',name,`${to}에 요청: ${a.text}`,'진행 중');renderResp(s)});return}
+  if(a.how==='manual'){openModal('직접 조치 결과 기록',`<div class="kv"><dt>조치</dt><dd>${esc(a.text)}</dd><dt>대상</dt><dd>${tgtCell(t)}</dd><dt>가이드</dt><dd>${esc(a.why)}</dd></div><div class="form" style="margin-top:10px"><label>결과</label><textarea class="inp" id="mnR" rows="4" placeholder="무엇을 했고 무엇을 확인했는지"></textarea><label>상태</label><select class="sel" id="mnS"><option>완료</option><option>진행 중</option><option>해당 없음</option></select></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="mnOk">저장</button>`);
+    $('#mnOk').onclick=()=>{a.st=$('#mnS').value;a.at=mnow();a.owner=a.owner||'admin';a.note=$('#mnR').value.trim()||a.note;addLog(s,'admin','결과 기록',name,`${a.text}: ${a.note||'-'}`,a.st);closeModal();renderResp(s);renderStoriesSoft()};return}
+  const cfg={
+   agent:['MDS Agent로 네트워크 분리',`MDS Agent가 이 장비의 네트워크를 끊습니다. MDS Manager와의 통신만 남겨 원격으로 다시 연결할 수 있습니다. 사용자는 업무를 할 수 없게 됩니다.`,'분리 요청',()=>finish('MDS Agent가 분리함(Manager 통신만 유지)',{act:'네트워크 분리',seen:'분리 후 통신 없음'})],
+   agentscan:['MDS Agent로 점검',`MDS Agent가 의심 파일·프로세스를 검사하고 최근 실행 기록을 모읍니다. 업무는 멈추지 않습니다.`,'점검 요청',()=>finish('MDS Agent 점검: 의심 파일 없음, 최근 실행 기록 수집함',null)],
+   fw:['방화벽 차단 요청',`<div class="form" style="margin-top:6px"><label>차단할 곳</label><select class="sel"><option>본사 방화벽(API 연동)</option><option>차단 목록 파일로 내보내기(직접 적용)</option></select><label>기간</label><select class="sel"><option>90일</option><option>30일</option><option>계속</option></select></div>`,'차단 요청',()=>finish(`본사 방화벽 정책 #44${10+mclk}`,{act:'방화벽 차단',seen:'조치 후 접속 시도 없음'})],
+   dns:['DNS 차단 요청',`내부 DNS 서버가 이 도메인을 조회하지 못하게 막습니다(싱크홀). 조회한 장비는 계속 기록됩니다.`,'차단 요청',()=>finish('내부 DNS에서 차단함',{act:'DNS 차단',seen:'조치 후 조회 없음'})],
+   nac:['NAC 차단 요청',`NAC가 이 장비의 네트워크 접속을 막습니다. 장비 주인이 확인되면 풀 수 있습니다.`,'차단 요청',()=>finish('NAC에서 차단함',{act:'NAC 차단',seen:'조치 후 통신 없음'})],
+  }[a.how];
+  openModal(cfg[0],`<div class="kv"><dt>대상</dt><dd>${tgtCell(t)}</dd><dt>공격 스토리</dt><dd>${s.id} · ${esc(s.title)}</dd><dt>조치</dt><dd>${esc(a.text)}</dd><dt>가이드</dt><dd>${esc(a.why)}</dd></div><div style="margin-top:10px">${cfg[1]}</div><div class="form" style="margin-top:10px"><label>사유</label><input class="inp" value="${esc(s.id)} 대응"></div><div id="raOut" style="margin-top:8px"></div>`,
+   `<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="raOk">${cfg[2]}</button>`);
+  $('#raOk').onclick=()=>{$('#raOk').disabled=true;a.st='진행 중';$('#raOut').innerHTML='<div class="note">요청 보내는 중…</div>';setTimeout(()=>{$('#raOut').innerHTML='<div class="oktxt">✔ 완료했습니다. "조치 현황 › 조치 후 확인"에서 지켜봅니다.</div>';cfg[3]();setTimeout(closeModal,700);toast(`${cfg[0]}: 완료`)},1200)};
+}
+function report(s){
+  const r=RESP[s.id]||{acts:[],verify:[],prev:[],log:[]},k=respStat(s)||{done:0,tot:0},open=r.acts.filter(a=>a.st!=='완료'&&a.st!=='해당 없음');
+  openModal(`종료 보고서 · ${s.id}`,`<div style="font-size:16px;font-weight:700">${esc(s.title)}</div><div class="note">작성 2026-11-18 ${mnow()} · ${esc(s.owner||'admin')} · 상태 ${s.status}</div>
+   <div class="sec">요약</div><div class="kv"><dt>기간</dt><dd>11-18 ${s.first} ~ ${s.last}</dd><dt>공격 단계</dt><dd>${s.reached.map(i=>STAGE_KO[STAGES[i]]).join(' → ')}</dd><dt>피해 범위</dt><dd>PC·서버 ${s.hosts.length}대(${s.hosts.map(nm).join(', ')}), 외부 대상 ${s.ext.length}곳</dd><dt>조치</dt><dd>${k.done}/${k.tot} 완료</dd></div>
+   <div class="sec">무슨 일이 있었나</div>${s.steps.map(x=>`<div>${x[2]} ${esc(x[6])}</div>`).join('')}
+   <div class="sec">조치 내역</div><table class="t"><tr><th>시각</th><th>작업자</th><th>구분</th><th>내용</th><th>결과</th></tr>${r.log.map(l=>`<tr><td>${l[0]}</td><td>${esc(l[1])}</td><td>${l[2]}</td><td>${esc(l[4])}</td><td>${esc(l[5])}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">없음</td></tr>'}</table>
+   <div class="sec">조치 후 확인</div>${r.verify.map(v=>`<div>${esc(v.name)} ${v.act}: ${esc(v.seen)} (${{watch:'지켜보는 중',ok:'확인 완료',warn:'경고',handled:'조치 추가함'}[v.st]})</div>`).join('')||'<div class="note">없음</div>'}
+   <div class="sec">남은 일</div>${open.map(a=>`<div class="warntxt">○ ${esc(a.text)}</div>`).join('')||'<div class="oktxt">없음</div>'}
+   <div class="sec">재발 방지</div>${r.prev.map(p=>`<div>${p.done?'✔':'○'} ${esc(p.text)}</div>`).join('')||'<div class="note">없음</div>'}`,
+   `<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="toast('보고서(PDF)를 내려받았습니다(목업)')">PDF로 받기</button>`)}
+
+const evById=id=>EV.find(e=>e.id===id);
+function hlStep(n){$$('.narr li').forEach(li=>li.classList.remove('hl'));const li=$('#sn'+n);if(li){li.classList.add('hl');li.scrollIntoView({behavior:'smooth',block:'center'})}}
+function storyGraph(s){
+  // 각 대상은 출발지 바로 오른쪽 열에 둔다(선이 다른 상자를 가로지르지 않게). 같은 열 안은 부모 순서 → 단계 순서
+  const isExt=ip=>!isInt(ip)||ip.includes('/');
+  const E=[];s.steps.forEach(x=>{const e=evById(x[8]);[...new Set([x[5],...((e&&e.victims)||[])])].forEach(d=>E.push([x[4],d,String(x[0]),false]))});
+  if(showObs)s.moves.forEach(m=>{const k=E.find(e=>e[0]===m[0]&&e[1]===m[1]);if(k)k[2]+=' +관측';else E.push([m[0],m[1],'관측',true])});
+  const col={},ord={};col[s.seed]=0;ord[s.seed]=0;let n=1;
+  E.forEach(([a,b])=>{if(col[a]===undefined){col[a]=0;ord[a]=n++}if(col[b]===undefined){col[b]=col[a]+1;ord[b]=ord[a]*100+(n++)}});
+  const byCol={};Object.keys(col).sort((x,y)=>ord[x]-ord[y]).forEach(ip=>(byCol[col[ip]]=byCol[col[ip]]||[]).push(ip));
+  const maxc=Math.max(...Object.values(col));
+  const CW=200,RH=66,bw=150,bh=44,rows=Math.max(...Object.values(byCol).map(a=>a.length)),W=(maxc+1)*CW+20,H=rows*RH+30,pos={};
+  Object.entries(byCol).forEach(([c,ips])=>ips.forEach((ip,i)=>pos[ip]={x:10+c*CW,y:15+i*RH+(rows-ips.length)*RH/2}));
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6676"/></marker><marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7c3aed"/></marker></defs>`;
+  const merged={};E.forEach(e=>{const k=e[0]+'>'+e[1];if(merged[k])merged[k][2]+=','+e[2];else merged[k]=e.slice()});
+  Object.values(merged).forEach(([a,b,lab,obs])=>{const p=pos[a],q=pos[b];const x1=p.x+bw,y1=p.y+bh/2,x2=q.x,y2=q.y+bh/2,mx=x1+(x2-x1)*.5,c=obs?'#7c3aed':'#5b6676',lw=lab.length*6.2+8,ly=y1+(y2-y1)*.5;
+   svg+=`<path d="M${x1} ${y1}C${mx} ${y1},${mx} ${y2},${x2} ${y2}" fill="none" stroke="${c}" ${obs?'stroke-dasharray="5 4"':''} stroke-width="1.4" marker-end="url(#${obs?'ao':'ar'})"/><rect x="${mx-lw/2}" y="${ly-8}" width="${lw}" height="15" rx="3" fill="#fff" stroke="#e1e5eb"/><text x="${mx}" y="${ly+3}" text-anchor="middle" style="fill:${obs||lab.includes('관측')?'#7c3aed':'#1f2733'};font-weight:700">${lab}</text>`});
+  Object.entries(pos).forEach(([ip,p])=>{const net=ip.includes('/'),ex=!isInt(ip),obsOnly=showObs&&s.obsHosts.includes(ip)&&!s.hosts.includes(ip);
+   svg+=`<g><rect x="${p.x}" y="${p.y}" width="${bw}" height="${bh}" rx="7" fill="${ip===s.seed?'#fdecec':ex?'#fff1e5':obsOnly?'#faf7ff':'#eef3fd'}" stroke="${ip===s.seed?'#c62828':ex?'#e65100':obsOnly?'#7c3aed':'#9db8ef'}" ${obsOnly?'stroke-dasharray="5 4"':''}/><text x="${p.x+bw/2}" y="${p.y+18}" text-anchor="middle" style="font-weight:700;fill:#1f2733">${esc(nm(ip).length>18?nm(ip).slice(0,17)+'…':nm(ip))}</text><text x="${p.x+bw/2}" y="${p.y+34}" text-anchor="middle">${ip===s.seed?'시작 공격자':ex?'외부':net?'내부 대역(여러 대)':obsOnly?'통신 기록으로만':esc((A[ip]||{}).role||ip)}</text></g>`});
+  return svg+'</svg>';
+}
+
+// ---- NSM 탐지
+function renderDet(){
+  const s=$('#dSevF').value,st=$('#dStageF').value,ty=$('#dTypeF').value,dp=$('#dDispF').value,q=$('#dq').value.toLowerCase(),c=$('#dCorr').checked;
+  const rows=nsmEv().filter(e=>(!s||e.sev===s)&&(!st||e.stage===st)&&(!ty||e.note===ty)&&(!dp||(dp==='suppressed'?e.disp==='suppressed':e.disp!=='suppressed'))&&(!c||e.corr)&&(!q||JSON.stringify(e).toLowerCase().includes(q)));
+  $('#detCount').textContent=`전체 ${rows.length}건`;
+  $('#detTable').innerHTML=`<tr><th>이벤트 ID</th><th>위험도</th><th>탐지명</th><th>공격 단계</th><th>출발지</th><th>목적지</th><th>포트</th><th>계정</th><th class="num">반복</th><th>처리</th><th>스토리</th><th>탐지 시각</th></tr>`+
+   rows.map(e=>{const st=storyOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}</td><td class="nw">${e.corr?'<span class="chip">7단계</span>':esc(STAGE_KO[e.stage])}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${st&&!st.single?`<span class="chip warn">${st.id}</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
+}
+function openDet(id){
+  const e=evById(id);if(!e)return;
+  const steps=e.stages||[e.stage],m=e.corr?[]:metaFor(e),v=e.victims||[e.dst],g=GUIDE[e.note],st=storyOf(e.id);
+  const ext=[e.dst,...v].find(x=>x&&!isInt(x)&&!x.includes('/'));
+  const iocQ=[...new Set([ext,e.sni,e.host].filter(Boolean))].join('\n');
+  const stepN=st?(st.steps.find(x=>x[8]===e.id)||[])[0]:null;
+  const body=`${st&&!st.single?`<div class="callout warn" style="margin-bottom:10px">이 탐지는 공격 스토리 <b>${esc(st.title)}</b>의 ${e.corr?'전체 흐름':stepN+'번째 단계'}입니다. <a data-go="story" data-id="${st.id}" data-n="${stepN||''}">공격 스토리 보기</a> · <a data-go="story" data-id="${st.id}" data-tab="resp">대응 보기</a></div>`:''}
+   <div class="sec" style="margin-top:0">기본 정보</div>
+   <dl class="kv"><dt>탐지 시각</dt><dd>${e.y||'2026'}-${e.d||DAY} ${e.t}${e.sec||':00'}</dd><dt>위험도</dt><dd>${sev(e.sev)}</dd><dt>탐지명</dt><dd>${esc(e.name)}</dd><dt>출발지</dt><dd>${who(e.src)}</dd><dt>목적지</dt><dd>${e.via?`<span class="mono">${esc(e.host||'목적지 확인 안 됨')}</span><div class="note">프록시 <span class="mono">${esc(e.via)}</span>(${esc(nm(e.dst))})를 거친 통신입니다. 프록시는 중계 장비라 피해 장비로 보지 않습니다</div>`:v.map(who).join('<br>')}</dd><dt>포트</dt><dd>${esc(e.port)}${e.proto?` (${esc(e.proto)})`:''}</dd>${e.account?`<dt>사용된 계정</dt><dd>${esc(e.account)}</dd>`:''}${e.occ>1?`<dt>반복</dt><dd>같은 공격이 이어져 ${e.occ}번 탐지됨(알림은 1번)</dd>`:''}${e.disp==='suppressed'?`<dt>처리</dt><dd><span class="chip sup">알림 끔</span> 예외 "${e.exc}"에 해당해 알림을 보내지 않았습니다.</dd>`:''}<dt>센서</dt><dd>${esc(e.sensor)}</dd></dl>
+   <div class="sec">어떤 공격인가</div>
+   ${g?`<div>${esc(g[0])}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${esc(g[1])}</div>`:`<div>${e.corr?'여러 탐지가 공격 순서대로 이어졌습니다. 공격 스토리에서 흐름을 확인하세요.':esc(R[e.note]?R[e.note].cond:'')}</div>`}
+   <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(s=>STAGE_KO[s]).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · <a data-go="rule" data-n="${e.note}">기준 바꾸기</a></dd>`:''}</dl>
+   <div class="sec">탐지한 근거</div><table class="t"><tr><th>항목</th><th>내용</th></tr>${(e.ev||[]).map(x=>`<tr><td class="nw">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join('')}</table>
+   ${e.corr?'':`<div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분, 참고용</span></div>${m.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th></tr>${m.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td></tr>`).join('')}</table>`:'<div class="note">같은 시간대 기록이 없습니다.</div>'}`}
+   <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl><pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,techniques:e.tech.split('→'),category:e.corr?'Correlated':'Single',killchain_stages:steps,severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre></details>`;
+  const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress'};
+  const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${iocQ?`<button class="btn" data-go="retro" data-q="${esc(iocQ)}">이 외부 주소를 과거 기록에서 찾기</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비 정보</button>`:''}`;
+  openDrawer(e.name,sev(e.sev)+' '+prod('NSM'),body,foot);
+}
+
+// ---- PC·서버
+// ---- 자산 현황
+// 자산별 보조 정보: 처음 본 시각, 소프트웨어, 변경 이력
+const AEXT={
+ '10.10.10.5':{first:'09-02 11:20',sw:['ssh:OpenSSH_8.9p1','ua:curl/7.81.0'],hist:[['11-18 09:11','웹쉘 접근 탐지 뒤 외부 HTTPS 접속이 새로 늘어남'],['10-30 14:02','OS 정보 확인: Linux']]},
+ '10.10.10.8':{first:'08-14 09:01',sw:['ua:Teams/24295'],hist:[['11-11 09:12','IP 변경 10.10.10.58 → 10.10.10.8 (DHCP)']]},
+ '10.10.10.20':{first:'08-14 09:00',sw:[],hist:[]},
+ '10.10.10.10':{first:'08-14 09:00',sw:[],hist:[]},
+ '10.10.10.30':{first:'08-14 09:00',sw:[],hist:[['11-18 10:26','파일 212개 이름 변경(랜섬웨어 의심)의 대상']]},
+ '10.10.10.31':{first:'09-21 08:47',sw:['ua:Chrome/131'],hist:[['11-04 08:50','MDS Agent 통신이 끊김(V3만 확인)']]},
+ '10.10.10.32':{first:'08-14 09:05',sw:['ua:Chrome/131'],hist:[['11-15 08:41','IP 변경 10.10.10.47 → 10.10.10.32 (DHCP)']]},
+ '10.10.10.40':{first:'10-02 15:30',sw:['ssh:OpenSSH_9.6p1','ua:git/2.43.0'],hist:[]},
+ '10.10.10.50':{first:'11-17 23:52',sw:['ssh:libssh2_1.10.0'],hist:[['11-18 00:26','포트 스캔 시작(탐지)']]},
+ '10.10.10.60':{first:'08-14 09:00',sw:[],hist:[]},
+ '10.10.10.70':{first:'11-03 13:12',sw:['ua:python-requests/2.31','ua:ollama/0.4'],hist:[['11-03 13:12','처음 보임(AI 서버)']]},
+ '10.10.10.80':{first:'08-20 10:10',sw:['ua:Slack/4.41'],hist:[['11-02 14:11','공격자 서버(203.0.113.40)에 접속한 기록']]},
+ '10.10.10.91':{first:'11-18 09:47',sw:['ssh:dropbear_2022.83'],hist:[['11-18 09:47','처음 보임. 호스트 이름 raspberrypi(NBNS)']]},
+ '10.10.10.1':{first:'08-14 09:00',sw:['snmp_sysdescr:Cisco IOS Software, C2960X Software, Version 15.2(7)E8','ssh:SSH-2.0-Cisco-1.25'],hist:[]},
+ '10.10.10.100':{first:'08-14 09:00',sw:['snmp_sysdescr:HP ETHERNET MULTI-ENVIRONMENT, LaserJet M507','http_server:HP HTTP Server'],hist:[]},
+ '10.10.10.95':{first:'09-30 08:12',sw:['ua:Mobile Safari (iPhone)'],hist:[['11-18 08:31','IP 변경 10.10.10.97 → 10.10.10.95 (DHCP, MAC은 랜덤)']]},
+};
+ASSETS.forEach(a=>Object.assign(a,{first:'08-14 09:00',sw:[],hist:[]},AEXT[a.ip]||{}));
+const agentNA=a=>a.role==='AhnLab MDS';                 // 보안 장비 자체는 대상 아님
+// ---- 에이전트 정책(고객 정의): 통신으로 에이전트 설치 확인. 판정은 Manager(SPEC 4.10)
+const POL_HOW={server:'관리 서버 주소·포트',domain:'접속 도메인',ua:'프로그램 이름(User-Agent)',ports:'포트만'};
+const isWin=a=>/Windows/.test(a.os),isLinuxSrv=a=>/Linux|Ubuntu/.test(a.os)&&/서버/.test(a.role||'');
+const POL_TGT={'전체':a=>true,'Windows 자산':isWin,'업무 PC':a=>a.role==='업무 PC','Linux 서버':isLinuxSrv,'서버 전체':a=>/서버|컨트롤러/.test(a.role||'')};
+const POL_RATIO=50;
+const AGPOL=[
+ {id:'ahnlab-v3',name:'AhnLab V3',builtin:1,server:'',ports:'',domain:'',ua:'v3inet',min:'',device:'',tgt:'Windows 자산',every:'24시간',on:1,ok:a=>a.agent.includes('V3'),chg:'기본 제공'},
+ {id:'ahnlab-mds',name:'AhnLab MDS Agent',builtin:1,server:'10.10.10.60',ports:'8290/tcp,8291/tcp,8293/tcp,50007/tcp,50502/tcp',domain:'',ua:'',min:'',device:'ahnlab-mds',tgt:'Windows 자산',every:'24시간',on:1,ok:a=>a.agent.includes('MDS Agent'),chg:'기본 제공'},
+ {id:'edr-a',name:'A사 EDR(클라우드)',server:'',ports:'',domain:'*.sensor.edr-vendor.example',ua:'',min:'',device:'',tgt:'업무 PC',every:'24시간',on:1,ok:a=>['10.10.10.8','10.10.10.31','10.10.10.32'].includes(a.ip),chg:'11-12 보안팀'},
+ {id:'pms',name:'패치 관리(PMS)',server:'',ports:'',domain:'',ua:'PMSAgent/',min:'',device:'',tgt:'Windows 자산',every:'7일',on:1,ok:isWin,chg:'11-05 인프라팀'},
+ {id:'linux-av',name:'리눅스 서버 백신',server:'10.10.30.5',ports:'8443/tcp',domain:'',ua:'',min:'',device:'av-mgr',tgt:'Linux 서버',every:'24시간',on:1,ok:a=>false,chg:'11-17 보안팀'},
+ {id:'nac',name:'NAC 에이전트',server:'',ports:'7001/tcp',domain:'',ua:'',min:'1',device:'',tgt:'전체',every:'24시간',on:1,ok:a=>false,chg:'11-18 인프라팀',err:'서버 주소 없이 포트만 적은 정책은 최소 포트 수가 2 이상이어야 합니다(다른 제품과 같은 포트를 쓸 수 있음)'},
+];
+function polKind(p){return p.server?'server':p.domain?'domain':p.ua?'ua':'ports'}
+function polCond(p){return [p.server&&`서버 ${p.server}`,p.ports&&`포트 ${p.ports.replace(/\/tcp/g,'')}`,p.domain&&`도메인 ${p.domain}`,p.ua&&`User-Agent에 "${p.ua}"`,p.min&&+p.min>1&&`서로 다른 포트 ${p.min}개 이상`].filter(Boolean).map(esc).join(' · ')}
+function polJudge(p,a){                                      // null = 이 정책의 대상 아님
+  if(p.err||!p.on||p.pending||p.waiting||agentNA(a)||!POL_TGT[p.tgt](a))return null;
+  if(p.ok(a))return {st:'확인',why:`${a.last} 통신 확인`};
+  const net=a.ip.split('.').slice(0,3).join('.'),peers=ASSETS.filter(x=>x.ip.startsWith(net+'.')&&!agentNA(x)&&POL_TGT[p.tgt](x)),okn=peers.filter(p.ok).length;
+  if(100*okn/peers.length>=POL_RATIO)return {st:'미확인',why:`${p.every} 동안 활동했는데 통신이 안 보임 · 같은 대역(${net}.0/24) 대상 ${peers.length}대 중 ${okn}대는 확인됨`};
+  return {st:'판정 불가',why:`같은 대역(${net}.0/24) 대상 ${peers.length}대 중 확인 ${okn}대 · ${p.server?`관리 서버(${p.server})로 가는 경로`:'이 통신 경로'}가 미러에 없을 수 있음`};
+}
+function polCounts(p){const c={확인:0,미확인:0,'판정 불가':0};ASSETS.forEach(a=>{const j=polJudge(p,a);if(j)c[j.st]++});return c}
+const polMissing=a=>AGPOL.filter(p=>{const j=polJudge(p,a);return j&&j.st==='미확인'});
+const noAgent=a=>polMissing(a).length>0;
+function polCell(a,full){
+  const r=AGPOL.map(p=>[p,polJudge(p,a)]).filter(x=>x[1]);if(!r.length)return '<span class="note">대상 정책 없음</span>';
+  const okp=r.filter(x=>x[1].st==='확인'),bad=r.filter(x=>x[1].st!=='확인');
+  const badc=([p,j])=>`<span class="chip ${j.st==='미확인'?'warn':'sup'}" title="${esc(j.why)}">${esc(p.name)} ${j.st}</span>`;
+  if(full)return okp.map(([p])=>`<span class="chip ok">${esc(p.name)}</span>`).join('')+bad.map(badc).join('');
+  return (okp.length?`<span class="chip ok" title="${esc(okp.map(x=>x[0].name).join(', '))}">확인 ${okp.length}</span>`:'')+bad.map(badc).join('');
+}
+const isNewAsset=a=>!REPORT&&a.first>='11-17 10:50';   // 리포트(pcap 한 개)에는 이전 기록이 없어 판단하지 않음             // 최근 24시간 안에 처음 보임(목업 현재 시각 11-18 10:50)
+const storyIps=()=>new Set(STORIES.filter(s=>!s.single&&s.status!=='종료').flatMap(s=>[...s.hosts,...s.obsHosts]));
+function detCount(ip){return nsmEv().filter(e=>e.src===ip||(e.victims||[e.dst]).includes(ip)).length}
+function assetRisk(ip){const ev=nsmEv().filter(e=>e.disp!=='suppressed'&&(e.src===ip||(e.victims||[e.dst]).includes(ip)));if(!ev.length)return null;return SEV[Math.min(...ev.map(e=>SEV.indexOf(e.sev)))]}
+let ACARD='';
+const ACARDS=[
+ ['','네트워크에서 보인 자산',()=>ASSETS,'센서가 통신으로 찾아낸 PC·서버'],
+ ['new','새로 나타난 자산',()=>ASSETS.filter(isNewAsset),'최근 24시간 안에 처음 보임'],
+ ['noagent','에이전트 미확인',()=>ASSETS.filter(noAgent),'정책 대상인데 에이전트 통신이 안 보임'],
+ ['story','공격 스토리에 포함된 자산',()=>{const s=storyIps();return ASSETS.filter(a=>s.has(a.ip))},'조사 중인 공격에 걸린 장비'],
+];
+function setAssetCard(k){ACARD=(ACARD===k&&k!=='')?'':k;renderAssets()}
+function renderAssets(){
+  // 요약 카드
+  $('#aCards').innerHTML=ACARDS.map(c=>{const n=c[2]().length,on=ACARD===c[0]&&c[0]!=='';return `<div class="panel kpi click" style="cursor:pointer;${on?'outline:2px solid var(--accent);':''}" onclick="setAssetCard('${c[0]}')"><div class="k">${c[1]}</div><div class="v" style="${c[0]==='noagent'&&n?'color:#e65100':c[0]==='story'&&n?'color:#c62828':c[0]==='new'&&n?'color:#7c3aed':''}">${n}</div><div class="d">${c[3]}${c[0]?' · 누르면 목록에 적용':''}</div></div>`}).join('');
+  // 역할별·식별 품질
+  const rc={};ASSETS.forEach(a=>{const r=DCGROUP(dx(a).dc[0]);rc[r]=(rc[r]||0)+1});const rm=Math.max(...Object.values(rc));
+  $('#aRoles').innerHTML=Object.entries(rc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="hbar click" style="grid-template-columns:120px 1fr 30px;cursor:pointer" onclick="$('#aRole').value='${k}';renderAssets()"><span>${esc(k)}</span><span class="b"><i style="width:${100*v/rm}%;background:${k==='알 수 없음'?'#e65100':'#5b8def'}"></i></span><span class="num">${v}</span></div>`).join('')
+   +`<div class="note" style="margin-top:6px">PC의 노트북·데스크톱 구분은 기본 컴퓨터 이름(LAPTOP-·DESKTOP-)이나 기기 모델(MacBook 등)이 보일 때만 됩니다. 기울임은 신뢰도 낮음.</div>`;
+  const q3={높음:0,보통:0,낮음:0};ASSETS.forEach(a=>q3[conf(a.key[1])]++);const named=ASSETS.filter(a=>a.host).length,tot=ASSETS.length;
+  $('#aQual').innerHTML=`<div class="stack">${[['높음','#2e7d32'],['보통','#d4a106'],['낮음','#e65100']].map(([k,c])=>`<i style="width:${100*q3[k]/tot}%;background:${c}"></i>`).join('')}</div>
+   <div class="leg">${[['높음','#2e7d32'],['보통','#d4a106'],['낮음','#e65100']].map(([k,c])=>`<span><i style="background:${c}"></i>신뢰도 ${k} <b>${q3[k]}</b></span>`).join('')}</div>
+   <div class="kv" style="margin-top:10px"><dt>이름까지 확인</dt><dd>${named} / ${tot}대 (${Math.round(100*named/tot)}%)</dd><dt>OS까지 확인</dt><dd>${ASSETS.filter(a=>a.os).length} / ${tot}대</dd></div>
+   <div class="note" style="margin-top:6px">미러링 위치에 따라 보이는 장비만 집계합니다(전체 자산 장부가 아님).</div>`;
+  // 목록
+  const q=$('#aq').value.toLowerCase(),r=$('#aRole').value,d=$('#aDet').checked;
+  const cardSet=ACARD?new Set(ACARDS.find(c=>c[0]===ACARD)[2]().map(a=>a.ip)):null,sIps=storyIps();
+  const rows=ASSETS.filter(a=>(!cardSet||cardSet.has(a.ip))&&(!q||JSON.stringify(a).toLowerCase().includes(q))&&(!r||DCGROUP(dx(a).dc[0])===r)&&(!d||detCount(a.ip)>0))
+   .sort((x,y)=>((assetRisk(x.ip)?SEV.indexOf(assetRisk(x.ip)):9)-(assetRisk(y.ip)?SEV.indexOf(assetRisk(y.ip)):9))||x.ip.localeCompare(y.ip,undefined,{numeric:true}));
+  $('#aFilt').innerHTML=ACARD?`<span class="chip warn">${ACARDS.find(c=>c[0]===ACARD)[1]}</span> <a onclick="setAssetCard('${ACARD}')">필터 해제</a>`:'';
+  $('#assetTable').innerHTML=`<tr><th>IP</th><th>이름</th><th style="min-width:170px">장비 유형·역할</th><th>OS</th><th>무엇으로 알아냈나(신뢰도)</th><th>에이전트</th><th>위험</th><th class="num">탐지</th><th>처음 본 시각</th><th>마지막으로 본 시각</th></tr>`+rows.map(a=>{const rk=assetRisk(a.ip);return `<tr class="click" data-go="asset" data-ip="${a.ip}"><td class="mono">${a.ip}</td><td><b>${esc(a.host||'(이름 없음)')}</b> ${isNewAsset(a)?'<span class="pill pnew">새 장비</span>':''} ${sIps.has(a.ip)?'<span class="chip bad">스토리</span>':''}</td><td>${dcChip(a)}${a.role?` <span style="white-space:nowrap">${esc(a.role)}</span>`:''}${vendorTxt(a)?`<div class="note">${esc(vendorTxt(a))}</div>`:''}</td><td>${a.os?esc(a.os)+(dx(a).osSrc?` <span class="note">(${esc(dx(a).osSrc)})</span>`:''):dx(a).tcp?`<span class="note" style="font-style:italic">${esc(dx(a).tcp)} (TCP 추정)</span>`:'-'}</td><td>${a.key[0]} <span class="note">(${conf(a.key[1])})</span></td><td>${agentNA(a)?'<span class="note">해당 없음</span>':polCell(a)}</td><td>${rk?sev(rk):'<span class="muted">-</span>'}</td><td class="num">${detCount(a.ip)||'<span class="muted">0</span>'}</td><td class="nw">${a.first}</td><td class="nw">${a.last}</td></tr>`}).join('')+(rows.length?'':'<tr><td colspan="10" class="muted" style="text-align:center;padding:20px">조건에 맞는 자산이 없습니다.</td></tr>');
+  $('#aPage').textContent=`${rows.length}대 중 1–${rows.length} · 한 페이지 50대`;
+}
+function assetSignals(a){if(a.sigs)return a.sigs;
+  const K={'도메인 컴퓨터 계정':['도메인 컴퓨터 계정',`corp\\${(a.host||'').toLowerCase()}$`,'Kerberos(DC 로그인)'],'DHCP 정보':['DHCP 클라이언트 ID',`1:${a.mac}`,'DHCP'],'호스트 이름':['호스트 이름',(a.host||'').toLowerCase(),'NBNS·LLMNR 이름 응답'],'SSH 정보':['SSH 호스트 키','e4:b1:8e:3a:…','SSH'],'MAC 주소':['MAC 주소',a.mac,'ARP'],'장비 인증서':['장비 종류','ahnlab-mds','TLS 인증서'],'SNMP 장비 이름':['호스트 이름',(a.host||'').toLowerCase(),'SNMP 응답(sysName)']}[a.key[0]];
+  const rows=[[...K,a.key[1],'대표 키']];
+  if(a.key[0]!=='MAC 주소')rows.push(['MAC 주소',a.mac,'ARP',50,'']);
+  dx(a).fp.forEach(f=>rows.push(['제품·장비 지문',f[1],f[0]+' + Recog 지문',70,'']));
+  if(dx(a).vendor&&dx(a).vendor!=='local')rows.push(['제조사',dx(a).vendor,'MAC 앞 3바이트(OUI)',90,'']);
+  if(a.os)rows.push(['OS 추정',a.os,dx(a).osSrc==='지문(Recog)'?'SNMP sysDescr + Recog 지문':/Windows/.test(a.os)?'NTLM·SMB 로그인':'HTTP·SSH 프로그램 정보',/Windows/.test(a.os)?70:50,'']);
+  if(a.svc.length)rows.push(['열린 서비스',a.svc.join(', '),'서버 응답',60,'역할 추정']);
+  const okp=AGPOL.filter(p=>{const j=polJudge(p,a);return j&&j.st==='확인'});
+  if(okp.length)rows.push(['에이전트',okp.map(p=>p.name).join(', '),'에이전트 정책('+[...new Set(okp.map(p=>POL_HOW[polKind(p)]))].join('·')+')',80,'']);
+  return rows;
+}
+const PEERS={'10.10.10.5':[['203.0.113.40','HTTPS(443)',134],['10.10.10.20','DB(1433)',48],['10.10.10.31','파일 공유(445)',12],['10.10.10.32','파일 공유(445)',9],['198.51.100.23','웹(80)',311]],'10.10.10.32':[['10.10.10.30','파일 공유(445)',2214],['10.10.10.10','도메인 로그인(88)',41]],'10.10.10.31':[['203.0.113.77','HTTPS(443)',3],['10.10.10.30','파일 공유(445)',188]]};
+function openEntity(ip){
+  const a=A[ip];if(!a)return;$$('#nsmSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t==='assets'));
+  ['#nsmStory','#nsmDet','#nsmAssets','#nsmRetro'].forEach(s=>$(s).classList.add('hidden'));
+  $('#nsmCrumb').innerHTML=`<a onclick="nsmTab('assets')">NSM 분석 › 자산 현황</a> › 상세`;
+  const evs=nsmEv().filter(e=>e.src===ip||(e.victims||[e.dst]).includes(ip)),peers=PEERS[ip]||(REPORT?[]:[['10.10.10.10','파일 공유(445)',22],['10.10.10.10','DNS(53)',61]]);
+  const sts=STORIES.filter(s=>s.hosts.includes(ip)||s.obsHosts.includes(ip)),rk=assetRisk(ip);
+  const el=$('#nsmEntity');el.classList.remove('hidden');
+  el.innerHTML=`<div class="panel"><div class="pbody">
+   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div><div style="font-size:18px;font-weight:700">${esc(a.host||'(이름 없음)')} ${isNewAsset(a)?'<span class="pill pnew">새 장비</span>':''} ${noAgent(a)?'<span class="chip warn">에이전트 미확인</span>':''}</div><div class="note">${a.ip} · ${esc(a.role||'역할 모름')} · 처음 본 시각 ${a.first} · 가장 높은 위험도 ${rk?rk:'-'}</div></div><button class="btn" style="margin-left:auto" onclick="nsmTab('assets')">목록</button></div>
+   ${sts.length?`<div class="callout warn" style="margin-top:10px">이 장비가 포함된 공격 스토리: ${sts.map(s=>`<a data-go="story" data-id="${s.id}">${esc(s.title)}</a> (${s.hosts.includes(ip)?(s.seed===ip?'시작 공격자':'탐지로 확인'):'통신 기록으로만'})`).join(', ')}</div>`:''}
+   <div class="grid g2" style="margin-top:12px"><div class="infog">
+    <div><b>장비 유형</b>${dcChip(a)} <span class="note">${esc(dx(a).dc[1])} · 신뢰도 ${esc(dx(a).dc[2])}</span></div><div><b>제조사(MAC)</b>${esc(vendorTxt(a)||'-')}${dx(a).vendor==='local'?' <span class="note">모바일 랜덤 MAC·가상 머신일 수 있음</span>':''}</div>
+    <div style="grid-column:1/3"><b>지문(제품·버전)</b>${dx(a).fp.map(f=>`<span class="chip" title="${esc(f[0])}에서 확인">${esc(f[1])}</span>`).join('')||'<span class="note">맞는 지문 없음</span>'}</div>
+    <div><b>IP 주소</b>${a.ip}</div><div><b>MAC 주소</b><span class="mono">${a.mac}</span></div><div><b>이름</b>${esc(a.host||'-')}</div><div><b>OS</b>${a.os?esc(a.os)+(dx(a).osSrc?` <span class="note">(${esc(dx(a).osSrc)})</span>`:''):'-'}${dx(a).tcp?`<br><span class="note">TCP SYN 모양: ${esc(dx(a).tcp)}</span>`:''}</div>
+    <div><b>역할</b>${esc(a.role||'-')}</div><div><b>마지막으로 본 시각</b>2026-${a.last}</div><div><b>무엇으로 알아냈나</b>${a.key[0]} (신뢰도 ${conf(a.key[1])})</div><div><b>에이전트</b>${agentNA(a)?'해당 없음(보안 장비)':polCell(a,true)} · <a class="note" onclick="show('admin');adm('agentpol')">에이전트 정책 보기</a></div>
+    <div style="grid-column:1/3"><b>소프트웨어</b>${a.sw.map(x=>`<span class="chip">${esc(x)}</span>`).join('')||'-'}</div>
+    <div style="grid-column:1/3"><b>열려 있는 서비스</b>${a.svc.map(s=>`<span class="chip">${s}</span>`).join('')||'-'}</div></div>
+   <div class="panel"><h3>이 장비와 관련된 NSM 탐지 <span class="r">${evs.length}건</span></h3><div class="tw"><table class="t"><tr><th>탐지명</th><th>이 장비는</th><th>위험도</th><th>시각</th></tr>${evs.slice(0,10).map(e=>`<tr class="click" data-go="det" data-id="${e.id}"><td>${esc(e.name)}</td><td>${e.src===ip?'출발지':'대상'}</td><td>${sev(e.sev)}</td><td>${e.t}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">탐지 없음</td></tr>'}</table></div></div></div>
+   <div class="grid g2" style="margin-top:12px">
+    <div class="panel tw"><h3>식별 근거 <span class="r">어떤 통신에서 무엇을 봤나</span></h3><table class="t"><tr><th>정보</th><th>값</th><th>본 통신</th><th>신뢰도</th><th></th></tr>${assetSignals(a).map(x=>`<tr><td class="nw">${x[0]}</td><td class="mono" style="word-break:break-all">${esc(x[1])}</td><td>${x[2]}</td><td>${conf(x[3])}</td><td>${x[4]?`<span class="chip">${x[4]}</span>`:''}</td></tr>`).join('')}</table></div>
+    <div class="panel tw"><h3>변경 이력 <span class="r">IP·이름·OS·보안 제품 변화</span></h3><table class="t"><tr><th>시각</th><th>내용</th></tr>${a.hist.map(h=>`<tr><td class="nw">${h[0]}</td><td>${esc(h[1])}</td></tr>`).join('')}${a.hist.some(h=>h[0]===a.first)?'':`<tr><td class="nw">${a.first}</td><td>처음 보임${a.host?'':'. 이름·OS를 알려 주는 통신이 없음'}</td></tr>`}</table></div></div>
+   <div class="grid g2" style="margin-top:12px"><div class="panel"><h3>주로 통신한 상대 <span class="r">최근 24시간 통신 기록</span></h3><div class="pbody svgt">${peerSvg(a,peers)}</div></div>
+    <div class="panel tw"><table class="t"><tr><th>상대 주소</th><th>서비스</th><th class="num">연결 수</th><th></th></tr>${peers.map(p=>`<tr><td>${who(p[0])}</td><td>${p[1]}</td><td class="num">${p[2].toLocaleString()}</td><td class="nw"><a data-go="retro" data-q="${p[0]}">과거 기록 찾기</a></td></tr>`).join('')}</table><div class="pbody note">"과거 기록 찾기"로 지난 기간에 다른 장비도 이 상대와 통신했는지 확인합니다.</div></div></div></div></div>`;
+}
+// 대시보드 자산 현황 카드
+function renderAssetStrip(){
+  const el=$('#dashAssets');if(!el)return;
+  el.innerHTML=ACARDS.map(c=>{const n=c[2]().length;return `<div style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:6px;padding:8px 12px;cursor:pointer" onclick="show('nsm');nsmTab('assets');ACARD='';setAssetCard('${c[0]}')"><div class="note">${c[1]}</div><div style="font-size:20px;font-weight:700;${c[0]==='noagent'&&n?'color:#e65100':c[0]==='story'&&n?'color:#c62828':c[0]==='new'&&n?'color:#7c3aed':''}">${n}</div></div>`}).join('')
+   +`<div style="flex:2;min-width:240px;padding:2px 4px">${(()=>{const rc={};ASSETS.forEach(a=>{const r=DCGROUP(dx(a).dc[0]);rc[r]=(rc[r]||0)+1});const rm=Math.max(...Object.values(rc));return Object.entries(rc).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`<div class="hbar" style="grid-template-columns:100px 1fr 24px;margin:2px 0"><span class="note">${esc(k)}</span><span class="b"><i style="width:${100*v/rm}%;background:${k==='알 수 없음'?'#e65100':'#5b8def'}"></i></span><span class="num note">${v}</span></div>`).join('')})()}</div>`;
+}
+function peerSvg(a,peers){const W=520,H=210,cx=W/2,cy=H/2;let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  peers.slice(0,6).forEach((p,i,arr)=>{const ang=Math.PI*2*i/arr.length-Math.PI/2,x=cx+Math.cos(ang)*190,y=cy+Math.sin(ang)*72,ext=!isInt(p[0]);s+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ext?'#e65100':'#9db8ef'}" stroke-width="${1+Math.log10(p[2])}"/><circle cx="${x}" cy="${y}" r="5" fill="${ext?'#e65100':'#5b8def'}"/><text x="${x}" y="${y+(y<cy?-9:17)}" text-anchor="middle">${nm(p[0])} · ${p[1]}</text>`});
+  return s+`<circle cx="${cx}" cy="${cy}" r="14" fill="#2f6fde"/><text x="${cx}" y="${cy+38}" text-anchor="middle" style="font-weight:700;fill:#1f2733">${esc(a.host||a.ip)}</text><text x="8" y="${H-6}">● 내부  <tspan fill="#e65100">● 외부</tspan>  · 선이 굵을수록 연결이 많음</text></svg>`}
+
+// ---- 과거 기록 검색
+const ALLOW_DOMAINS=['windowsupdate.com','update.microsoft.com','av-vendor.example'];
+const RETRO={
+ '203.0.113.40':[['10.10.10.5','11-18','09:25','10:50',134,'30분 단위 요약','flow_summary'],['10.10.10.80','11-02','14:11','14:40',12,'30분 단위 요약','flow_summary'],['10.10.10.80','10-29','09:02','09:05',3,'30분 단위 요약','flow_summary']],
+ 'update-check.example':[['10.10.10.5','11-18','09:25','10:50',4,'그날 처음 본 시각만','ssl'],['10.10.10.5','11-18','09:00','09:00',4,'1시간 단위 요약','dns_summary'],['10.10.10.80','11-02','14:10','14:10',1,'1시간 단위 요약','dns_summary'],['10.10.10.8','10-21','11:42','11:42',1,'그날 처음 본 시각만','ssl']],
+ 'files.transfer-host.example':[['10.10.10.31','11-18','10:17','10:18',1,'그날 처음 본 시각만','ssl']],
+ 'svc_sql':[['10.10.10.5','11-18','10:07','10:09',3,'건별 기록','ntlm'],['10.10.10.20','11-15','02:00','02:00',1,'건별 기록','ntlm']],
+ '198.51.100.99':[],
+};
+const SAMPLE_IOC=['203.0.113.40','update-check.example','files.transfer-host.example','svc_sql','3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea','windowsupdate.com','198.51.100.99'];
+function iocType(s){s=s.trim();if(/^cert:/i.test(s))return 'cert';if(/^\d+\.\d+\.\d+\.\d+(\/\d+)?$/.test(s))return 'ip';if(/^[a-f0-9]{64}$/i.test(s))return 'sha256';if(/^[a-f0-9]{40}$/i.test(s))return 'sha1';if(/^[a-f0-9]{32}$/i.test(s))return 'md5';if(/^\//.test(s))return 'url';if(/[\\@]/.test(s)||(/^[a-z_][a-z0-9_-]*$/i.test(s)))return 'account';if(/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(s))return 'domain';return '?'}
+const TKO={ip:'IP',domain:'도메인',cert:'인증서',sha256:'파일 해시',sha1:'파일 해시',md5:'파일 해시',url:'URL 경로',account:'계정','?':'알 수 없음'};
+function renderChips(){const ls=$('#iocIn').value.split('\n').map(x=>x.trim()).filter(Boolean);$('#iocChips').innerHTML=ls.length?ls.map(l=>`<span class="ioc"><b>${TKO[iocType(l)]}</b>${esc(l.length>28?l.slice(0,26)+'…':l)}</span>`).join('')+`<div class="note">${ls.length}개</div>`:''}
+let RRES=[];
+function runRetro(){
+  renderChips();const ls=[...new Set($('#iocIn').value.split('\n').map(x=>x.trim()).filter(Boolean))];if(!ls.length){toast('찾을 대상을 넣어 주세요');return}
+  RRES=ls.map(v=>{const t=iocType(v),h=RETRO[v]||RETRO[v.toLowerCase()];
+    if(ALLOW_DOMAINS.some(a=>v===a||v.endsWith('.'+a)))return {v,t,st:'excluded'};
+    if(['sha256','sha1','md5','cert'].includes(t))return {v,t,st:'nodata'};
+    if(!h||!h.length)return {v,t,st:'none'};
+    return {v,t,st:'hit',hits:h,hosts:new Set(h.map(x=>x[0])).size,n:h.reduce((a,x)=>a+x[4],0),first:h[h.length-1][1]+' '+h[h.length-1][2],last:h[0][1]+' '+h[0][3],prec:[...new Set(h.map(x=>x[5]))].join(', '),logs:[...new Set(h.map(x=>x[6]))]}});
+  const hit=RRES.filter(r=>r.st==='hit');
+  $('#rKpi').innerHTML=[['찾은 대상',RRES.length,''],['발견된 대상',hit.length,hit.length?'up':''],['관련된 내부 PC·서버',new Set(hit.flatMap(r=>r.hits.map(x=>x[0]))).size,'']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v ${k[2]}">${k[1]}</div></div>`).join('');
+  const stc={hit:'<span class="chip bad">발견</span>',none:'<span class="chip ok">없음</span>',excluded:'<span class="chip sup">수집 제외 대상</span>',nodata:'<span class="chip">아직 수집 안 함</span>'};
+  $('#rTable').innerHTML=`<tr><th>찾은 대상</th><th>종류</th><th>결과</th><th>처음 본 때</th><th>마지막으로 본 때</th><th class="num">PC·서버</th><th class="num">횟수</th><th>기록 방식</th><th>기록 종류</th></tr>`+RRES.map((r,i)=>`<tr class="click" data-r="${i}"><td class="mono" style="max-width:240px;word-break:break-all">${esc(r.v)}</td><td class="nw">${TKO[r.t]}</td><td class="nw">${stc[r.st]}</td><td class="nw">${r.first||'-'}</td><td class="nw">${r.last||'-'}</td><td class="num">${r.hosts??'-'}</td><td class="num">${r.n??'-'}</td><td>${r.prec||'-'}</td><td>${(r.logs||[]).map(l=>`<span class="chip">${LOGKO[l]||l}</span>`).join('')}</td></tr>`).join('');
+  $('#rDetail').innerHTML='<span class="muted">결과를 누르면 어느 PC·서버가 언제 접속했는지 보입니다.</span>';$('#rDetailH').textContent='상세';
+  toast(`검색 완료: ${RRES.length}개 중 ${hit.length}개 발견`);
+}
+$('#rTable').onclick=e=>{const tr=e.target.closest('tr[data-r]');if(!tr)return;$$('#rTable tr').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel');const r=RRES[+tr.dataset.r];
+  $('#rDetailH').textContent='상세 · '+r.v;
+  if(r.st==='excluded'){$('#rDetail').innerHTML=`<div class="callout warn" style="margin:0">이 도메인은 업데이트처럼 양이 많은 정상 도메인이라 HTTPS·웹·DNS 기록을 따로 남기지 않습니다. 결과가 없어도 접속이 없었다는 뜻은 아닙니다. 이 도메인의 IP 주소로 다시 찾아보세요.</div>`;return}
+  if(r.st==='nodata'){$('#rDetail').innerHTML=`<div class="callout" style="margin:0">파일 해시와 인증서는 아직 기록하지 않아 찾을 수 없습니다. 센서 업데이트로 기록 항목이 추가되면 찾을 수 있습니다.</div>`;return}
+  if(r.st==='none'){$('#rDetail').innerHTML=`<div class="oktxt">조회 기간 동안 보인 적이 없습니다.</div>`;return}
+  const days=[...Array(90)].map(()=>0);r.hits.forEach(h=>{const [mm,dd]=h[1].split('-').map(Number);const idx=89-((11-mm)*30+(18-dd));if(idx>=0&&idx<90)days[idx]+=h[4]});
+  $('#rDetail').innerHTML=`<div class="note">최근 90일 날짜별 횟수</div><div>${spark(days,'#c62828',560,30)}</div>
+   <table class="t" style="margin-top:8px"><tr><th>PC·서버</th><th>날짜</th><th>시간</th><th class="num">횟수</th><th>기록 방식</th><th>기록 종류</th><th></th></tr>${r.hits.map(h=>`<tr><td>${who(h[0])}</td><td>${h[1]}</td><td class="nw">${h[2]} ~ ${h[3]}</td><td class="num">${h[4]}</td><td>${h[5]}</td><td>${LOGKO[h[6]]||h[6]}</td><td class="nw">${A[h[0]]?`<a data-go="asset" data-ip="${h[0]}">장비 정보</a>`:''}</td></tr>`).join('')}</table>
+   <div class="note" style="margin-top:6px">"그날 처음 본 시각만"은 같은 접속을 하루에 한 번만 기록하는 방식이라 횟수가 실제보다 적습니다. "30분 단위 요약"은 30분 동안의 연결을 묶은 횟수입니다.</div>`};
+$('#rGo').onclick=runRetro;$('#iocIn').oninput=renderChips;
+$('#rSample').onclick=()=>{$('#iocIn').value=SAMPLE_IOC.join('\n');renderChips()};
+
+// =============================================================== 장비 현황
+function renderDevices(t){
+  $$('#devTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  if(t!=='nsm'){$('#devBody').innerHTML=`<div class="panel"><div class="pbody muted" style="padding:40px;text-align:center">${t==='mta'?'MTA':'Mirroring'} 장비 현황은 기존 화면 그대로입니다.</div></div>`;return}
+  const pct=v=>typeof v!=='number'?'<span class="note">-</span>':`<span class="nw"><span style="display:inline-block;width:46px;height:6px;background:#e6ebf2;border-radius:3px;vertical-align:middle;margin-right:4px"><i style="display:block;height:100%;width:${v}%;background:${v>80?'#e65100':'#5b8def'};border-radius:3px"></i></span>${v}%</span>`;
+  const st={ok:['ok','정상'],warn:['warn','주의'],bad:['bad','연결 끊김']};
+  $('#devBody').innerHTML=`<div class="callout">NSM 센서는 MTA·Mirroring과 따로 보여 줍니다. 센서가 보내는 상태 정보로 표시합니다.</div>
+  <div class="panel tw"><table class="t"><tr><th>센서 이름</th><th>관리 IP</th><th>상태</th><th>마지막 응답</th><th>CPU</th><th>메모리</th><th>디스크</th><th>수집 포트</th><th class="num">초당 패킷</th><th class="num">초당 트래픽</th><th class="num">패킷 누락</th><th>분석 엔진</th><th>Suricata</th><th>마지막 기록 전송</th><th>전송 상태</th><th>탐지 엔진 버전</th><th>적용 정책</th></tr>
+  ${SENSORS.map(s=>`<tr><td class="nw"><b>${s.name}</b></td><td class="mono">${s.ip}</td><td class="nw"><span class="dot ${st[s.st][0]}"></span>${st[s.st][1]}</td><td>${s.hb}</td><td>${pct(s.cpu)}</td><td>${pct(s.mem)}</td><td>${pct(s.disk)}</td><td class="nw">${s.ifc}</td><td class="num">${s.pps}</td><td class="num nw">${s.bps}</td><td class="num" style="color:${s.loss>=1?'#c62828':''}">${s.loss}%</td><td>${s.zeek}</td><td>${s.suri}</td><td class="nw">${s.lag} 전</td><td class="nw"><span class="dot ${s.send==='정상'?'ok':s.send==='지연'?'warn':'bad'}"></span>${s.send}</td><td class="mono nw">${s.eng}${s.eng!==ENGINE.latest?' <span class="chip warn">업데이트 필요</span>':''}</td><td class="mono nw">${RULESET[s.grp]}</td></tr>`).join('')}</table></div>
+  <div class="grid g3" style="margin-top:12px">
+   <div class="panel"><h3>${esc(SENSORS[0]?SENSORS[0].name:'센서')}이 보낸 기록 <span class="r">${REPORT?'캡처 구간':'오늘'}</span></h3><div class="pbody">${(REPORT?REPORT.sent:[['통신 기록','1.12 GB',97.6],['장비 식별 정보','14.1 MB',1.2],['센서 상태','11.8 MB',1.0],['탐지','2.3 MB',0.2]]).map(x=>`<div class="hbar"><span>${x[0]}</span><span class="b"><i style="width:${x[2]}%"></i></span><span class="num nw">${x[1]}</span></div>`).join('')}<div class="note">기록량 한도로 버린 통신 기록 0건</div></div></div>
+   <div class="panel"><h3>항목 설명</h3><div class="pbody tw"><table class="t"><tr><th>항목</th><th>보여 주는 것</th></tr><tr><td>상태</td><td>정상·주의·연결 끊김, 마지막 응답 시각</td></tr><tr><td>자원</td><td>CPU, 메모리, 디스크 사용률</td></tr><tr><td>패킷 수집</td><td>수집 포트, 초당 패킷·트래픽, 누락 비율</td></tr><tr><td>분석 엔진</td><td>Zeek·Suricata가 돌고 있는지, 엔진 버전</td></tr><tr><td>기록 전송</td><td>마지막 전송 시각, 지연·실패</td></tr><tr><td>적용 정책</td><td>지금 적용된 룰 정책 버전</td></tr></table></div></div>
+   <div class="panel"><h3>경고 기준(제안)</h3><div class="pbody"><div class="kv"><dt>패킷 누락</dt><dd>1% 넘으면 주의, 5% 넘으면 위험</dd><dt>기록 전송</dt><dd>5분 넘게 밀리면 지연, 30분 넘으면 실패</dd><dt>응답</dt><dd>3분 동안 없으면 연결 끊김</dd><dt>디스크</dt><dd>80% 넘으면 주의</dd><dt>버전</dt><dd>배포한 버전과 다르면 표시</dd></div></div></div></div>`;
+}
+$('#devTabs').onclick=e=>{const b=e.target.closest('button');if(b)renderDevices(b.dataset.t)};
+
+// =============================================================== 관리
+const DEVICES=[['MDS','MDS-01','10.10.10.60','ZA-MDS-0001','정상','2026-11-18 10:50','TOTAL'],['MTA','MTA-01','10.10.0.21','ZA-MTA-0003','정상','2026-11-18 10:50','TOTAL'],['Mirroring','MIR-01','10.10.0.31','ZA-MIR-0002','정상','2026-11-18 10:49','TOTAL'],['NSM','NSM-SENSOR-01','10.10.0.11','NSM-01','정상','2026-11-18 10:50','본사 센서'],['NSM','NSM-SENSOR-02','10.20.0.11','NSM-02','주의','2026-11-18 10:49','본사 센서'],['NSM','NSM-SENSOR-03','10.30.0.11','NSM-03','연결 끊김','2026-11-18 09:12','지사 센서']];
+function adm(k){
+  $$('#tree a').forEach(a=>a.classList.toggle('on',a.dataset.a===k));const b=$('#admBody');
+  if(k==='devlist'){$('#admCrumb').textContent='관리 › 장비 › 장비 목록';
+   b.innerHTML=`<div class="bar"><select class="sel"><option>장비 종류 전체</option><option>MDS</option><option>MTA</option><option>Mirroring</option><option>NSM</option></select><input class="inp" placeholder="장비 이름·IP"><button class="btn">추가</button><button class="btn">삭제</button><span class="pill pnew" style="margin-left:auto">장비 종류에 NSM 추가</span></div>
+   <div class="panel tw"><table class="t"><tr><th><input type="checkbox"></th><th>장비 종류</th><th>장비 이름</th><th>관리 IP</th><th>시리얼·센서 ID</th><th>상태</th><th>마지막 통신</th><th>그룹</th></tr>${DEVICES.map(d=>`<tr ${d[0]==='NSM'?'style="background:#faf7ff"':''}><td><input type="checkbox"></td><td>${d[0]==='NSM'?prod('NSM'):`<span class="chip">${d[0]}</span>`}</td><td><b>${d[1]}</b></td><td class="mono">${d[2]}</td><td class="mono">${d[3]}</td><td class="nw"><span class="dot ${d[4]==='정상'?'ok':d[4]==='주의'?'warn':'bad'}"></span>${d[4]}</td><td>${d[5]}</td><td>${d[6]}</td></tr>`).join('')}</table></div>
+   <div class="panel" style="margin-top:12px"><h3>NSM 센서를 등록할 때 넣는 정보 <span class="pill pnew">신규</span></h3><div class="pbody"><div class="kv"><dt>센서 ID</dt><dd>탐지·기록에 붙는 센서 이름</dd><dt>관리 IP·인증</dt><dd>Manager와 안전하게 통신하기 위한 인증서</dd><dt>내부 대역</dt><dd>우리 회사 IP 대역(내부·외부를 구분하는 기준)</dd><dt>프록시 주소(선택)</dt><dd>PC가 쓰는 프록시. 비워 두면 센서가 연결 첫 줄(CONNECT)로 찾아 배움. 프록시를 거친 통신은 실제 목적지로 탐지</dd><dt>수집 포트</dt><dd>미러 트래픽이 들어오는 포트(SPAN·TAP)</dd><dt>정책</dt><dd>소속 그룹의 룰 정책·예외·탐지 엔진 버전을 따름</dd></div></div></div>`}
+  if(k==='group'){$('#admCrumb').textContent='관리 › 장비 › 그룹 관리';
+   b.innerHTML=`<div class="grid g12"><div class="panel"><h3>그룹</h3><div class="pbody">📁 TOTAL<br>&nbsp;&nbsp;📁 MDS·MTA<br>&nbsp;&nbsp;📁 <b>본사 센서</b> <span class="pill pnew">NSM</span><br>&nbsp;&nbsp;📁 <b>지사 센서</b> <span class="pill pnew">NSM</span></div></div>
+   <div class="panel tw"><h3>그룹별로 적용된 것 <span class="r">룰 정책·예외·탐지 엔진은 그룹 단위로 배포</span></h3><table class="t"><tr><th>그룹</th><th>센서</th><th>룰 정책</th><th>예외</th><th>탐지 엔진</th></tr>${['본사 센서','지사 센서'].map(g=>`<tr><td><b>${g}</b></td><td>${SENSORS.filter(s=>s.grp===g).map(s=>s.name).join('<br>')}</td><td class="mono">${RULESET[g]}</td><td class="mono">${EXCVER}</td><td class="mono">${SENSORS.find(s=>s.grp===g).eng}</td></tr>`).join('')}</table></div></div>`}
+  if(k==='rules')renderRules();
+  if(k==='exc')renderExc();
+  if(k==='engine')renderEngine();
+  if(k==='agentpol')renderAgentPol();
+}
+$('#tree').onclick=e=>{const a=e.target.closest('a[data-a]');if(a)adm(a.dataset.a)};
+
+// ---------------------------------------------------------------- 에이전트 정책
+let POLDIRTY=0;
+function renderAgentPol(){
+  $('#admCrumb').textContent='관리 › 자산 › 에이전트 정책';
+  const tot={확인:0,미확인:0,'판정 불가':0};AGPOL.forEach(p=>{const c=polCounts(p);for(const k in tot)tot[k]+=c[k]});
+  const miss=ASSETS.filter(noAgent).length,nerr=AGPOL.filter(p=>p.err).length;
+  $('#admBody').innerHTML=`<div class="callout">회사에서 쓰는 보안·관리 제품(EDR, 백신 관리 서버, 패치, NAC, DLP 등)의 <b>에이전트가 장비에서 통신하는지</b> 네트워크로 확인합니다. 제품마다 관리 서버 주소·포트, 접속 도메인, 프로그램 이름(User-Agent) 중 아는 것을 적으면 센서가 맞는 통신을 찾습니다. 통신이 안 보인다고 설치가 안 된 것은 아니어서 결과는 <b>확인 · 미확인 · 판정 불가</b>로 나눕니다.</div>
+   <div class="grid g4" style="margin-bottom:12px">${[['사용 중인 정책',AGPOL.filter(p=>p.on&&!p.err).length+'개','',''],['에이전트 미확인 장비',miss+'대','#e65100','미확인 정책이 하나라도 있는 장비'],['판정 불가',tot['판정 불가']+'건','','미러가 경로를 못 보는 것으로 추정'],['정책 오류',nerr+'개',nerr?'#c62828':'','센서가 받지 않은 정책']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v" style="color:${k[2]||'inherit'}">${k[1]}</div><div class="d">${k[3]}</div></div>`).join('')}</div>
+   <div class="bar"><button class="btn pri" id="pAdd">정책 추가</button><button class="btn" id="pTpl">템플릿에서 추가</button><button class="btn" id="pExp">센서 파일 보기</button>${POLDIRTY?`<span class="chip warn">배포 전 변경 ${POLDIRTY}건</span><button class="btn pri" id="pDep">센서에 배포</button>`:'<span class="note">모든 변경이 센서에 반영됨</span>'}<a class="note" onclick="show('nsm');nsmTab('assets');ACARD='';setAssetCard('noagent')">자산 현황에서 미확인 장비 보기</a><span class="note" style="margin-left:auto">행을 누르면 수정 · 숫자를 누르면 장비 목록</span></div>
+   <div class="panel tw"><table class="t" id="polTable"><tr><th>제품</th><th>찾는 방법</th><th>조건</th><th>대상 장비</th><th>확인 주기</th><th class="num">확인</th><th class="num">미확인</th><th class="num">판정 불가</th><th>상태</th><th>마지막 변경</th></tr>
+   ${AGPOL.map((p,i)=>{const c=polCounts(p);return `<tr class="click" data-pi="${i}"><td><b>${esc(p.name)}</b> ${p.builtin?'<span class="pill pnew">기본 제공</span>':''}<div class="note mono">policy:${esc(p.id)}</div></td><td class="nw">${POL_HOW[polKind(p)]}</td><td class="note">${polCond(p)}</td><td class="nw">${esc(p.tgt)}</td><td class="nw">${p.every}</td>${p.err||p.pending||p.waiting?`<td colspan="3" class="muted" style="text-align:center">${p.pending?'배포 후 결과가 나옵니다':p.waiting?`결과 수집 중(확인 주기 ${p.every}가 지나면 나옴)`:'-'}</td>`:['확인','미확인','판정 불가'].map(k=>`<td class="num">${c[k]?`<a data-pr="${i}" data-ps="${k}" style="${k==='미확인'?'color:#e65100;font-weight:700':''}">${c[k]}</a>`:'<span class="muted">0</span>'}</td>`).join('')}<td class="nw">${p.err?`<span class="chip bad" title="${esc(p.err)}">오류</span>`:p.pending?'<span class="chip warn">배포 전</span>':p.on?'<span class="chip ok">사용</span>':'<span class="chip">사용 안 함</span>'}</td><td class="nw note">${esc(p.chg)}</td></tr>`}).join('')}</table></div>
+   ${nerr?`<div class="callout warn" style="margin-top:12px">센서가 받지 않은 정책이 있습니다. ${AGPOL.filter(p=>p.err).map(p=>`<b>${esc(p.name)}</b>: ${esc(p.err)}`).join(' · ')}</div>`:''}
+   <div class="panel" style="margin-top:12px"><h3>판정 기준</h3><div class="pbody"><div class="kv"><dt>확인</dt><dd>확인 주기 안에 정책에 맞는 통신이 보임</dd><dt>미확인</dt><dd>대상 장비가 그 기간에 충분히 활동했는데 통신이 안 보임. 단, 같은 대역(/24)의 대상 장비 중 ${POL_RATIO}% 이상에서는 통신이 보여야 함(미러가 그 경로를 본다는 증거). 설치 안 됨, 서비스 꺼짐, 다른 경로 사용일 수 있어 확인이 필요함</dd><dt>판정 불가</dt><dd>같은 대역에서 이 통신이 거의 안 보임. 미러가 관리 서버로 가는 경로를 못 보는 것으로 봄</dd><dt>정확한 확인</dt><dd>각 제품 관리 콘솔의 에이전트 목록과 대조(연동 예정)</dd></div></div></div>`;
+  $$('#polTable tr[data-pi]').forEach(t=>t.onclick=e=>{const a=e.target.closest('a[data-pr]');if(a){polResult(+a.dataset.pr,a.dataset.ps);return}polForm(+t.dataset.pi)});
+  $('#pAdd').onclick=()=>polForm(-1);
+  $('#pTpl').onclick=polTemplates;
+  $('#pExp').onclick=polFile;
+  if($('#pDep'))$('#pDep').onclick=()=>{AGPOL.forEach(p=>{if(p.pending){p.pending=0;p.waiting=1;p.chg='11-18 '+nowHM()+' admin'}});POLDIRTY=0;renderAgentPol();toast('센서 3대에 배포했습니다. 1분 안에 반영되고 결과는 확인 주기가 지나면 채워집니다')};
+}
+function polResult(i,st){
+  const p=AGPOL[i],rows=ASSETS.map(a=>[a,polJudge(p,a)]).filter(x=>x[1]&&x[1].st===st);
+  openModal(`${p.name} · ${st} ${rows.length}대`,`<table class="t"><tr><th>장비</th><th>역할</th><th>OS</th><th>판정 근거</th><th></th></tr>${rows.map(([a,j])=>`<tr><td>${who(a.ip)}</td><td>${esc(a.role||'-')}</td><td>${esc(a.os||'-')}</td><td class="note">${esc(j.why)}</td><td class="nw"><a onclick="closeModal();show('nsm');openEntity('${a.ip}')">장비 상세</a>${st==='미확인'?` · <a onclick="toast('${esc(a.host||a.ip)} 담당자에게 확인 요청을 보냈습니다(목업)')">확인 요청</a>`:''}</td></tr>`).join('')}</table>
+   <div class="note" style="margin-top:8px">${st==='미확인'?'통신이 안 보인 것이지 설치 안 됨이 확정된 것은 아닙니다. 장비에서 에이전트 서비스 상태를 확인하세요.':st==='판정 불가'?'센서가 이 경로를 보도록 미러링 구간을 바꾸거나, 제품 관리 콘솔 목록으로 확인하세요.':'확인 주기 안에 에이전트 통신이 보인 장비입니다.'}</div>`,`<button class="btn" onclick="closeModal()">닫기</button>`);
+}
+function polCheck(f){                                       // 센서 정책 검사와 같은 규칙(SPEC 3.17)
+  const e=[],items=s=>s.split(',').map(x=>x.trim()).filter(Boolean);
+  if(!/^[A-Za-z0-9_.\-]+$/.test(f.id))e.push('정책 ID는 영문·숫자·._- 만 쓸 수 있습니다');
+  if(!f.name.trim())e.push('제품 이름을 적어 주세요');
+  items(f.server).forEach(x=>{if(!/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x))e.push(`관리 서버 "${x}"가 주소·대역이 아닙니다`)});
+  const ps=items(f.ports);ps.forEach(x=>{const m=/^(\d+)(\/(tcp|udp))?$/i.exec(x);if(!m||+m[1]>65535)e.push(`포트 "${x}"가 포트가 아닙니다`)});
+  items(f.domain).forEach(x=>{if(!/^(\*\.)?[a-z0-9_]([a-z0-9_\-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_\-]*[a-z0-9_])?)+$/i.test(x))e.push(`도메인 "${x}"가 도메인이 아닙니다`)});
+  const app=items(f.domain).length||f.ua.trim();
+  if(!app&&!items(f.server).length&&!ps.length)e.push('관리 서버, 포트, 도메인, User-Agent 중 하나는 있어야 합니다');
+  if(!app&&!items(f.server).length&&ps.length){const m=+(f.min||2);if(m<2)e.push('서버 주소 없이 포트만 적으면 최소 포트 수가 2 이상이어야 합니다(다른 제품과 같은 포트를 쓸 수 있음)');else if(m>ps.length)e.push('최소 포트 수가 적은 포트 수보다 많습니다')}
+  if(f.device.trim()&&!items(f.server).length)e.push('서버에 표시할 장비 종류는 관리 서버 주소를 적은 정책에만 쓸 수 있습니다');
+  return e;
+}
+const polLine=f=>[f.id,f.name,f.server,f.ports,f.domain,f.ua,f.min,f.device].map(x=>String(x||'').trim()||'-').join('\t');
+function polForm(i,pre){
+  const p=i>=0?AGPOL[i]:Object.assign({id:'',name:'',server:'',ports:'',domain:'',ua:'',min:'',device:'',tgt:'업무 PC',every:'24시간',on:1},pre||{}),ro=p.builtin?'disabled':'';
+  const fld=(k,lab,ph,help)=>`<label>${lab}</label><div><input class="inp pf" data-k="${k}" style="width:100%" value="${esc(p[k])}" placeholder="예: ${ph}" ${ro}><div class="help">${help}</div></div>`;
+  openModal(i>=0?`에이전트 정책 수정 · ${p.name}`:'에이전트 정책 추가',`${p.builtin?'<div class="callout">기본 제공 정책은 찾는 조건을 바꿀 수 없습니다. 대상 장비, 확인 주기, 사용 여부만 바꿀 수 있습니다.</div>':'<div class="callout">아는 것만 적으면 됩니다. 적은 조건은 <b>모두</b> 맞아야 합니다. 프록시를 거치는 클라우드 제품은 관리 서버 없이 도메인만 적으세요.</div>'}
+   <div class="form">
+    <label>제품 이름</label><div><input class="inp pf" data-k="name" style="width:100%" value="${esc(p.name)}" placeholder="예: A사 EDR" ${ro}></div>
+    <label>정책 ID</label><div><input class="inp pf mono" data-k="id" style="width:240px" value="${esc(p.id)}" placeholder="edr-a" ${i>=0?'disabled':''}><div class="help">탐지·자산 기록에 policy:ID로 남습니다(영문·숫자·._-)</div></div>
+    ${fld('server','관리 서버 주소','10.1.2.30, 10.1.3.0/24','사내에 관리 서버가 있는 제품. 쉼표로 여러 개')}
+    ${fld('ports','포트','8443/tcp, 443','에이전트가 서버에 접속하는 포트. 프로토콜을 안 적으면 tcp')}
+    ${fld('domain','접속 도메인','*.sensor.vendor.example','클라우드 제품. 하위 도메인 포함, 제조사 웹사이트 도메인은 넣지 마세요')}
+    ${fld('ua','User-Agent','PMSAgent/','평문 HTTP로 업데이트하는 프로그램의 이름(대소문자 무시)')}
+    ${fld('min','최소 포트 수','2','서버 주소 없이 포트만 적었을 때 같은 서버의 서로 다른 포트를 몇 개 이상 봐야 하는지')}
+    ${fld('device','서버 장비 종류','av-mgr','(선택) 관리 서버를 자산 현황에 이 장비로 표시')}
+    <label>대상 장비</label><div><select class="sel pf" data-k="tgt">${Object.keys(POL_TGT).map(t=>`<option ${t===p.tgt?'selected':''}>${t}</option>`).join('')}</select><div class="help">이 제품이 깔려 있어야 하는 장비. 대상이 아닌 장비는 미확인으로 세지 않음</div></div>
+    <label>확인 주기</label><div><select class="sel pf" data-k="every">${['24시간','7일'].map(t=>`<option ${t===p.every?'selected':''}>${t}</option>`).join('')}</select><div class="help">에이전트가 서버에 보고하는 주기보다 길게</div></div>
+    <label>사용</label><div><label class="note"><input type="checkbox" class="pf" data-k="on" ${p.on?'checked':''}> 이 정책으로 확인</label></div>
+   </div>
+   <div id="pfErr" style="margin-top:10px"></div>
+   <div class="note" style="margin-top:8px">센서 정책 파일에 들어갈 줄</div><pre class="mono" id="pfPrev" style="background:#f5f7fa;padding:8px;border-radius:4px;white-space:pre-wrap;font-size:11.5px"></pre>`,
+   `${i>=0&&!p.builtin?'<button class="btn" id="pfDel" style="margin-right:auto">삭제</button>':''}<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="pfOk">저장</button>`);
+  const get=()=>{const f={};$$('#mBody .pf').forEach(x=>f[x.dataset.k]=x.type==='checkbox'?(x.checked?1:0):x.value);return Object.assign({},p,f)};
+  const upd=()=>{const f=get(),e=p.builtin?[]:polCheck(f);$('#pfErr').innerHTML=e.length?`<div class="callout warn">${e.map(esc).join('<br>')}</div>`:'<div class="note" style="color:var(--low)">✓ 센서가 받을 수 있는 정책입니다</div>';$('#pfPrev').textContent=p.builtin?'(기본 제공 정책은 센서에 내장)':polLine(f)};
+  $$('#mBody .pf').forEach(x=>x.oninput=x.onchange=upd);upd();
+  $('#pfOk').onclick=()=>{const f=get(),e=p.builtin?[]:polCheck(f);if(e.length){toast('고칠 곳이 있습니다');return}
+    if(!p.builtin&&AGPOL.some((x,k)=>k!==i&&x.id===f.id)){toast('같은 정책 ID가 이미 있습니다');return}
+    const keep=i>=0?AGPOL[i]:null,np=Object.assign({},keep||{},f,{err:'',pending:1,chg:'11-18 '+nowHM()+' admin'});
+    if(!keep||(!p.builtin&&polLine(f)!==polLine(keep)))np.ok=a=>false;
+    if(p.builtin){np.pending=0}
+    if(i>=0)AGPOL[i]=np;else AGPOL.push(np);
+    if(!p.builtin)POLDIRTY++;closeModal();renderAgentPol();toast(p.builtin?'저장했습니다':'저장했습니다. 센서에 배포하면 적용됩니다')};
+  if($('#pfDel'))$('#pfDel').onclick=()=>{AGPOL.splice(i,1);POLDIRTY++;closeModal();renderAgentPol();toast('삭제했습니다. 센서에 배포하면 적용됩니다')};
+}
+function polTemplates(){
+  const T=[['AhnLab EPP 에이전트','관리 서버형','server','관리 서버 주소는 고객마다 다릅니다. 포트는 제품 설치 가이드 값으로 채움'],['AhnLab EDR 에이전트','관리 서버형','server','관리 서버 주소 필요'],['클라우드 EDR(도메인형)','접속 도메인','domain','벤더가 공개한 방화벽 허용 목록의 수집 도메인'],['패치·자산관리(HTTP)','User-Agent','ua','업데이트 요청의 프로그램 이름']];
+  openModal('템플릿에서 정책 추가',`<div class="note" style="margin-bottom:8px">제품별 서버 포트·도메인은 버전마다 확인한 값만 템플릿으로 제공합니다. (목업: 템플릿 값은 제품별 검증 후 채움)</div><table class="t"><tr><th>템플릿</th><th>찾는 방법</th><th>고객이 넣을 것</th><th></th></tr>${T.map((t,k)=>`<tr><td><b>${t[0]}</b></td><td>${t[1]}</td><td class="note">${t[3]}</td><td><button class="btn" data-tp="${k}">이걸로 시작</button></td></tr>`).join('')}</table>`,`<button class="btn" onclick="closeModal()">닫기</button>`);
+  $$('#mBody [data-tp]').forEach(b=>b.onclick=()=>{const t=T[+b.dataset.tp];polForm(-1,{name:t[0],tgt:t[2]==='server'?'Windows 자산':'업무 PC',domain:t[2]==='domain'?'*.':''})});
+}
+function polFile(){
+  const cus=AGPOL.filter(p=>!p.builtin);
+  openModal('센서 정책 파일',`<div class="note" style="margin-bottom:6px">Manager가 센서에 배포하는 파일입니다(agent_policy.tsv). 기본 제공 정책(AhnLab V3, MDS Agent)은 센서에 내장돼 있어 파일에 없습니다. 오류 정책은 센서가 받지 않고 이유를 로그에 남깁니다.</div><pre class="mono" style="background:#f5f7fa;padding:8px;border-radius:4px;font-size:11.5px;overflow:auto">#fields\tid\tproduct\tserver\tports\tdomain\tuser_agent\tmin_ports\tdevice\n${cus.map(p=>esc(polLine(p))).join('\n')}</pre>`,`<button class="btn" onclick="closeModal()">닫기</button>`);
+}
+
+// ---------------------------------------------------------------- NSM 룰 정책
+const RSEL=new Set();
+function ruleChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||p.sev!==d.sev||JSON.stringify(p.params)!==JSON.stringify(d.params)}
+function sensorChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||JSON.stringify(p.params)!==JSON.stringify(d.params)}
+const custom=n=>Object.keys(POLICY[curProfile][n].params).length>0;
+function renderRules(){
+  $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 룰 정책';
+  const nchg=RULES.filter(r=>ruleChanged(r[1])).length;
+  $('#admBody').innerHTML=`<div class="callout">탐지 종류마다 <b>사용 여부, 위험도, 탐지 기준</b>을 정합니다. 위험도는 배포하면 바로 반영됩니다. 사용 여부와 탐지 기준은 센서에 적용되며, 적용하는 동안 센서 분석이 몇 초 멈춥니다. 정상 통신이 반복해서 탐지되면 기준을 바꾸기보다 <a onclick="adm('exc')">NSM 예외</a>에 등록하세요.</div>
+   <div class="bar"><span class="note">정책</span><select class="sel" id="rProf">${PROFILES.map(p=>`<option ${p===curProfile?'selected':''}>${p}</option>`).join('')}</select><span class="note">${curProfile==='기본 정책'?'새 그룹을 만들 때 쓰는 기본값':curProfile+' 그룹에 적용'} · 현재 버전 <span class="mono">${RULESET[curProfile]}</span></span>
+    </div>
+   <div class="bar"><select class="sel" id="rStage"><option value="">공격 단계 전체</option>${STAGES.map(s=>`<option value="${s}">${STAGE_KO[s]}</option>`).join('')}</select>
+    <select class="sel" id="rSev"><option value="">위험도 전체</option>${SEV.map(s=>`<option>${s}</option>`).join('')}</select>
+    <select class="sel" id="rState"><option value="">상태 전체</option><option value="on">사용 중</option><option value="off">사용 안 함</option><option value="custom">기준을 바꾼 것</option><option value="chg">아직 배포 안 한 변경</option></select>
+    <input class="inp" id="rq" placeholder="탐지명 검색" style="width:200px"><span class="note" id="rCnt"></span></div>
+   <div class="bar hidden" id="rBulk" style="background:#eef3fd;border:1px solid #cfdcf8;border-radius:6px;padding:6px 10px"><b id="rBulkN"></b><button class="btn sm" data-b="on">사용</button><button class="btn sm" data-b="off">사용 안 함</button><span class="note">위험도</span>${SEV.map(s=>`<button class="btn sm" data-b="sev:${s}">${s}</button>`).join('')}<button class="btn sm" data-b="clear" style="margin-left:auto">선택 해제</button></div>
+   <div class="panel tw"><table class="t" id="ruleTable"></table></div>
+   <div class="pending ${nchg?'':'hidden'}"><b>아직 배포 안 한 변경 ${nchg}건</b><span class="note">그중 ${RULES.filter(r=>sensorChanged(r[1])).length}건은 센서 적용 필요</span><span style="margin-left:auto"></span><button class="btn" id="rDiscard">변경 취소</button><button class="btn" id="rPrev">바뀌는 내용 보기</button><button class="btn pri" id="rDeploy">배포</button></div>`;
+  drawRules();
+  ['#rStage','#rSev','#rState'].forEach(s=>$(s).onchange=drawRules);$('#rq').oninput=drawRules;
+  $('#rProf').onchange=e=>{curProfile=e.target.value;RSEL.clear();renderRules()};
+  $('#rBulk').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;const a=b.dataset.b;if(a!=='clear'){RSEL.forEach(n=>{const p=POLICY[curProfile][n];if(a==='on')p.on=true;else if(a==='off')p.on=false;else p.sev=a.slice(4)});toast(`${RSEL.size}개를 바꿨습니다(배포 전)`)}RSEL.clear();renderRules()};
+  $('#rDiscard').onclick=()=>{RULES.forEach(r=>{const p=POLICY[curProfile][r[1]];p.on=p.deployed.on;p.sev=p.deployed.sev;p.params=JSON.parse(JSON.stringify(p.deployed.params));p.hist=p.hist.filter(h=>h[3]!=='저장(배포 전)')});renderRules();toast('배포 안 한 변경을 취소했습니다')};
+  $('#rPrev').onclick=()=>previewRules(false);$('#rDeploy').onclick=()=>previewRules(true);
+}
+function drawRules(){
+  const st=$('#rStage').value,sv=$('#rSev').value,ss=$('#rState').value,q=$('#rq').value.toLowerCase();
+  const rows=RULES.filter(r=>{const p=POLICY[curProfile][r[1]];return(!st||r[3]===st)&&(!sv||p.sev===sv)&&(!ss||(ss==='on'?p.on:ss==='off'?!p.on:ss==='custom'?custom(r[1]):ruleChanged(r[1])))&&(!q||r.join(' ').toLowerCase().includes(q))});
+  $('#rCnt').textContent=`${rows.length}개 · 사용 중 ${RULES.filter(r=>POLICY[curProfile][r[1]].on).length}/${RULES.length}`;
+  const cnt7=n=>{const base=nsmEv().filter(e=>e.note===n).length;let x=n.length;return [...Array(7)].map((_,i)=>i===6?base:Math.max(0,Math.round(base*(.5+((x=(x*31+i*7)%17)/17)))))};
+  $('#ruleTable').innerHTML=`<tr><th><input type="checkbox" id="rAll"></th><th>사용</th><th>탐지명</th><th>공격 단계</th><th>위험도</th><th>탐지 기준</th><th>최근 7일</th><th class="num">예외</th><th></th></tr>`+rows.map(r=>{const n=r[1],p=POLICY[curProfile][n],ch=ruleChanged(n),ex=EXC.filter(e=>e.scope.includes(n)&&excStatus(e)!=='만료됨'&&!e.rej).length;
+   return `<tr class="${ch?'chg':''} ${p.on?'':'dim'}" data-n="${n}"><td><input type="checkbox" class="rck" ${RSEL.has(n)?'checked':''}></td><td><span class="toggle ${p.on?'on':''}" data-tg="${n}"></span></td><td><a data-go="rule" data-n="${n}">${r[2]}</a><span class="sub">${r[0]} · ${n} · ${r[4]}</span></td><td class="nw">${STAGE_KO[r[3]]}</td><td><select class="sel rsev" style="padding:1px 4px">${SEV.map(s=>`<option ${s===p.sev?'selected':''}>${s}</option>`).join('')}</select></td><td>${esc(r[6])}${custom(n)?' <span class="pill pchg">기준 바꿈</span>':''}</td><td>${spark(cnt7(n))}</td><td class="num">${ex?`<a onclick="adm('exc');$('#xq').value='${n}';drawExc()">${ex}개</a>`:''}</td><td class="nw">${ch?'<span class="pill pchg">배포 전</span>':''}</td></tr>`}).join('');
+  $$('#ruleTable [data-tg]').forEach(t=>t.onclick=e=>{e.stopPropagation();const p=POLICY[curProfile][t.dataset.tg];p.on=!p.on;p.hist.unshift(['2026-11-18 '+nowHM(),'admin',p.on?'사용':'사용 안 함','저장(배포 전)']);renderRules()});
+  $$('#ruleTable .rsev').forEach(s=>s.onchange=()=>{const p=POLICY[curProfile][s.closest('tr').dataset.n];p.hist.unshift(['2026-11-18 '+nowHM(),'admin',`위험도 ${p.sev} → ${s.value}`,'저장(배포 전)']);p.sev=s.value;renderRules()});
+  $$('#ruleTable .rck').forEach(c=>c.onchange=()=>{const n=c.closest('tr').dataset.n;c.checked?RSEL.add(n):RSEL.delete(n);bulkBar()});
+  $('#rAll').onchange=e=>{rows.forEach(r=>e.target.checked?RSEL.add(r[1]):RSEL.delete(r[1]));$$('#ruleTable .rck').forEach(c=>c.checked=e.target.checked);bulkBar()};bulkBar();
+}
+function bulkBar(){$('#rBulk').classList.toggle('hidden',!RSEL.size);$('#rBulkN').textContent=`${RSEL.size}개 선택`}
+function openRule(n){
+  const r=R[n],p=POLICY[curProfile][n],ps=PARAMS[n]||[],g=GUIDE[n];
+  const evs=nsmEv().filter(e=>e.note===n),exs=EXC.filter(e=>e.scope.includes(n));
+  const body=`<div class="note">정책 <b>${curProfile}</b> · ${STAGE_KO[r.stage]}</div>
+   ${g?`<div style="margin-top:6px">${esc(g[0])}</div>`:''}
+   <div class="sec">기본 설정</div><div class="kv"><dt>사용</dt><dd><span class="toggle ${p.on?'on':''}" id="roOn"></span> <span class="note">끄면 이 탐지를 하지 않습니다</span></dd><dt>위험도</dt><dd><select class="sel" id="roSev">${SEV.map(s=>`<option ${s===p.sev?'selected':''}>${s}</option>`).join('')}</select> <span class="note">배포하면 바로 반영</span></dd><dt>탐지 기준</dt><dd>${esc(r.cond)}</dd></div>
+   <div class="sec">탐지 기준 바꾸기 <span class="note" style="font-weight:400">비워 두면 기본값을 씁니다</span></div>
+   ${ps.length?`<table class="t"><tr><th>항목</th><th>기본값</th><th>이 정책 값</th></tr>${ps.map(x=>`<tr><td>${x[3]}<span class="sub">${x[0]}</span></td><td class="mono">${esc(x[1])||'<span class="muted">비어 있음</span>'}</td><td><input class="inp mono rpar" data-k="${x[0]}" data-t="${x[2]}" value="${esc(p.params[x[0]]??'')}" placeholder="${esc(x[1])}" style="width:170px"><div class="errtxt hidden"></div></td></tr>`).join('')}</table>`:'<div class="note">이 탐지는 정해진 공격 패턴을 찾는 방식이라 바꿀 기준이 없습니다(사용 여부·위험도만).</div>'}
+   <div class="sec">최근 탐지 <span class="note" style="font-weight:400">오늘 ${evs.length}건</span></div>${evs.slice(0,5).map(e=>`<div><a data-go="det" data-id="${e.id}">${e.t} ${esc(nm(e.src))} → ${esc(dstName(e))}</a> ${e.disp?'<span class="chip sup">알림 끔</span>':''}</div>`).join('')||'<div class="note">없음</div>'}
+   <div class="sec">이 탐지에 걸린 예외 <span class="note" style="font-weight:400">${exs.length}개</span></div>${exs.map(e=>`<div><span class="mono">${e.id}</span> <span class="chip ${e.disp==='suppress'?'sup':''}">${DISP[e.disp]}</span> ${esc(e.reason)} <span class="note">오늘 ${e.hits}건 해당</span></div>`).join('')||'<div class="note">없음</div>'}
+   <details class="tech"><summary>기술 상세</summary><div class="note" style="margin-top:4px">룰 ${r.file} · 탐지 유형 <span class="mono">${n}</span> · ATT&amp;CK <span class="mono">${r.tech}</span> · ${r.agg?'여러 건을 모아서 판단':'한 건마다 판단'}</div></details>`;
+  openDrawer(r.ko,sev(p.sev),body,`<button class="btn" id="roReset">기본값으로</button><span style="margin-left:auto"></span><button class="btn" onclick="closeDrawer()">취소</button><button class="btn pri" id="roSave">저장</button>`);
+  $('#roOn').onclick=e=>e.target.classList.toggle('on');
+  $('#roReset').onclick=()=>{$$('.rpar').forEach(i=>i.value='');toast('기준을 기본값으로 비웠습니다(저장해야 반영)')};
+  $('#roSave').onclick=()=>{let ok=true;const np={};
+   $$('.rpar').forEach(i=>{const v=i.value.trim(),t=i.dataset.t,er=i.nextElementSibling;let msg='';
+    if(v){if((t==='count'||t==='bytes')&&!/^\d+$/.test(v))msg='숫자만 입력하세요';else if(t==='count'&&+v===0)msg='0보다 커야 합니다';else if(t==='ratio'&&!(+v>0&&+v<=1))msg='0과 1 사이 값(예: 0.5)';else if(t==='interval'&&!/^\d+(sec|min|hr|day)s?$/.test(v))msg='예: 30sec, 5min, 12hr';else if(t==='bool'&&!/^[TF]$/.test(v))msg='T(예) 또는 F(아니오)';else if(t==='addrs'&&!v.split(',').every(a=>/^\d+\.\d+\.\d+\.\d+(\/\d+)?$/.test(a.trim())))msg='IP 또는 대역, 쉼표로 구분';else if(t==='ports'&&!v.split(',').every(a=>/^\d+\/(tcp|udp)$/.test(a.trim())))msg='예: 8081/tcp, 53/udp'}
+    i.classList.toggle('err',!!msg);er.textContent=msg;er.classList.toggle('hidden',!msg);if(msg)ok=false;if(v&&!msg)np[i.dataset.k]=v});
+   if(!ok){toast('입력값을 확인하세요');return}
+   const now='2026-11-18 '+nowHM(),on=$('#roOn').classList.contains('on'),sv=$('#roSev').value;
+   if(p.on!==on){p.hist.unshift([now,'admin',on?'사용':'사용 안 함','저장(배포 전)']);p.on=on}
+   if(p.sev!==sv){p.hist.unshift([now,'admin',`위험도 ${p.sev} → ${sv}`,'저장(배포 전)']);p.sev=sv}
+   if(JSON.stringify(p.params)!==JSON.stringify(np)){ps.forEach(x=>{if((p.params[x[0]]||'')!==(np[x[0]]||''))p.hist.unshift([now,'admin',`${x[3]}: ${p.params[x[0]]||x[1]||'기본값'} → ${np[x[0]]||'기본값('+(x[1]||'비어 있음')+')'}`,'저장(배포 전)'])});p.params=np}
+   closeDrawer();renderRules();toast('저장했습니다. 아래에서 배포하세요.')};
+}
+function cfgLines(prof,dep){const L=[`# ${prof} 센서 설정 (MDS Manager가 만듦)`];RULES.forEach(r=>{const n=r[1],p=dep?POLICY[prof][n].deployed:POLICY[prof][n];if(!p.on)L.push(`redef NSM::detect_${n.toLowerCase()} = F;`);Object.entries(p.params).forEach(([k,v])=>{const t=((PARAMS[n]||[]).find(x=>x[0]===k)||[])[2];L.push(`redef NSM::${k} = ${t==='addrs'||t==='ports'?'{ '+v.split(',').map(a=>a.trim()).join(', ')+' }':v};`)})});return L}
+function changeList(){const L=[];RULES.forEach(r=>{const n=r[1],p=POLICY[curProfile][n],d=p.deployed;if(p.on!==d.on)L.push(`<b>${r[2]}</b>: ${p.on?'사용':'사용 안 함'}`);(PARAMS[n]||[]).forEach(x=>{const a=d.params[x[0]],b=p.params[x[0]];if((a||'')!==(b||''))L.push(`<b>${r[2]}</b> · ${x[3]}: ${esc(a||x[1]||'기본값')} → ${esc(b||'기본값('+(x[1]||'비어 있음')+')')}`)})});return L}
+function previewRules(deploy){
+  const a=cfgLines(curProfile,true),b=cfgLines(curProfile,false),sevCh=RULES.filter(r=>POLICY[curProfile][r[1]].sev!==POLICY[curProfile][r[1]].deployed.sev),chl=changeList();
+  const diff=[...a.filter(x=>!b.includes(x)).map(x=>`<span class="d">- ${esc(x)}</span>`),...b.map(x=>a.includes(x)?`<span>${esc('  '+x)}</span>`:`<span class="a">+ ${esc(x)}</span>`)].join('');
+  const needSensor=chl.length>0,grp=SENSORS.filter(s=>s.grp===curProfile);
+  if(deploy&&!needSensor&&!sevCh.length){toast('배포할 변경이 없습니다');return}
+  openModal(deploy?`룰 정책 배포 · ${curProfile}`:`바뀌는 내용 · ${curProfile}`,`
+   <div class="sec" style="margin-top:0">위험도 <span class="note" style="font-weight:400">배포하면 바로 반영 · ${sevCh.length}건</span></div>${sevCh.map(r=>`<div>${r[2]}: ${sev(POLICY[curProfile][r[1]].deployed.sev)} → ${sev(POLICY[curProfile][r[1]].sev)}</div>`).join('')||'<div class="note">없음</div>'}
+   <div class="sec">센서에 적용할 변경 <span class="note" style="font-weight:400">${needSensor?'적용하는 동안 분석이 몇 초 멈춤':'없음'}</span></div>${chl.map(x=>`<div>· ${x}</div>`).join('')||'<div class="note">없음</div>'}
+   <details class="tech"><summary>기술 상세(센서 설정 파일 비교)</summary><pre class="diff mono">${diff}</pre></details>
+   <div class="sec">사전 점검</div><div id="valOut"><div class="note">점검 중…</div></div>
+   ${deploy&&needSensor?`<div class="sec">적용할 센서</div>${grp.length?`<table class="t"><tr><th>센서</th><th>상태</th><th>진행</th></tr>${grp.map(s=>`<tr><td>${s.name}</td><td>${s.st==='bad'?'<span class="chip bad">연결 끊김</span>':'<span class="chip ok">연결됨</span>'}</td><td><div class="prog" id="pg-${s.name}"><i style="width:0"></i></div><span class="note" id="pt-${s.name}">대기</span></td></tr>`).join('')}</table><div class="note" style="margin-top:6px">한 대씩 적용합니다. 문제가 생기면 자동으로 이전 설정으로 되돌립니다.</div>`:'<div class="note">기본 정책은 새 그룹을 만들 때 복사되는 값이라 지금 적용할 센서가 없습니다.</div>'}`:''}`,
+   `<button class="btn" onclick="closeModal()">닫기</button>${deploy?'<button class="btn pri" id="dpGo" disabled>배포 시작</button>':''}`);
+  setTimeout(()=>{const old8=grp.some(s=>s.zv.startsWith('8'));$('#valOut').innerHTML=`<div class="oktxt">✔ 설정 문법 확인</div><div class="oktxt">✔ 적용 후 경고 없음</div><div class="${old8?'warntxt':'oktxt'}">${old8?'⚠ 이전 버전 엔진(Zeek 8.0.9)을 쓰는 센서가 있어 일부 탐지는 동작하지 않습니다':'✔ 센서 버전과 호환'}</div>`;const g=$('#dpGo');if(g)g.disabled=false},600);
+  if(!deploy)return;
+  setTimeout(()=>{const g=$('#dpGo');if(!g)return;g.onclick=()=>{g.disabled=true;
+   const done=()=>{RULES.forEach(r=>{const p=POLICY[curProfile][r[1]];p.hist.forEach(h=>{if(h[3]==='저장(배포 전)')h[3]='배포됨'});p.deployed={on:p.on,sev:p.sev,params:JSON.parse(JSON.stringify(p.params))}});
+    const v=RULESET[curProfile].match(/r(\d+)$/);RULESET[curProfile]='POL-2026.11.18-r'+(v?+v[1]+1:1);toast(`배포 완료: ${RULESET[curProfile]}`);setTimeout(()=>{closeModal();renderRules()},700)};
+   if(!needSensor||!grp.length){done();return}
+   let i=0;const run=()=>{const s=grp[i];if(!s){done();return}const pg=$('#pg-'+s.name),pt=$('#pt-'+s.name);if(s.st==='bad'){pg.classList.add('bad');pg.firstChild.style.width='100%';pt.textContent='건너뜀(연결되면 적용)';i++;setTimeout(run,300);return}
+    let w=0;const tk=setInterval(()=>{w+=25;pg.firstChild.style.width=w+'%';pt.textContent=['설정 보내는 중','확인 중','분석 다시 시작','적용 확인'][Math.min(3,w/25-1)];if(w>=100){clearInterval(tk);pg.classList.add('ok');pt.textContent='완료';i++;setTimeout(run,250)}},300)};run()}},650);
+}
+
+// ---------------------------------------------------------------- NSM 예외
+let EXCVER='EXC-v14',EXCDIRTY=false;
+const DISP={drop:'탐지 안 함',suppress:'알림만 끔'};
+const AXES=['src','dst','dst_port','service','domain'];
+const AXKO={src:'출발지',dst:'목적지',dst_port:'포트',service:'서비스',domain:'도메인'};
+let EXC=[
+ {id:'X-backup-01',disp:'drop',src:'10.10.10.90',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['Exfil_Large_Transfer','Exfil_Volume_Aggregate'],reason:'야간 백업 서버',owner:'인프라팀',expires:'2027-05-31',ref:'CHG-1182',hits:12,h7:[10,12,11,13,12,9,12]},
+ {id:'X-vulnscan',disp:'drop',src:'10.10.0.50',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['Port_Scan','Host_Scan'],reason:'분기 취약점 점검 장비',owner:'보안팀',expires:'2026-12-31',ref:'',hits:41,h7:[0,0,0,0,0,212,41]},
+ {id:'X-ad-refresh',disp:'suppress',src:'',dst:'',dst_port:'',service:'',domain:'ad-refresh.example',ja4:'',scope:['HTTP_Beaconing'],reason:'광고 자동 새로고침(확인 중)',owner:'보안팀',expires:'2026-11-25',ref:'',hits:9,h7:[8,7,9,10,8,6,9]},
+ {id:'X-partner-8081',disp:'drop',src:'',dst:'203.0.113.15',dst_port:'8081',service:'',domain:'',ja4:'',scope:['Nonstandard_Port'],reason:'협력사 포털',owner:'영업지원',expires:'',ref:'',hits:3,h7:[4,3,5,2,3,4,3]},
+ {id:'X-dns-resolver',disp:'drop',src:'10.10.10.10',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['DNS_Tunneling','Name_Poisoning'],reason:'DC 겸 내부 DNS 서버',owner:'인프라팀',expires:'',ref:'',hits:118,h7:[120,131,99,118,140,77,118]},
+ {id:'X-old-vpn',disp:'drop',src:'',dst:'198.51.100.200',dst_port:'',service:'',domain:'',ja4:'',scope:['Long_Connection'],reason:'구 VPN 장비(폐기)',owner:'인프라팀',expires:'2026-11-01',ref:'',hits:0,h7:[0,0,0,0,0,0,0]},
+ {id:'X-typo',disp:'drop',src:'10.10.10.66',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['No_Such_Notice'],reason:'(잘못 입력)',owner:'admin',expires:'',ref:'',hits:0,h7:[0,0,0,0,0,0,0],rej:'"No_Such_Notice"라는 탐지가 없어 센서가 이 예외를 적용하지 않았습니다'},
+];
+// 기본 예외 목록(nsm 저장소 docs/examples/exceptions.proxy-beacon.tsv): 프록시 경유 주기 접속을 켤 때 함께 적용
+const BUILTIN_EXC=[
+ ['EX-pb-ms-ncsi','msftconnecttest.com, msftncsi.com','Windows 네트워크 연결 확인',14],
+ ['EX-pb-ms-update','delivery.mp.microsoft.com, update.microsoft.com, windowsupdate.com','Windows 업데이트',6],
+ ['EX-pb-ms-telemetry','dc.services.visualstudio.com, in.applicationinsights.azure.com, events.data.microsoft.com','Microsoft 원격 측정',9],
+ ['EX-pb-ms-bing','www.bing.com','Windows 검색·위젯 갱신',2],
+ ['EX-pb-vscode','update.code.visualstudio.com, main.vscode-cdn.net','VS Code 업데이트 확인',11],
+ ['EX-pb-google','android.clients.google.com, optimizationguide-pa.googleapis.com','Chrome·Google 동기화',15],
+ ['EX-pb-apple','weatherkit.apple.com','Apple 날씨 위젯',3],
+ ['EX-pb-elastic','telemetry.elastic.co','Elastic 원격 측정',5],
+];
+let BUILTIN_ON=true;
+const proxyBeaconProfiles=()=>PROFILES.filter(pf=>['HTTP_Beaconing','TLS_Beaconing'].some(n=>(POLICY[pf][n].params.proxy_aware_beacon||'F')==='T'));
+function showBuiltin(){const on=proxyBeaconProfiles();
+  openModal('기본 예외 목록 · 프록시 경유 주기 접속',`<div class="callout">프록시를 쓰는 회사에서 "주기적 외부 접속(HTTP·HTTPS)" 탐지가 프록시를 거친 접속도 보게 하면, 업데이트·원격 측정 같은 정상 주기 통신이 많이 잡힙니다(고객 환경 1.4시간 측정에서 55건). 그 통신을 도메인으로 미리 빼 둔 목록입니다. 공개 서비스 이름만 들어 있습니다.</div>
+   <dl class="kv" style="margin:8px 0"><dt>적용 탐지</dt><dd>주기적 외부 접속(HTTP), 주기적 외부 접속(HTTPS)</dd><dt>처리</dt><dd>탐지 안 함</dd><dt>적용되는 정책</dt><dd>${on.length?on.map(esc).join(', '):'<span class="warntxt">프록시 경유를 켠 정책이 없어 지금은 적용되지 않습니다</span>'} <a data-go="rule" data-n="TLS_Beaconing">탐지 정책에서 켜기</a></dd><dt>사용</dt><dd>${BUILTIN_ON?'<span class="chip ok">사용</span>':'<span class="chip">끔</span>'}</dd></dl>
+   <table class="t"><tr><th>이름</th><th>도메인(하위 포함)</th><th>무엇인가</th><th class="num">오늘</th></tr>${BUILTIN_EXC.map(b=>`<tr><td class="mono nw">${b[0]}</td><td class="mono">${esc(b[1])}</td><td>${esc(b[2])}</td><td class="num">${REPORT?(REPORT.bihits[b[0]]||0):on.length&&BUILTIN_ON?b[3]:0}</td></tr>`).join('')}</table>
+   <div class="note" style="margin-top:6px">AI 서비스(열어 둔 ChatGPT 탭의 주기 요청)는 넣지 않았습니다. AI 사용 허용은 회사가 정합니다. 목록에 없는 정상 통신은 일반 예외로 추가합니다.</div>`,
+   `<button class="btn" onclick="closeModal()">닫기</button><button class="btn ${BUILTIN_ON?'':'pri'}" id="biTog">${BUILTIN_ON?'기본 목록 끄기':'기본 목록 사용'}</button>`);
+  $('#biTog').onclick=()=>{BUILTIN_ON=!BUILTIN_ON;EXCDIRTY=true;closeModal();renderExc();toast(BUILTIN_ON?'기본 예외 목록을 사용합니다(배포 전)':'기본 예외 목록을 껐습니다(배포 전)')}}
+const TODAY='2026-11-18';
+function excStatus(e){if(e.rej)return '오류';if(e.expires&&e.expires<TODAY)return '만료됨';if(e.expires&&e.expires<='2026-12-02')return '곧 만료';return '사용 중'}
+function renderExc(){
+  $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 예외';
+  const cnt=s=>EXC.filter(e=>excStatus(e)===s).length;
+  $('#admBody').innerHTML=`<div class="callout">정상인데 반복해서 탐지되는 통신을 등록합니다. <b>탐지 안 함</b>은 탐지 자체를 만들지 않고, <b>알림만 끔</b>은 기록은 남기되 알림을 보내지 않습니다. 센서에 1분 안에 반영되고(분석 중단 없음), 만료일이 지나면 자동으로 빠집니다.</div>
+   <div class="grid g4" style="margin-bottom:12px">${[['사용 중',cnt('사용 중'),''],['2주 안에 만료',cnt('곧 만료'),'#e65100'],['만료됨',cnt('만료됨'),''],['오류',cnt('오류'),'#c62828']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v" style="color:${k[2]}">${k[1]}</div></div>`).join('')}</div>
+   <div class="bar"><button class="btn pri" id="xAdd">예외 추가</button><button class="btn" id="xFromDet">탐지에서 예외 만들기</button><button class="btn" id="xImp">파일 가져오기</button><button class="btn" id="xExp">파일 내보내기</button>
+    <select class="sel" id="xSt"><option value="">상태 전체</option><option>사용 중</option><option>곧 만료</option><option>만료됨</option><option>오류</option></select><select class="sel" id="xDp"><option value="">처리 전체</option><option value="drop">탐지 안 함</option><option value="suppress">알림만 끔</option></select><input class="inp" id="xq" placeholder="이름·주소·도메인·사유" style="width:200px">
+    <span class="note" style="margin-left:auto">현재 버전 <span class="mono">${EXCVER}</span>${EXCDIRTY?' <span class="pill pchg">배포 전 변경 있음</span>':''}</span><button class="btn ${EXCDIRTY?'pri':''}" id="xDeploy">센서에 배포</button></div>
+   <div class="panel" style="margin-bottom:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>기본 예외 목록</b> <span class="pill pnew">신규</span><span>프록시 경유 주기 접속 ${BUILTIN_EXC.length}개(Windows·VS Code·Chrome·Apple 등 정상 주기 통신)</span>${REPORT?(BUILTIN_ON?'<span class="chip ok">예외 파일에 있음</span>':'<span class="chip">예외 파일에 없음</span>'):BUILTIN_ON?(proxyBeaconProfiles().length?'<span class="chip ok">적용 중</span>':'<span class="chip">대기: 프록시 경유 주기 접속을 켠 정책 없음</span>'):'<span class="chip">끔</span>'}<a id="xBuiltin" style="margin-left:auto">목록 보기</a></div>
+   <div class="panel tw"><table class="t" id="excTable"></table></div>
+   <div class="note" style="margin-top:6px">한 예외에 조건을 여러 개 넣으면 모두 맞을 때만 적용됩니다.</div>`;
+  drawExc();['#xSt','#xDp'].forEach(s=>$(s).onchange=drawExc);$('#xq').oninput=drawExc;
+  $('#xAdd').onclick=()=>excForm(null,{});$('#xBuiltin').onclick=showBuiltin;$('#xFromDet').onclick=pickDet;$('#xImp').onclick=importTsv;$('#xExp').onclick=exportTsv;$('#xDeploy').onclick=deployExc;
+}
+function drawExc(){
+  const st=$('#xSt').value,dp=$('#xDp').value,q=$('#xq').value.toLowerCase();
+  const rows=EXC.filter(e=>(!st||excStatus(e)===st)&&(!dp||e.disp===dp)&&(!q||JSON.stringify(e).toLowerCase().includes(q)));
+  const stc={'사용 중':'ok','곧 만료':'warn','만료됨':'','오류':'bad'};
+  $('#excTable').innerHTML=`<tr><th>이름</th><th>상태</th><th>처리</th><th>조건</th><th>적용할 탐지</th><th>사유·담당</th><th>만료일</th><th>최근 7일</th><th class="num">오늘</th><th></th></tr>`+rows.map(e=>{const s=excStatus(e),forced=e.disp==='suppress'&&(e.dst||e.dst_port||e.domain||e.ja4)&&e.scope.some(n=>R[n]&&R[n].agg);return `<tr class="${s==='만료됨'?'dim':''}"><td class="mono nw">${e.id}</td><td><span class="chip ${stc[s]}">${s}</span>${e.rej?`<div class="errtxt">${esc(e.rej)}</div>`:''}</td><td><span class="chip ${e.disp==='suppress'?'sup':''}">${DISP[e.disp]}</span>${forced?'<div class="note">이 조합은 "탐지 안 함"으로 동작</div>':''}</td><td>${AXES.filter(a=>e[a]).map(a=>`<div class="nw"><span class="note">${AXKO[a]}</span> <span class="mono">${esc(e[a])}</span></div>`).join('')}</td><td>${e.scope.length?e.scope.map(s=>`<span class="chip">${R[s]?R[s].ko:esc(s)}</span>`).join(''):'<span class="chip warn">모든 탐지</span>'}</td><td style="min-width:120px">${esc(e.reason)}<div class="note">${esc(e.owner)}${e.ref?' · '+esc(e.ref):''}</div></td><td class="nw">${e.expires||'없음'}</td><td>${spark(e.h7,e.disp==='suppress'?'#d4a106':'#5b8def')}</td><td class="num">${e.hits}</td><td class="nw"><a data-x="${e.id}" data-act="edit">수정</a><br><a data-x="${e.id}" data-act="dup">복제</a><br><a data-x="${e.id}" data-act="del" style="color:#c62828">삭제</a></td></tr>`}).join('');
+  $$('#excTable a[data-act]').forEach(a=>a.onclick=()=>{const e=EXC.find(x=>x.id===a.dataset.x);if(a.dataset.act==='edit')excForm(e,e);if(a.dataset.act==='dup')excForm(null,Object.assign({},e,{id:e.id+'-copy',rej:''}));if(a.dataset.act==='del'){if(confirm(`예외 "${e.id}"를 삭제할까요?`)){EXC=EXC.filter(x=>x!==e);EXCDIRTY=true;renderExc();toast('삭제했습니다(배포 전)')}}});
+}
+function excMatches(f){const inNet=(ip,c)=>{if(!c.includes('/'))return ip===c;const [n,b]=c.split('/');const toI=x=>x.split('.').reduce((a,o)=>a*256+(+o),0);if(!/^\d+\.\d+\.\d+\.\d+$/.test(ip))return false;const m=b==='0'?0:(~0<<(32-b))>>>0;return ((toI(ip)&m)>>>0)===((toI(n)&m)>>>0)};
+  return nsmEv().filter(ev=>!ev.corr&&(!f.scope.length||f.scope.includes(ev.note))&&(!f.src||inNet(ev.src,f.src))&&(!f.dst||(ev.victims||[ev.dst]).some(d=>inNet(d,f.dst)))&&(!f.dst_port||String(ev.port)===String(f.dst_port))&&(!f.domain||[ev.dst,ev.sni,ev.host].some(x=>x&&(x===f.domain||x.endsWith('.'+f.domain)))))}
+function excForm(edit,pre){
+  const v=Object.assign({id:'',disp:'drop',src:'',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:[],reason:'',owner:'admin',expires:'2027-02-18',ref:''},pre||{});
+  if(!edit&&!v.id)v.id='X-'+(v.src||v.dst||v.domain||'new').replace(/[^a-z0-9]/gi,'-').slice(0,22);
+  const opts=STAGES.map(s=>`<optgroup label="${STAGE_KO[s]}">${RULES.filter(r=>r[3]===s).map(r=>`<option value="${r[1]}" ${v.scope.includes(r[1])?'selected':''}>${r[2]}</option>`).join('')}</optgroup>`).join('');
+  openModal(edit?`예외 수정 · ${edit.id}`:'예외 추가',`<div class="form">
+   <label>이름</label><div><input class="inp mono" id="fx-id" value="${esc(v.id)}" ${edit?'readonly':''} style="width:260px"><div class="help">영문·숫자·-·_ 만 쓸 수 있고, 다른 예외와 겹치면 안 됩니다</div></div>
+   <label>처리 방법</label><div><label style="display:block"><input type="radio" name="fx-disp" value="drop" ${v.disp==='drop'?'checked':''}> <b>탐지 안 함</b> <span class="note">확실히 정상이고 양이 많은 통신(백업, 점검 장비)</span></label><label style="display:block"><input type="radio" name="fx-disp" value="suppress" ${v.disp==='suppress'?'checked':''}> <b>알림만 끔</b> <span class="note">아직 확신이 없을 때. 기록은 남아 나중에 확인 가능</span></label></div>
+   <label>출발지 IP</label><input class="inp mono" id="fx-src" value="${esc(v.src)}" placeholder="IP 또는 대역(예: 10.10.0.0/24)">
+   <label>목적지 IP</label><input class="inp mono" id="fx-dst" value="${esc(v.dst)}" placeholder="IP 또는 대역">
+   <label>목적지 포트</label><input class="inp mono" id="fx-port" value="${esc(v.dst_port)}" placeholder="예: 8081" style="width:120px">
+   <label>서비스</label><input class="inp mono" id="fx-svc" value="${esc(v.service)}" placeholder="예: ssl, http" style="width:160px">
+   <label>도메인</label><div><input class="inp mono" id="fx-dom" value="${esc(v.domain)}" placeholder="example.com" style="width:100%"><div class="help">하위 도메인(a.example.com)도 함께 적용됩니다. 프록시를 거친 통신은 목적지 IP가 프록시라서 도메인으로 걸어야 맞습니다</div></div>
+   <label>적용할 탐지</label><div><select class="sel" id="fx-scope" multiple size="6" style="width:100%">${opts}</select><div class="help">Ctrl(⌘)을 누른 채로 여러 개를 고릅니다. 고르지 않으면 모든 탐지에 적용됩니다</div></div>
+   <label>사유</label><input class="inp" id="fx-reason" value="${esc(v.reason)}" placeholder="왜 정상인지 적어 주세요">
+   <label>담당·참조</label><div style="display:flex;gap:6px"><input class="inp" id="fx-owner" value="${esc(v.owner)}" style="flex:1"><input class="inp mono" id="fx-ref" value="${esc(v.ref)}" placeholder="변경 요청 번호(선택)" style="flex:1"></div>
+   <label>만료일</label><div><input class="inp" type="date" id="fx-exp" value="${esc(v.expires)}"> <span class="help">비우면 계속 적용됩니다(기한을 두는 것을 권장)</span></div>
+  </div><div class="sec">확인 결과</div><div id="fx-out" class="note"></div>`,
+  `<span class="note" style="margin-right:auto">저장 후 "센서에 배포"를 눌러야 적용됩니다</span><button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="fx-save">저장</button>`);
+  const read=()=>({id:$('#fx-id').value.trim(),disp:document.querySelector('input[name=fx-disp]:checked').value,src:$('#fx-src').value.trim(),dst:$('#fx-dst').value.trim(),dst_port:$('#fx-port').value.trim(),service:$('#fx-svc').value.trim(),domain:$('#fx-dom').value.trim().toLowerCase(),scope:[...$('#fx-scope').selectedOptions].map(o=>o.value),reason:$('#fx-reason').value.trim(),owner:$('#fx-owner').value.trim(),ref:$('#fx-ref').value.trim(),expires:$('#fx-exp').value});
+  const check=()=>{const f=read(),err=[],warn=[];const ip=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/;
+   if(!/^[A-Za-z0-9_-]+$/.test(f.id))err.push('이름은 영문·숫자·-·_ 만');if(!edit&&EXC.some(x=>x.id===f.id))err.push('같은 이름의 예외가 있습니다');
+   if(!AXES.some(a=>f[a]))err.push('조건(출발지·목적지·포트·서비스·도메인)을 하나 이상 넣으세요');
+   if(f.src&&!ip.test(f.src))err.push('출발지 IP 형식이 맞지 않습니다');if(f.dst&&!ip.test(f.dst))err.push('목적지 IP 형식이 맞지 않습니다');if(f.dst_port&&!/^\d{1,5}$/.test(f.dst_port))err.push('포트는 숫자만');
+   if(f.domain&&!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(f.domain))err.push('도메인 형식이 맞지 않습니다');if(!f.reason)err.push('사유를 적어 주세요');
+   if(!f.scope.length)warn.push('적용할 탐지를 고르지 않아 모든 탐지에 적용됩니다');if(!f.expires)warn.push('만료일이 없어 계속 적용됩니다');
+   if(f.disp==='suppress'&&(f.dst||f.dst_port||f.domain||f.ja4)&&f.scope.some(n=>R[n].agg))warn.push('여러 건을 모아서 판단하는 탐지에 목적지 쪽 조건을 넣으면, "알림만 끔"을 골라도 "탐지 안 함"으로 동작합니다');
+   if(f.disp==='drop'&&f.scope.some(n=>R[n].agg))warn.push('여러 건을 모아서 판단하는 탐지라, 일부를 빼면 남은 통신만으로는 기준에 못 미쳐 다른 탐지 결과도 달라질 수 있습니다');
+   if(f.scope.some(n=>R[n].sev==='Critical'))warn.push('Critical 탐지에 거는 예외입니다. 먼저 "알림만 끔"으로 지켜보세요');
+   const m=excMatches(f);
+   $('#fx-out').innerHTML=(err.length?err.map(x=>`<div class="errtxt">✖ ${x}</div>`).join(''):'<div class="oktxt">✔ 입력값 확인 완료</div>')+warn.map(w=>`<div class="warntxt">⚠ ${w}</div>`).join('')+
+    `<div style="margin-top:6px;color:var(--ink)">오늘 탐지 중 이 예외에 해당하는 것: <b>${m.length}건</b>${m.length?` → 앞으로 ${f.disp==='drop'?'탐지하지 않습니다':'알림만 꺼집니다'}`:''}</div>${m.slice(0,4).map(e=>`<div>· ${e.t} ${esc(e.name)} ${esc(nm(e.src))} → ${esc(nm(e.dst))}</div>`).join('')}${m.length>4?`<div>· 외 ${m.length-4}건</div>`:''}`;
+   return err.length===0};
+  $$('#modal input,#modal select').forEach(i=>{i.addEventListener('input',check);i.addEventListener('change',check)});check();
+  $('#fx-save').onclick=()=>{if(!check()){toast('입력값을 확인하세요');return}const f=read();
+   if(edit)Object.assign(edit,f,{rej:''});else EXC.unshift(Object.assign(f,{hits:0,h7:[0,0,0,0,0,0,0]}));EXCDIRTY=true;closeModal();show('admin');adm('exc');toast(`"${f.id}"를 저장했습니다(배포 전)`)};
+}
+function pickDet(){const ds=nsmEv().filter(e=>!e.corr&&e.disp!=='suppressed').slice(0,14);
+  openModal('탐지에서 예외 만들기',`<div class="note" style="margin-bottom:6px">오탐으로 확인한 탐지를 고르면 출발지·탐지 종류가 채워진 예외 양식이 열립니다.</div><table class="t">${ds.map(e=>`<tr class="click" data-id="${e.id}"><td>${e.t}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}</td><td>${who(e.src)} → ${who(e.dst)}</td></tr>`).join('')}</table>`,`<button class="btn" onclick="closeModal()">취소</button>`);
+  $$('#modal tr[data-id]').forEach(tr=>tr.onclick=()=>{const e=evById(tr.dataset.id);const extIp=/^\d/.test(e.dst)&&!isInt(e.dst)&&!e.dst.includes('/');
+   excForm(null,{scope:[e.note],src:extIp||e.note==='Nonstandard_Port'?'':e.src,dst:extIp?e.dst:'',domain:e.sni||e.host||(!/^\d/.test(e.dst)?e.dst:''),dst_port:e.note==='Nonstandard_Port'?String(e.port):'',reason:`오탐 확인: ${e.name}`,disp:'suppress'})})}
+const TSVH='#fields\tid\tscope\tsrc\tdst\tdst_port\tservice\tdomain\tja4\tdisposition\treason\towner\texpires\tref';
+function exportTsv(){const lines=[TSVH,...EXC.filter(e=>!e.rej).map(e=>[e.id,e.scope.join(',')||'-',e.src||'-',e.dst||'-',e.dst_port||'-',e.service||'-',e.domain||'-',e.ja4||'-',e.disp,e.reason,e.owner||'-',e.expires||'-',e.ref||'-'].join('\t')),...(BUILTIN_ON?BUILTIN_EXC.map(b=>[b[0],'HTTP_Beaconing,TLS_Beaconing','-','-','-','-',b[1].replace(/, /g,','),'-','drop','기본 예외(프록시 주기 접속) '+b[2],'nsm-default','-','-'].join('\t')):[])];
+  openModal('파일 내보내기',`<div class="note">센서에 들어가는 예외 파일(TSV) 그대로입니다. 백업하거나 다른 Manager로 옮길 때 씁니다.</div><textarea class="inp mono" rows="12" readonly>${esc(lines.join('\n'))}</textarea>`,`<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="toast('exceptions.tsv 를 내려받았습니다(목업)');closeModal()">파일로 받기</button>`)}
+function importTsv(){openModal('파일 가져오기',`<div class="note">예외 파일(TSV) 내용을 붙여 넣으면 한 줄씩 확인합니다.</div><textarea class="inp mono" id="tsvIn" rows="8">${esc(TSVH+'\nX-print-srv\tName_Poisoning\t10.10.10.15\t-\t-\t-\t-\t-\tdrop\t프린터 서버 이름 응답\t인프라팀\t2027-06-30\t-\nX-bad-row\tPort_Scan\t10.10.10.300\t-\t-\t-\t-\t-\tdrop\t잘못된 주소\tadmin\t-\t-\nX-vulnscan\tPort_Scan\t10.10.0.50\t-\t-\t-\t-\t-\tdrop\t중복\tadmin\t-\t-')}</textarea><button class="btn" id="tsvChk" style="margin-top:6px">확인</button><div id="tsvOut" style="margin-top:8px"></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="tsvOk" disabled>문제없는 줄만 가져오기</button>`);
+  let good=[];$('#tsvChk').onclick=()=>{good=[];const out=[];$('#tsvIn').value.split('\n').filter(l=>l.trim()&&!l.startsWith('#')).forEach(l=>{const c=l.split('\t');const g=i=>c[i]&&c[i]!=='-'?c[i]:'';const f={id:c[0],scope:g(1)?g(1).split(','):[],src:g(2),dst:g(3),dst_port:g(4),service:g(5),domain:g(6),ja4:g(7),disp:c[8],reason:c[9],owner:g(10),expires:g(11),ref:g(12)};
+    let e='';if(c.length<13)e='칸 수가 모자랍니다(13칸)';else if(EXC.some(x=>x.id===f.id))e='같은 이름이 이미 있습니다';else if(f.src&&(!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d+)?$/.test(f.src)||f.src.split('/')[0].split('.').some(o=>+o>255)))e='출발지 IP 형식 오류';else if(f.scope.some(s=>!R[s]))e='없는 탐지 이름';else if(!['drop','suppress'].includes(f.disp))e='처리 방법 값 오류';
+    out.push(`<div class="${e?'errtxt':'oktxt'}">${e?'✖':'✔'} <span class="mono">${esc(f.id)}</span> ${e||'문제없음'}</div>`);if(!e)good.push(f)});$('#tsvOut').innerHTML=out.join('');$('#tsvOk').disabled=!good.length};
+  $('#tsvOk').onclick=()=>{good.forEach(f=>EXC.unshift(Object.assign(f,{hits:0,h7:[0,0,0,0,0,0,0]})));EXCDIRTY=true;closeModal();renderExc();toast(`${good.length}개를 가져왔습니다(배포 전)`)}}
+function deployExc(){const nv='EXC-v'+(+EXCVER.slice(5)+1),act=EXC.filter(e=>excStatus(e)!=='만료됨'&&!e.rej).length;
+  openModal('예외를 센서에 배포',`<div class="kv"><dt>새 버전</dt><dd class="mono">${nv}</dd><dt>적용할 예외</dt><dd>${act}개 (만료·오류 제외)</dd><dt>반영 방식</dt><dd>센서가 1분 안에 다시 읽습니다(분석 중단 없음)</dd></div>
+   <div class="sec">대상 센서</div><table class="t"><tr><th>그룹</th><th>센서</th><th>결과</th></tr>${SENSORS.map(s=>`<tr><td>${s.grp}</td><td>${s.name}</td><td id="xd-${s.name}" class="note">대기</td></tr>`).join('')}</table>`,`<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" id="xdGo">배포</button>`);
+  $('#xdGo').onclick=()=>{$('#xdGo').disabled=true;SENSORS.forEach((s,i)=>setTimeout(()=>{$('#xd-'+s.name).innerHTML=s.st==='bad'?'<span class="errtxt">연결 끊김: 연결되면 적용</span>':`<span class="oktxt">✔ ${act}개 적용</span>`},400*(i+1)));setTimeout(()=>{EXCVER=nv;EXCDIRTY=false;EXC=EXC.filter(e=>!e.rej);toast(`예외 ${nv} 배포 완료`);closeModal();renderExc()},400*SENSORS.length+700)}}
+
+// ---------------------------------------------------------------- NSM 탐지 엔진 업데이트
+const TGTS=[
+ {k:'eng',name:'네트워크 행위 룰',desc:'네트워크 행위 탐지 48종, 장비 식별, 통신 기록 기준',latest:'2026.11.24-r1',apply:'적용 시 분석이 몇 초 멈춤'},
+ {k:'sig',name:'시그니처 룰',desc:'Suricata 시그니처',latest:'2026.11.18',apply:'바로 적용'},
+ {k:'ioc',name:'IOC 정보',desc:'악성 IP·도메인·URL 목록(142개)',latest:'2026.11.15',apply:'바로 적용'},
+];
+const WZ={step:0,pkg:0,tg:{eng:true,sig:true,ioc:true},target:{'본사 센서':true,'지사 센서':false},canary:true,when:'now'};
+const outdated=s=>TGTS.filter(t=>s[t.k]!==t.latest);
+function renderEngine(){
+  $('#admCrumb').textContent='관리 › 업데이트 › NSM 탐지 엔진';const old=SENSORS.filter(s=>outdated(s).length).length;
+  const verOf=t=>{const c={};SENSORS.forEach(s=>c[s[t.k]]=(c[s[t.k]]||0)+1);return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]};
+  $('#admBody').innerHTML=`<div class="grid g2" style="margin-bottom:12px">
+    <div class="panel kpi sm"><div class="k">최신 버전</div><div class="v" style="font-size:14px">${TGTS.map(t=>`${t.name} <span class="mono">${t.latest}</span>`).join('<br>')}</div></div>
+    <div class="panel kpi sm"><div class="k">업데이트가 필요한 센서</div><div class="v mono">${old} / ${SENSORS.length}</div><div class="d">대상 3가지 중 하나라도 최신이 아닌 센서</div></div></div>
+   <div class="panel tw"><h3>업데이트 대상 <span class="r">세 가지 모두 버전으로 관리하고 같은 방법으로 배포합니다</span></h3><table class="t"><tr><th>대상</th><th>내용</th><th>센서 대부분의 버전</th><th>최신 버전</th><th>적용</th></tr>${TGTS.map(t=>{const v=verOf(t);return `<tr><td><b>${t.name}</b></td><td class="note">${t.desc}</td><td class="mono nw">${v}</td><td class="mono nw">${t.latest}${v!==t.latest?' <span class="chip warn">새 버전</span>':''}</td><td>${t.apply}</td></tr>`}).join('')}</table>
+     <div class="pbody"><button class="btn pri" id="wzOpen">업데이트 배포</button> <button class="btn" id="offUp">파일로 올리기(폐쇄망 수동 업데이트)</button> <button class="btn" onclick="toast('확인했습니다: 표시된 버전이 최신입니다')">새 버전 확인</button></div></div>
+   <div class="panel tw" style="margin-top:12px"><h3>센서별 버전</h3><table class="t"><tr><th>센서</th><th>그룹</th><th>상태</th>${TGTS.map(t=>`<th>${t.name}</th>`).join('')}</tr>${SENSORS.map(s=>`<tr><td><b>${s.name}</b></td><td>${s.grp}</td><td class="nw"><span class="dot ${s.st}"></span>${{ok:'정상',warn:'주의',bad:'연결 끊김'}[s.st]}</td>${TGTS.map(t=>`<td class="mono nw">${s[t.k]}${s[t.k]!==t.latest?' <span class="chip warn">업데이트 필요</span>':' <span class="chip ok">최신</span>'}</td>`).join('')}</tr>`).join('')}</table></div>
+   <div class="panel tw" style="margin-top:12px"><h3>배포 기록</h3><table class="t"><tr><th>시각</th><th>대상·버전</th><th>센서 그룹</th><th>결과</th><th>작업자</th><th></th></tr>${ENGINE.hist.map((h,i)=>`<tr><td>${h[0]}</td><td>${h[1]}</td><td>${h[2]}</td><td>${h[3].includes('되돌')?`<span class="chip bad">${h[3]}</span>`:h[3]==='예약됨'?`<span class="chip warn">${h[3]}</span>`:`<span class="chip ok">${h[3]}</span>`}</td><td>${h[4]}</td><td class="nw">${h[3]==='예약됨'?`<a onclick="ENGINE.hist.splice(${i},1);renderEngine();toast('예약을 취소했습니다')">예약 취소</a>`:h[3]==='완료'?`<a onclick="rollback('${h[2]}')">이전 버전으로 되돌리기</a>`:''}</td></tr>`).join('')}</table></div>`;
+  $('#wzOpen').onclick=()=>{WZ.step=0;wizard()};
+  $('#offUp').onclick=()=>openModal('파일로 올리기(폐쇄망 수동 업데이트)',`<div class="note">인터넷이 막힌 환경에서는 업데이트 서버에서 받은 파일을 직접 올립니다. 올린 파일은 "업데이트 배포"에서 고를 수 있습니다.</div>
+    <div class="form" style="margin-top:10px"><label>대상</label><select class="sel">${TGTS.map(t=>`<option>${t.name}</option>`).join('')}</select></div>
+    <div style="border:2px dashed var(--line);border-radius:8px;padding:30px;text-align:center;margin:10px 0" class="muted">업데이트 파일(.tgz)을 여기로 끌어 놓기</div><div class="oktxt">✔ 정품 서명 확인</div><div class="oktxt">✔ 파일 손상 없음</div><div class="oktxt">✔ 버전 2026.11.24-r1 (지금보다 새 버전)</div>`,`<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="closeModal();toast('업데이트 파일을 등록했습니다')">등록</button>`);
+}
+function rollback(g){openModal('이전 버전으로 되돌리기',`<div class="kv"><dt>대상</dt><dd>${g}</dd><dt>되돌릴 버전</dt><dd class="mono">2026.11.10-r1</dd><dt>영향</dt><dd>센서 분석이 약 5초 멈춥니다. 룰 정책과 예외는 그대로입니다.</dd></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" onclick="closeModal();ENGINE.hist.unshift(['2026-11-18 '+nowHM(),'2026.11.10-r1','${g}','직접 되돌림','admin']);renderEngine();toast('되돌리기를 시작했습니다')">되돌리기</button>`)}
+function wizard(){
+  const st=['대상·버전 선택','사전 점검','센서·시간','진행'],S=WZ.step;
+  let body=`<div class="steps">${st.map((x,i)=>`<div class="${i===S?'on':i<S?'done':''}">${i+1}. ${x}</div>`).join('')}</div>`;
+  if(S===0)body+=`<div class="form"><label>업데이트 대상</label><div>${TGTS.map(t=>`<label style="display:block"><input type="checkbox" class="wzg" value="${t.k}" ${WZ.tg[t.k]?'checked':''}> ${t.name} <span class="mono note">→ ${WZ.pkg===0?t.latest:'센서 대부분의 버전'}</span></label>`).join('')}</div>
+   <label>버전</label><div>${['최신 버전','지금 센서 대부분이 쓰는 버전(다시 배포)'].map((v,i)=>`<label style="display:block"><input type="radio" name="wzp" ${i===WZ.pkg?'checked':''} value="${i}"> ${v}</label>`).join('')}</div></div>`;
+  if(S===1)body+=`<div id="pre"></div>`;
+  if(S===2)body+=`<div class="form"><label>대상 그룹</label><div>${Object.keys(WZ.target).map(g=>`<label style="display:block"><input type="checkbox" class="wzt" value="${g}" ${WZ.target[g]?'checked':''}> ${g} <span class="note">(${SENSORS.filter(s=>s.grp===g).map(s=>s.name).join(', ')})</span></label>`).join('')}</div>
+   <label>순서</label><div><label><input type="checkbox" id="wzc" ${WZ.canary?'checked':''}> 먼저 1대에 적용하고 15분 지켜본 뒤 나머지에 적용</label></div>
+   <label>시간</label><div><label><input type="radio" name="wzw" value="now" ${WZ.when==='now'?'checked':''}> 지금</label> &nbsp; <label><input type="radio" name="wzw" value="night" ${WZ.when==='night'?'checked':''}> 예약</label> <input class="inp" type="datetime-local" value="2026-11-18T22:00" style="width:200px"></div>
+   <label>자동 되돌리기</label><div class="note">적용 후 경고·오류가 나거나, 10분 동안 기록이 들어오지 않거나, 패킷 누락이 3배 이상 늘면 자동으로 이전 버전으로 되돌립니다.</div></div>`;
+  if(S===3)body+=`<table class="t"><tr><th>센서</th><th>진행</th><th>상태</th></tr>${SENSORS.filter(s=>WZ.target[s.grp]).map(s=>`<tr><td>${s.name}</td><td><div class="prog" id="wp-${s.name}"><i style="width:0"></i></div></td><td id="wt-${s.name}" class="note">대기</td></tr>`).join('')}</table><div class="note" style="margin-top:6px" id="wzMsg"></div>`;
+  openModal('NSM 탐지 엔진 업데이트',body,`<button class="btn" onclick="closeModal();renderEngine()">${S===3?'닫기':'취소'}</button>${S>0&&S<3?'<button class="btn" id="wzBack">이전</button>':''}${S<3?`<button class="btn pri" id="wzNext" ${S===1?'disabled':''}>${S===2?(WZ.when==='night'?'예약':'배포 시작'):'다음'}</button>`:''}`);
+  if(S===1){const ck=[['정품 서명','제품 서명이 맞습니다',1],['센서 버전과 호환','지사 센서는 이전 버전 분석 엔진이라 네트워크 행위 룰 일부가 동작하지 않습니다',0],['설정 문법','경고 없음',1],['현재 정책·예외와 충돌','충돌 없음',1],['기본값 변경 안내','오래 유지되는 외부 연결 기준이 6시간 → 8시간으로 바뀝니다(본사 정책은 직접 정한 12시간 유지)',0],['디스크 여유','충분함',1],['연결 끊긴 센서','NSM-SENSOR-03: 연결되면 적용',0]];
+   $('#pre').innerHTML=ck.map((c,i)=>`<div id="ck${i}" class="note">… ${c[0]}</div>`).join('');
+   ck.forEach((c,i)=>setTimeout(()=>{$('#ck'+i).outerHTML=`<div class="${c[2]?'oktxt':'warntxt'}">${c[2]?'✔':'⚠'} <b>${c[0]}</b> · ${c[1]}</div>`;if(i===ck.length-1)$('#wzNext').disabled=false},230*(i+1)))}
+  if(S===0){$$('input[name=wzp]').forEach(r=>r.onchange=()=>{WZ.pkg=+r.value;wizard()});$$('.wzg').forEach(c=>c.onchange=()=>WZ.tg[c.value]=c.checked)}
+  if(S===2){$$('.wzt').forEach(c=>c.onchange=()=>WZ.target[c.value]=c.checked);$('#wzc').onchange=e=>WZ.canary=e.target.checked;$$('input[name=wzw]').forEach(r=>r.onchange=()=>{WZ.when=r.value;$('#wzNext').textContent=r.value==='night'?'예약':'배포 시작'})}
+  if($('#wzBack'))$('#wzBack').onclick=()=>{WZ.step--;wizard()};
+  if($('#wzNext'))$('#wzNext').onclick=()=>{const tg=Object.keys(WZ.target).filter(g=>WZ.target[g]);
+   if(S===0&&!TGTS.some(t=>WZ.tg[t.k])){toast('업데이트 대상을 고르세요');return}
+   if(S===2&&!tg.length){toast('대상 그룹을 고르세요');return}
+   if(S===2&&WZ.when==='night'){closeModal();ENGINE.hist.unshift(['2026-11-18 22:00',wzLabel(),tg.join(', '),'예약됨','admin']);renderEngine();toast('오늘 22:00 배포를 예약했습니다');return}
+   WZ.step++;wizard();if(WZ.step===3)runWz()};
+}
+function wzLabel(){return TGTS.filter(t=>WZ.tg[t.k]).map(t=>`${t.name} ${WZ.pkg===0?t.latest:'(재배포)'}`).join(' · ')}
+function runWz(){const ts=SENSORS.filter(s=>WZ.target[s.grp]);let i=0;
+  const next=()=>{const s=ts[i];if(!s){ENGINE.hist.unshift(['2026-11-18 '+nowHM(),wzLabel(),Object.keys(WZ.target).filter(g=>WZ.target[g]).join(', '),'완료','admin']);$('#wzMsg').innerHTML='<span class="oktxt">배포가 끝났습니다. 센서별 버전과 장비 현황의 버전도 바뀝니다.</span>';toast('탐지 엔진 업데이트 완료');return}
+   const pg=$('#wp-'+s.name),pt=$('#wt-'+s.name);if(s.st==='bad'){pg.classList.add('bad');pg.firstChild.style.width='100%';pt.innerHTML='<span class="errtxt">연결 끊김: 연결되면 적용</span>';i++;setTimeout(next,300);return}
+   const ph=['파일 보내는 중','설치 중','분석 다시 시작','시작 확인','탐지·기록 확인'];let w=0;const tk=setInterval(()=>{w+=20;pg.firstChild.style.width=w+'%';pt.textContent=ph[Math.min(4,w/20-1)];if(w>=100){clearInterval(tk);pg.classList.add('ok');pt.innerHTML=`<span class="oktxt">완료</span>`;if(WZ.pkg===0)TGTS.forEach(t=>{if(WZ.tg[t.k])s[t.k]=t.latest});i++;if(i===1&&WZ.canary&&ts.length>1){$('#wzMsg').textContent='첫 센서를 지켜보는 중(목업은 2초로 단축)…';setTimeout(()=>{$('#wzMsg').textContent='';next()},2000)}else setTimeout(next,300)}},280)};next()}
+
+// =============================================================== PoC 리포트 모드
+// tests/report_pcap.py 가 <script type="application/json" id="report-data"> 로 pcap 분석 결과(탐지·스토리·자산·예외·센서)를
+// 넣으면 예시 데이터 대신 그 데이터를 그린다(읽기 전용). 데이터 모양은 이 파일의 예시 데이터와 같다(ui/README.md).
+// 위험도·탐지명·공격 단계는 RULES 표(룰별 기본값)에서 채운다.
+function applyReport(D){
+  REPORT=D;DAY=D.day||DAY;const IN=new Set(D.internal||[]);isInt=ip=>IN.has(ip);
+  EV.length=0;(D.ev||[]).forEach(e=>{const r=R[e.note];if(r){e.name=e.name||r.ko;e.stage=e.stage||r.stage;e.tech=e.tech||r.tech;e.sev=e.sev||r.sev}e.sev=e.sev||'Low';e.name=e.name||e.note;EV.push(e)});
+  EV.sort((a,b)=>(b.ts||0)-(a.ts||0));META.length=0;
+  ASSETS.length=0;(D.assets||[]).forEach(a=>ASSETS.push(a));Object.keys(A).forEach(k=>{A[k]=undefined});ASSETS.forEach(a=>A[a.ip]=a);
+  Object.keys(DEVX).forEach(k=>{DEVX[k]=undefined});Object.assign(DEVX,D.devx||{});
+  Object.keys(PEERS).forEach(k=>{PEERS[k]=undefined});Object.assign(PEERS,D.peers||{});AGPOL.length=0;
+  STORIES.length=0;(D.stories||[]).forEach(s=>{s.reached=[...new Set(s.steps.map(x=>STAGES.indexOf(x[3])).filter(i=>i>=0))].sort((a,b)=>a-b);if(!s.reached.length)s.reached=[0];
+    s.hosts=[...new Set(s.steps.flatMap(x=>[x[4],x[5]]).filter(ip=>isInt(ip)))];
+    s.sev=s.steps.map(x=>(evById(x[8])||{}).sev).filter(Boolean).sort((a,b)=>SEV.indexOf(a)-SEV.indexOf(b))[0]||'Low';STORIES.push(s)});
+  SINGLE_HIDDEN=0;Object.keys(RESP).forEach(k=>{RESP[k]=undefined});
+  SENSORS.length=0;(D.sensors||[]).forEach(s=>SENSORS.push(s));
+  EXC=D.exc||[];EXCVER=D.excver||'-';BUILTIN_ON=!!D.builtin;
+  document.querySelector('.sys').textContent=D.banner||'PoC 리포트';document.title=D.title||document.title;
+  // Manager 기능(대응·보고서·로그·MDS·MTA·편집)은 리포트에 없다
+  $$('#nav button').forEach(b=>{if(['events','resp','report','logs'].includes(b.dataset.v))b.style.display='none'});
+  $$('#nsmSeg button[data-t="retro"]').forEach(b=>b.style.display='none');
+  $$('#tree a').forEach(x=>{if(!['rules','exc'].includes(x.dataset.a))x.style.display='none'});
+  $$('#tree .g').forEach(x=>{if(x.textContent.trim()!=='탐지/대응')x.style.display='none'});
+  const st=document.createElement('style');st.textContent='[data-go="retro"],#stCase,.topr .bell{display:none!important}';document.head.appendChild(st);
+  document.body.classList.add('report');
+}
+{const rd=document.getElementById('report-data');if(rd)applyReport(JSON.parse(rd.textContent))}
+
+// =============================================================== 초기화
+$('#dStageF').innerHTML='<option value="">공격 단계 전체</option>'+STAGES.map(s=>`<option value="${s}">${STAGE_KO[s]}</option>`).join('');
+$('#dTypeF').innerHTML='<option value="">탐지 종류 전체</option>'+RULES.map(r=>`<option value="${r[1]}">${r[2]}</option>`).join('');
+['#dSevF','#dStageF','#dTypeF','#dDispF','#dCorr'].forEach(s=>$(s).onchange=renderDet);$('#dq').oninput=renderDet;
+['#fProd','#fSev'].forEach(s=>$(s).onchange=renderEvents);$('#fq').oninput=renderEvents;
+$('#aRole').innerHTML='<option value="">장비 유형 전체</option>'+[...new Set(ASSETS.map(a=>DCGROUP(dx(a).dc[0])))].map(r=>`<option>${r}</option>`).join('');
+['#aRole','#aDet'].forEach(s=>$(s).onchange=renderAssets);$('#aq').oninput=renderAssets;
+renderDash();renderEvents();renderDet();renderDevices('nsm');renderAssets();adm(REPORT?'exc':'devlist');
+show(location.hash.slice(1)||'dash');
+</script>
+</body>
+</html>

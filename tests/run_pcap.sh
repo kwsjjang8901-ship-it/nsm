@@ -21,7 +21,7 @@
 #               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
 #   화면 요약에는 주소·도메인 원문을 출력하지 않는다(탐지 종류·건수, 신호 종류별 건수, 로그 크기만).
-#   출력 디렉터리의 <pcap 이름>_report.html(통합 리포트, pcap 이름은 확장자를 뺀 파일 이름: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
+#   출력 디렉터리의 <pcap 이름>_report.html(통합 리포트)·<pcap 이름>_report_mockup.html(같은 데이터를 MDS Manager 목업 화면으로)(통합 리포트, pcap 이름은 확장자를 뺀 파일 이름: 공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태)과 로그에는 원문이 있다. 처리 부하·전체 로그 대비 비율은 tests/measure_meta_export.sh 로 잰다.
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
@@ -87,7 +87,7 @@ if [ $# -gt 1 ] || [ -d "$1" ]; then
     {
         echo '<!doctype html><meta charset="utf-8"><title>run_pcap 결과</title>'
         echo '<style>body{font:14px system-ui,sans-serif;margin:24px}td,th{padding:4px 12px;text-align:left;border-bottom:1px solid #ddd}.FAIL{color:#c00}</style>'
-        echo "<h1>run_pcap 결과 (${#LIST[@]}개)</h1><table><tr><th>pcap</th><th>상태</th><th>탐지 건수</th><th>리포트</th><th>실행 출력</th></tr>"
+        echo "<h1>run_pcap 결과 (${#LIST[@]}개)</h1><table><tr><th>pcap</th><th>상태</th><th>탐지 건수</th><th>리포트</th><th>목업형 리포트</th><th>실행 출력</th></tr>"
     } > "$BASE/index.html"
     nfail=0
     for r in "${RES[@]}"; do
@@ -95,7 +95,8 @@ if [ $# -gt 1 ] || [ -d "$1" ]; then
         [ "$st" = ok ] || nfail=$((nfail + 1))
         printf '%-40s %-5s %s\n' "$name" "$st" "$det"
         link=-; [ -f "$BASE/$name/$rf" ] && link="<a href=\"$name/$rf\">$rf</a>"
-        echo "<tr><td>$name</td><td class=\"$st\">$st</td><td>$det</td><td>$link</td><td><a href=\"$name/run.txt\">run.txt</a></td></tr>" >> "$BASE/index.html"
+        mf="${rf%.html}_mockup.html"; mlink=-; [ -f "$BASE/$name/$mf" ] && mlink="<a href=\"$name/$mf\">$mf</a>"
+        echo "<tr><td>$name</td><td class=\"$st\">$st</td><td>$det</td><td>$link</td><td>$mlink</td><td><a href=\"$name/run.txt\">run.txt</a></td></tr>" >> "$BASE/index.html"
     done
     echo "</table>" >> "$BASE/index.html"
     echo ""; echo "목록: $BASE/index.html"
@@ -264,6 +265,7 @@ python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$P
 echo
 echo "결과: $OUT"
 echo "  - $(basename "$REPORT")    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"
+echo "  - $(basename "${REPORT%.html}_mockup.html")    목업형 리포트(같은 데이터를 MDS Manager 목업 화면으로, ui/mockup/). 원문이 들어 있으니 외부로 보내지 않는다"
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
 if [ -n "$KEEP_RAW" ]; then echo "  - zeek/*.log     Zeek 원본 로그(-k: conn·dns·http·ssl 등)"; fi
