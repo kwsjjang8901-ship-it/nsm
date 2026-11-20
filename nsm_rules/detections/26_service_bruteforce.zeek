@@ -116,7 +116,7 @@ event connection_state_remove(c: connection)
     if ( NSM::exception_drop_agg(SSH_Bruteforce, c) )
         return;
     local key: SumStats::Key = [$host=c$id$orig_h, $str=cat(c$id$resp_h)];
-    SumStats::observe("nsm.ssh_bf.sample", key, [$str=cat("-|", c$uid, "|client=", c$ssh$client)]);
+    SumStats::observe("nsm.ssh_bf.sample", key, [$str=cat("-|", NSM::conn_ref(c), "|client=", c$ssh$client)]);
     SumStats::observe("nsm.ssh_bf", key, [$num=1]);
     }
 
@@ -129,7 +129,7 @@ event ftp_reply(c: connection, code: count, msg: string, cont_resp: bool) &prior
         return;
     local user = ( c$ftp?$user && c$ftp$user != "<unknown>" ) ? to_lower(c$ftp$user) : "-";
     local key: SumStats::Key = [$host=c$id$orig_h, $str=cat(c$id$resp_h)];
-    SumStats::observe("nsm.ftp_bf.sample", key, [$str=cat(user, "|", c$uid, "|reply=530")]);
+    SumStats::observe("nsm.ftp_bf.sample", key, [$str=cat(user, "|", NSM::conn_ref(c), "|reply=530")]);
     SumStats::observe("nsm.ftp_bf.user", key, [$str=user]);
     SumStats::observe("nsm.ftp_bf", key, [$num=1]);
     }

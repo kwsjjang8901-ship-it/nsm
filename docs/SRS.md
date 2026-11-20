@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 137개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 139개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1144,14 +1144,22 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | --- | --- |
 | `ts` | 언제 |
 | `evidence_id` | 어느 탐지의 근거인지(notice와 공유) |
-| `note` / `killchain_stage` / `technique` | 무엇을(탐지 유형·단계·기법) |
+| `note` / `rule` / `killchain_stage` / `technique` | 무엇을(탐지 유형·단계·기법). `rule`은 `note`에서 `NSM::`을 뺀 값으로 `nsm_detection.log`의 `rule`과 같다(센서가 자동으로 채움) |
 | `account` | 누가(계정, 알 때만. 예: `user01@corp.example`, `corp\admin01`). 확산 근거는 인증 맥락에서 찾은 값(5.6절). 여러 개면 쉼표로 잇는다 |
 | `user_name` / `user_domain` / `user_domain_type` | `account`를 나눈 값(소문자). `domain\user`는 (user, domain), `user@realm`은 (user, realm). 도메인이 없으면 `user_name`만. `user_domain_type`은 도메인에 점이 있으면 `dns`(Kerberos realm·FQDN), 없으면 `netbios`. `account`가 여러 개면 첫 계정. 자산 식별 `asset_signal.log`의 계정 신호와 같은 규칙(5.5절)이라 Manager가 계정을 한 형식으로 잇는다. 같은 도메인의 NetBIOS 이름(`corp`)과 DNS 이름(`corp.example`)을 맞추는 것은 Manager(도메인 신호로 대응표를 만든다) |
 | `src` / `dst` | 어디서 → 어디로 |
 | `operation` | 어떻게(예: `kerberos_as_failure`, `drsuapi_DRSGetNCChanges`) |
 | `uid` / `fuid` | conn.log·files.log·선별 전송 로그 조인 키. 집계형 근거는 표본 대상마다 대표 연결 하나 |
-| `parent_id` | 상관 탐지가 묶는 하위 근거 |
-| `detail` | 부가 정보(실패 코드, 파일명, 바이트 등) |
+| `src_port` / `dst_port` / `proto` | 근거 연결(`uid`)의 포트·프로토콜(`tcp`·`udp`·`icmp`). 근거의 `src`·`dst` 방향에 맞춘다(`src`가 연결의 응답 쪽이면 뒤바꿈). 프록시 경유 연결은 프록시와의 연결(실제 목적지는 `dst_name`). 연결이 하나로 정해지지 않는 근거(스캔, DNS 터널링, 볼륨 집계 등)와 상관 근거는 없음 |
+| `community_id` | 근거 연결의 Community ID v1(`1:` + base64, seed `community_id_seed` 기본 0). 방향과 무관한 연결 식별자로, Suricata·다른 제품 이벤트와 연결 단위로 잇는 키. 5-tuple에서 계산하므로 NAT·프록시 바깥에서 본 연결과는 값이 다르다 |
+| `dst_name` | 목적지 이름: `detail`의 `sni=` > `host=` > `name=` > `parent=`(DNS 상위 도메인) > `query=`. 소문자, 포트·끝 점 제거, IP 주소는 넣지 않는다 |
+| `proxy` | 거쳐 간 명시적 프록시 `주소:포트`(`detail`의 `via_proxy=`) |
+| `bytes` | 출발지가 보낸 바이트(`detail`의 `orig_bytes` > `conn_upload` > `sum_bytes`): 유출·AI 업로드·이상 연결 |
+| `window_s` | 집계형 근거의 집계 창(초, `detail`의 `window=`) |
+| `parent_id` | 상관 탐지가 묶는 하위 근거(배열) |
+| `detail` | 부가 정보(실패 코드, 파일명, 바이트 등). 사람이 읽는 요약으로 그대로 둔다. 위 공통 필드는 센서가 `detail`에서 올려 채우므로 Manager는 `detail`을 파싱하지 않아도 된다 |
+
+**연결 필드를 채우는 방법:** 룰은 근거의 `uid` 자리에 연결 참조 `NSM::conn_ref(c)`(`uid~orig_h~orig_p~resp_h~resp_p~proto`)를 넘기고, `write_evidence()`가 이를 풀어 `uid`(앞부분만 기록)·포트·프로토콜·`community_id`를 채웁니다. 집계형 룰은 SumStats 표본 문자열에 이 참조를 넣으므로, 클러스터에서 워커가 본 연결도 판정 노드(매니저)의 근거에 포트·`community_id`가 들어갑니다. 룰이 직접 넣은 필드가 있으면 그 값을 씁니다.
 
 근거 건수 카운터와 `nsm_detection.log` 요약(`accounts`·`dst_names`·`relays`)용 값은 2시간(`evidence_count_expire`) 뒤 만료됩니다. 요약 값은 근거를 쓴 노드에 있으므로, 단일 탐지는 그 노드에서 채우고, 상관 탐지는 각 단계 탐지의 요약을 상관 이벤트(`NSM::corr_notice`)에 실어 매니저로 보내 체인에 누적합니다(클러스터에서 워커가 쓴 근거도 상관 행에 들어감). 체인당 칸마다 최대 32개를 모으고 5개를 싣습니다. 운영에서는 세 로그 모두 JSON으로 나갑니다.
 
@@ -1554,6 +1562,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
+| `community_id_seed` | 0 | 근거 `community_id` 계산 seed. 연동하는 다른 제품(Suricata 등)과 같아야 한다 |  |
 | `evidence_summary_max` | 5 | `nsm_detection.log`의 `accounts`·`dst_names`·`relays`에 싣는 최대 개수 |  |
 | `detection_continue_gap` | 15min | 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지를 같은 사건(`incident_id`)으로 묶는 최대 간격 | 집계형 룰의 창(5·10분)보다 길게 둠 |
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
@@ -1670,7 +1679,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 137개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 90개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 139개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 92개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |

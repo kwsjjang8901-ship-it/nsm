@@ -167,7 +167,7 @@ event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, ds
     local src = c$id$orig_h;
     local fkey = to_lower(cat(c$id$resp_h, ":", f$prev_name));
     SumStats::observe("nsm.ransom.sample", [$host=src],
-                      [$str=cat("rename|", c$id$resp_h, "|", f$prev_name, " -> ", smb_basename(f$name), "|", c$uid)]);
+                      [$str=cat("rename|", c$id$resp_h, "|", f$prev_name, " -> ", smb_basename(f$name), "|", NSM::conn_ref(c))]);
     SumStats::observe("nsm.ransom.rename", [$host=src], [$str=fkey]);
     }
 
@@ -183,6 +183,6 @@ event smb2_create_response(c: connection, hdr: SMB2::Header, response: SMB2::Cre
     local share = ( c$smb_state?$current_tree && c$smb_state$current_tree?$path ) ? c$smb_state$current_tree$path : "";
     local dir = to_lower(cat(c$id$resp_h, ":", share, "\\", smb_dirname(f$name)));
     SumStats::observe("nsm.ransom.sample", [$host=src],
-                      [$str=cat("note|", c$id$resp_h, "|", f$name, "|", c$uid)]);
+                      [$str=cat("note|", c$id$resp_h, "|", f$name, "|", NSM::conn_ref(c))]);
     SumStats::observe("nsm.ransom.note", [$host=src], [$str=dir]);
     }

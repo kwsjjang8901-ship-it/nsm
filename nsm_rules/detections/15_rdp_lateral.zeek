@@ -186,7 +186,7 @@ function observe_rdp(c: connection, cookie: string)
        [$str=cat(dst)]);
     SumStats::observe("nsm.rdp_lm.who",
        [$host=src],
-       [$str=cat(dst, "|", rdp_user_from_cookie(cookie), "|", c$uid)]);
+       [$str=cat(dst, "|", rdp_user_from_cookie(cookie), "|", NSM::conn_ref(c))]);
     }
 
 # RDP 접속 요청 시 cookie(사용자 힌트 mstshash) 동반. 확산 관측의 진입점.

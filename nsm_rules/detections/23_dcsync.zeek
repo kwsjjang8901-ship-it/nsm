@@ -126,7 +126,7 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
             $src=src,
             $dst=c$id$resp_h,
             $operation="drsuapi_DRSGetNCChanges",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $account=dcsync_account(c),
             $detail=fmt("port=%s target_is_known_dc=%s stub_len=%d",
                         c$id$resp_p, dcsync_is_dc(c$id$resp_h), stub_len)]);

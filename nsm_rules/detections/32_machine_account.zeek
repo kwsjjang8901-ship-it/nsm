@@ -49,7 +49,7 @@ function machine_acct_observe(c: connection, account: string, via: string)
         return;
     local key: SumStats::Key = [$host=c$id$orig_h];
     SumStats::observe("nsm.machine_acct", key, [$str=account]);
-    SumStats::observe("nsm.machine_acct.sample", key, [$str=cat(account, "|", c$uid, "|", c$id$resp_h, "|", via)]);
+    SumStats::observe("nsm.machine_acct.sample", key, [$str=cat(account, "|", NSM::conn_ref(c), "|", c$id$resp_h, "|", via)]);
     }
 
 event zeek_init()

@@ -640,7 +640,7 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
         $src=st$attacker,
         $dst=last_host,
         $operation="killchain",
-        $parent_id=join_string_vec(st$eids, ","),
+        $parent_id=st$eids,
         $detail=fmt("stages=%s len=%d last_host=%s", chain_names(st), len, last_host)]);
 
     NOTICE([$note=Correlated_KillChain,

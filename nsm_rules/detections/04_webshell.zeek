@@ -74,7 +74,7 @@ function webshell_report(c: connection, where: string, method: string, raw: stri
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="http_request",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("location=%s method=%s value=%s", where, method, sub_bytes(raw, 1, 256))]);
 
     NOTICE([$note=Webshell_Access,

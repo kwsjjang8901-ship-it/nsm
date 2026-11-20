@@ -4,7 +4,7 @@
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
-- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
+- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -228,7 +228,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | N2 | **계정 표기 통일** | 같은 사람이 세 가지로 나옴: Kerberos 자산 신호 `realm\이름`, NTLM `도메인\이름`(NetBIOS), 근거 `이름@realm`(UPN) | 원문은 두고 `user_name`(소문자 이름)·`user_domain`(원래 표기)·`user_domain_type`(`netbios`·`dns`)으로 나눠 씀. NetBIOS ↔ DNS 도메인 대응은 Manager가 디렉터리로(센서는 관측한 도메인 쌍을 자산 신호 `domain`으로 이미 남김) | P1 |
 | N3 | **탐지 단위 목적지 이름** | 근거 `detail`의 `host=`·`sni=`(E1에서 근거 필드로 제안) | E1에 더해 `nsm_detection`에도 `dst_names`(배열). 피싱 URL 메일 → 같은 도메인 접속(C-02)처럼 도메인으로 묶는 상관에 씀 | P1 |
 | N4 | **중계 장비 표시** | 프록시 경유 탐지의 `victims`에 프록시 IP가 들어가고, 프록시라는 표시는 근거 `detail`의 `via_proxy=`에만 있음 | `nsm_detection`에 `relays`(배열: 프록시 `주소:포트`). Manager는 `victims`에서 이 주소를 엔티티로 쓰지 않음(모든 PC가 한 스토리로 묶이는 것을 막음). 센서가 배운 프록시는 자산 신호 `device=proxy`로도 남김 | P1 |
-| N5 | **연결 단위 조인 키** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미). **MDS는 Community ID가 없음**(2026-11-20 확인) | MDS와 NSM을 연결 단위로 이을 때는 `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)`로 맞춤. 이를 위해 근거에 `src_port`·`dst_port`를 필드로 둠(E1의 `dst_port`와 같은 값). `community_id`는 넣지 않고, [Suricata 연동](SURICATA_INTEGRATION_DESIGN.md)의 conn.log Community ID(경보 ↔ Zeek 연결 조인)에만 씀 | P2 |
+| N5 | **연결 단위 조인 키** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미). **MDS는 Community ID가 없음**(2026-11-20 확인) | MDS와 NSM을 연결 단위로 이을 때는 `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)`로 맞춤. 이를 위해 근거에 `src_port`·`dst_port`를 필드로 둠(E1의 `dst_port`와 같은 값). 근거에 `community_id`도 넣음(Q6 변경): Suricata 경보, 그리고 앞으로 Community ID를 갖게 될 다른 제품과의 연결 조인 키 | P2 |
 | N6 | **센서 지연** | 없음 | S1 상태 로그에 `capture_lag_s`(벽시계 - 패킷 시각). Manager가 "아직 안 온 이벤트"를 기다릴 시간을 정함 | P2 |
 | N7 | **상관 행의 구성 탐지 id** | 상관 행의 `evidence_ids`가 구성 단독 탐지의 id와 같다는 것이 코드상 규칙일 뿐 문서·필드에 없음 | `member_detection_ids` 필드 추가(또는 SRS에 규칙 명시). 통합 사건이 "이 NSM 상관은 이 단독 탐지들을 포함"을 알게 함 | P2 |
 | N8 | **ATT&CK 전술 id** | 단계는 `killchain_stages` 이름(`Command and Control`) | `tactics`(예: `TA0011`) 추가. 제품마다 단계 이름이 달라도 전술 id로 맞춤 | P3 |
@@ -241,7 +241,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | 1 | D1(`severity_id`)·D4(`rule`)·D5(id 충돌·`victim_count`)·N1(`accounts`)·N3(`dst_names`)·N4(`relays`): 탐지 요약에 필드 추가(하위 호환) | 완료(아래 참고) |
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) | 완료(아래 참고) |
 | 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | 완료(아래 참고) |
-| 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | |
+| 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | 완료(아래 참고) |
 | 5 | M1·S1(+N6)·G1, X1 | |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 | |
 
@@ -261,10 +261,18 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 - notice와 체인 근거(`operation=killchain`)는 갈래마다 한 건 그대로입니다(notice 1건 = 탐지 1건).
 - 통합 리포트도 같은 체인은 `revision`이 가장 큰 행 하나만 씁니다(`revision`이 없는 옛 로그는 행마다).
 
+4단계에서 정한 것([SRS 6.3](SRS.md)):
+
+- 근거 공통 필드: `rule`, `src_port`·`dst_port`·`proto`·`community_id`(근거 연결), `dst_name`·`proxy`·`bytes`·`window_s`(`detail`에서 센서가 올림). `parent_id`는 배열(E2). `note`는 그대로 두고 `rule`을 더했습니다(E2의 접두사 문제).
+- 연결 필드는 룰이 `uid` 자리에 연결 참조(`NSM::conn_ref(c)`)를 넘기면 `write_evidence()`가 채웁니다. SumStats 표본에도 같은 참조를 넣어, 클러스터에서 워커가 본 연결도 매니저가 쓰는 근거에 포트·`community_id`가 들어갑니다. 룰 50곳 중 연결이 있는 곳은 모두 바꿨습니다.
+- 처음 제안과 다른 점: `dst_port`는 프록시 경유여도 실제 연결(프록시) 포트입니다. `community_id`와 같은 연결을 가리키게 하려는 것이고, 실제 목적지는 `dst_name`·`proxy`로 압니다(비표준 포트 룰의 대상 포트는 `detail`의 `port=`).
+- 값 검증: btest가 근거의 `community_id`를 conn.log의 5-tuple에서 스펙대로 따로 계산한 값과 대조합니다(Zeek 계산과 Python 계산이 같음).
+- 리포트(`report_pcap.py`·`report_mockup.py`)는 필드가 있으면 필드를, 없으면(옛 로그) 예전처럼 `detail`을 읽습니다.
+
 ### 6.5 결정 필요 (추가)
 
 | # | 질문 | 제안 |
 | --- | --- | --- |
 | Q5 | 계정을 센서에서 나눠 쓸지(N2), Manager에서 원문을 파싱할지 | 센서에서 나눔. 표기 규칙은 프로토콜을 아는 쪽이 정확함 |
-| Q6 | `community_id`를 넣을지(N5) | **결정(2026-11-20): 넣지 않음.** MDS에 Community ID가 없어 MDS ↔ NSM은 주소·포트·시각으로 맞춤. Community ID는 Suricata 연동에서만 |
+| Q6 | `community_id`를 넣을지(N5) | **결정(2026-11-20 변경): 넣음.** 센서가 근거 연결의 5-tuple로 계산해 `evidence.log`에 남긴다(seed 0). MDS에는 아직 없으므로 MDS ↔ NSM은 당분간 주소·포트·시각으로 맞추고, MDS 이벤트에 출발 포트가 있으면 Manager가 같은 방식으로 계산해 붙일 수 있다(NAT·프록시 뒤 연결은 값이 달라 맞지 않음) |
 

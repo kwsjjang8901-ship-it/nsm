@@ -156,7 +156,7 @@ event krb_tgs_response(c: connection, msg: KRB::KDC_Response)
     local src = c$id$orig_h;
 
     SumStats::observe("nsm.krb_roast.sample", [$host=src],
-                      [$str=cat(spn, "|", c$id$resp_h, "|", krb_weak_ciphers[msg$ticket$cipher], "|", who, "|", c$uid)]);
+                      [$str=cat(spn, "|", c$id$resp_h, "|", krb_weak_ciphers[msg$ticket$cipher], "|", who, "|", NSM::conn_ref(c))]);
     SumStats::observe("nsm.krb_roast", [$host=src], [$str=spn]);
     }
 
@@ -205,7 +205,7 @@ event krb_as_response(c: connection, msg: KRB::KDC_Response)
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="kerberos_as_rep_without_preauth",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("enc_part_cipher=%s", cipher)]);
 
     NOTICE([$note=ASREP_Roasting,

@@ -136,6 +136,6 @@ event connection_state_remove(c: connection)
     local key: SumStats::Key = [$host=c$id$orig_h, $str=svc];
     # 표본을 먼저 넣는다: 합계를 넣는 순간 임계를 넘으면 그 연결도 근거에 남도록
     SumStats::observe("nsm.webupload.sample", key,
-                      [$str=cat(c$uid, "|", c$id$resp_h, "|", name, "|", c$orig$size, "|", proxy_detail(c))]);
+                      [$str=cat(NSM::conn_ref(c), "|", c$id$resp_h, "|", name, "|", c$orig$size, "|", proxy_detail(c))]);
     SumStats::observe("nsm.webupload", key, [$num=c$orig$size]);
     }

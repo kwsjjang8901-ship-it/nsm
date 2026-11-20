@@ -34,6 +34,7 @@ export {
         ts:          time         &log;            # WHEN
         evidence_id: string       &log;            # 상관 key (notice 와 공유)
         note:        Notice::Type &log &optional;  # 어떤 탐지에서 나온 근거인지
+        rule:        string       &log &optional;  # note 에서 NSM:: 를 뺀 값(nsm_detection 의 rule 과 같음). 자동
         killchain_stage: string   &log &optional;  # 킬체인 단계명(note 로 매핑, detection_log 와 동일 체계)
         technique:   string       &log &optional;  # WHAT  (ATT&CK 기법코드)
         account:     string       &log &optional;  # WHO   (가능할 때만)
@@ -47,8 +48,24 @@ export {
         dst:         addr         &log &optional;  # WHERE (대상)
         operation:   string       &log &optional;  # HOW   (행위/오퍼레이션)
         uid:         string       &log &optional;  # 연결 조인 key (conn.log 등)
+        ## 근거 연결(uid)의 포트·프로토콜과 Community ID. 룰이 uid 자리에 NSM::conn_ref(c) 를 넘기면 자동으로 채운다.
+        ##   src_port·dst_port 는 근거의 src·dst 방향(src 가 연결의 응답 쪽이면 뒤바꿔 맞춘다).
+        ##   community_id 는 방향과 무관한 연결 식별자(Community ID v1, base64, seed=community_id_seed). 다른 제품과 연결 단위로 잇는 키.
+        src_port:     count       &log &optional;
+        dst_port:     count       &log &optional;
+        proto:        string      &log &optional;  # tcp | udp | icmp
+        community_id: string      &log &optional;
+        ## detail 에서 뽑아 올린 공통 값(룰이 직접 넣으면 그 값을 쓴다).
+        ##   dst_name: 목적지 이름(sni > host > name > DNS 상위 도메인 parent > query). 소문자, 포트·끝 점 제거, IP 주소는 넣지 않음
+        ##   proxy   : 거쳐 간 프록시 주소:포트(via_proxy=)
+        ##   bytes   : 출발지가 보낸 바이트(orig_bytes > conn_upload > sum_bytes)
+        ##   window_s: 집계 창(초, window=)
+        dst_name:    string       &log &optional;
+        proxy:       string       &log &optional;
+        bytes:       count        &log &optional;
+        window_s:    double       &log &optional;
         fuid:        string       &log &optional;  # 파일 조인 key (files.log 등)
-        parent_id:   string       &log &optional;  # 상관 행이 묶는 하위 evidence_id(쉼표 구분)
+        parent_id:   vector of string &log &optional;  # 상관 행이 묶는 하위 evidence_id
         detail:      string       &log &optional;  # 부가 컨텍스트
     };
 
@@ -59,6 +76,16 @@ export {
 
     ## 증적 1건 기록 헬퍼.
     global write_evidence: function(ev: EvidenceInfo);
+
+    ## 근거의 uid 자리에 넣는 연결 참조: "uid~orig_h~orig_p~resp_h~resp_p~proto".
+    ##   uid 와 함께 연결의 5-tuple 을 실어, SumStats 표본으로 다른 노드(매니저)에 넘어가도
+    ##   write_evidence 가 포트·프로토콜·community_id 를 채울 수 있다. 기록되는 uid 는 앞부분만.
+    global conn_ref: function(c: connection): string;
+    ## 연결 참조(또는 uid)에서 uid 만
+    global ref_uid: function(ref: string): string;
+
+    ## Community ID seed(다른 제품과 맞춰야 함, 기본 0)
+    const community_id_seed = 0 &redef;
 
     ## evidence_id 별 실제 기록 건수. detection 의 evidence_count 산출에 사용한다.
     ##   evidence_id 에 time_bucket 이 포함되므로 창이 바뀌면 자연히 새 키가 된다.
@@ -161,14 +188,14 @@ function summary_add(t: table[string] of set[string], eid: string, v: string)
 function summary_name(v: string): string
     {
     local n = to_lower(v);
-    while ( |n| > 0 && n[-1] == "." )
-        n = n[:-1];
     if ( n == "" || n == "-" || is_valid_ip(n) || /^\[/ in n )
         return "";
-    # host 헤더의 포트(name:8080)
-    if ( /:[0-9]+$/ in n )
+    # host 헤더의 포트(name:8080). 콜론이 하나일 때만(IPv6 주소는 위에서 걸러짐)
+    if ( /^[^:]+:[0-9]+$/ in n )
         n = split_string1(n, /:/)[0];
-    return is_valid_ip(n) ? "" : n;
+    while ( |n| > 0 && n[-1] == "." )
+        n = n[:-1];
+    return ( n == "" || is_valid_ip(n) ) ? "" : n;
     }
 
 function summary_collect(ev: EvidenceInfo)
@@ -230,6 +257,115 @@ function evidence_names_of(eids: vector of string): vector of string
 function evidence_relays_of(eids: vector of string): vector of string
     { return summary_of(ev_relays, eids); }
 
+function conn_ref(c: connection): string
+    {
+    return fmt("%s~%s~%d~%s~%d~%s", c$uid, c$id$orig_h, port_to_count(c$id$orig_p),
+               c$id$resp_h, port_to_count(c$id$resp_p), get_port_transport_proto(c$id$resp_p));
+    }
+
+function ref_uid(ref: string): string
+    {
+    return ( /~/ in ref ) ? split_string1(ref, /~/)[0] : ref;
+    }
+
+# uid 자리의 연결 참조를 풀어 uid·포트·프로토콜·community_id 를 채운다.
+function apply_conn_ref(ev: EvidenceInfo)
+    {
+    local p = split_string(ev$uid, /~/);
+    ev$uid = p[0];
+    if ( |p| != 6 || ! is_valid_ip(p[1]) || ! is_valid_ip(p[3]) )
+        return;
+    local oh = to_addr(p[1]);
+    local rh = to_addr(p[3]);
+    local op = to_count(p[2]);
+    local rp = to_count(p[4]);
+    local tp: transport_proto;
+    switch ( p[5] ) {
+    case "tcp":  tp = tcp;  break;
+    case "udp":  tp = udp;  break;
+    case "icmp": tp = icmp; break;
+    default:     return;
+    }
+    if ( ! ev?$src_port && ! ev?$dst_port )
+        {
+        # 근거의 src 가 연결의 응답 쪽이면(예: 응답자가 공격자) 방향을 맞춘다
+        if ( ev?$src && ev$src == rh && ev$src != oh )
+            {
+            ev$src_port = rp;
+            ev$dst_port = op;
+            }
+        else
+            {
+            ev$src_port = op;
+            ev$dst_port = rp;
+            }
+        }
+    if ( ! ev?$proto )
+        ev$proto = p[5];
+    if ( ! ev?$community_id )
+        ev$community_id = community_id_v1([$orig_h=oh, $orig_p=count_to_port(op, tp),
+                                           $resp_h=rh, $resp_p=count_to_port(rp, tp)],
+                                          community_id_seed);
+    }
+
+# Zeek interval 표기("10.0 mins", "1.0 hr", "30.0 secs")를 초로
+function interval_text_s(num: string, unit: string): double
+    {
+    local v = to_double(num);
+    if ( /^min/ in unit )
+        return v * 60.0;
+    if ( /^hr/ in unit )
+        return v * 3600.0;
+    if ( /^day/ in unit )
+        return v * 86400.0;
+    return v;
+    }
+
+# detail 의 key=value 에서 공통 값을 필드로 올린다(룰이 이미 채운 필드는 그대로).
+function detail_fields(ev: EvidenceInfo)
+    {
+    local d = ev$detail;
+    local kv: table[string] of string = table();
+    for ( _i, tok in split_string(d, / +/) )
+        {
+        if ( /=/ !in tok )
+            next;
+        local x = split_string1(tok, /=/);
+        if ( x[0] !in kv )
+            kv[x[0]] = x[1];
+        }
+
+    if ( ! ev?$dst_name )
+        for ( _j, k in vector("sni", "host", "name", "parent", "query") )
+            if ( k in kv )
+                {
+                local nm = summary_name(kv[k]);
+                if ( nm != "" )
+                    {
+                    ev$dst_name = nm;
+                    break;
+                    }
+                }
+
+    if ( ! ev?$proxy && "via_proxy" in kv && kv["via_proxy"] != "" )
+        ev$proxy = kv["via_proxy"];
+
+    if ( ! ev?$bytes )
+        for ( _k, bk in vector("orig_bytes", "conn_upload", "sum_bytes") )
+            if ( bk in kv && /^[0-9]+$/ in kv[bk] )
+                {
+                ev$bytes = to_count(kv[bk]);
+                break;
+                }
+
+    if ( ! ev?$window_s && /window=[0-9.]+ [a-z]+/ in d )
+        {
+        local w = split_string1(find_last(d, /window=[0-9.]+ [a-z]+/), /=/)[1];
+        local wp = split_string1(w, / /);
+        ev$window_s = interval_text_s(wp[0], wp[1]);
+        }
+    }
+
 function write_evidence(ev: EvidenceInfo)
     {
     # killchain_stage 미지정 시 note 로 자동 매핑(detection_log 와 동일 체계).
@@ -240,8 +376,14 @@ function write_evidence(ev: EvidenceInfo)
             ev$killchain_stage = stg;
         }
     # 값이 없는 선택 필드는 빈 문자열 대신 필드 없음으로 남긴다(uid·계정 조회 결과가 없을 때)
+    if ( ev?$uid && /~/ in ev$uid )
+        apply_conn_ref(ev);
     if ( ev?$uid && ev$uid == "" )
         delete ev$uid;
+    if ( ev?$note && ! ev?$rule )
+        ev$rule = sub(cat(ev$note), /^NSM::/, "");
+    if ( ev?$detail )
+        detail_fields(ev);
     if ( ev?$account && ev$account == "" )
         delete ev$account;
     if ( ev?$account && ! ev?$user_name )

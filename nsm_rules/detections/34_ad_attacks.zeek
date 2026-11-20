@@ -72,6 +72,15 @@ export {
 }
 
 # 호출한 계정: 같은 연결의 NTLM 인증, 없으면 같은 대상으로 받은 티켓(cifs·host·rpcss)의 계정.
+# 연결 참조 목록에서 uid 만(detail 표시용)
+function zl_uid_only(refs: vector of string): vector of string
+    {
+    local out: vector of string = vector();
+    for ( _i, r in refs )
+        out += NSM::ref_uid(r);
+    return out;
+    }
+
 function ad_attack_account(c: connection): string
     {
     if ( c?$ntlm && c$ntlm?$username && c$ntlm$username != "" )
@@ -101,7 +110,7 @@ function ad_attack_report(c: connection, note: Notice::Type, technique: string, 
             $technique=technique,
             $src=src,
             $dst=dst,
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $account=ad_attack_account(c),
             $operation=fmt("%s::%s", ep, op),
             $detail=fmt("endpoint=%s operation=%s port=%s pipe=%s dst_is_dc=%s", ep, op, c$id$resp_p, pipe,
@@ -147,7 +156,7 @@ event zeek_init()
                     if ( p[0] !in uid_seen )
                         {
                         add uid_seen[p[0]];
-                        uids += p[0];
+                        uids += p[0];       # 연결 참조(NSM::conn_ref). detail 에는 uid 만
                         }
                     if ( |p| > 1 )
                         op = p[1];
@@ -162,7 +171,7 @@ event zeek_init()
                 $uid=|uids| > 0 ? uids[0] : "",
                 $operation=fmt("netlogon::%s", op),
                 $detail=fmt("netlogon_auth_calls=%d window=%s dst_is_dc=%s sample_uids=%s", n, zerologon_epoch,
-                            dcsync_is_dc(dst) ? "T" : "F", join_string_vec(uids, ","))]);
+                            dcsync_is_dc(dst) ? "T" : "F", join_string_vec(zl_uid_only(uids), ","))]);
             NOTICE([$note=Zerologon_Attempt,
                     $src=src,
                     $dst=dst,
@@ -261,7 +270,7 @@ event dce_rpc_response(c: connection, fid: count, ctx_id: count, opnum: count, s
             return;
         local zk: SumStats::Key = [$host=src, $str=cat(dst)];
         SumStats::observe("nsm.zerologon", zk, [$num=1]);
-        SumStats::observe("nsm.zerologon.sample", zk, [$str=cat(c$uid, "|", op)]);
+        SumStats::observe("nsm.zerologon.sample", zk, [$str=cat(NSM::conn_ref(c), "|", op)]);
         }
     else if ( detect_ad_enumeration && [ep, op] in ad_enum_ops )
         {
@@ -270,6 +279,6 @@ event dce_rpc_response(c: connection, fid: count, ctx_id: count, opnum: count, s
         local ek: SumStats::Key = [$host=src];
         SumStats::observe("nsm.ad_enum", ek, [$str=cat(dst)]);
         SumStats::observe("nsm.ad_enum.sample", ek,
-                          [$str=cat(dst, "|", ep, "::", op, "|", c$uid, "|", ad_attack_account(c))]);
+                          [$str=cat(dst, "|", ep, "::", op, "|", NSM::conn_ref(c), "|", ad_attack_account(c))]);
         }
     }

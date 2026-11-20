@@ -75,7 +75,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | `raw_ref` | string | 원본 이벤트 위치(화면 링크) | ✓ | ✓ | ✓ |
 
 - **시각:** MDS는 판정 시각이 아니라 파일이 들어오거나 실행된 시각을 `time`으로 씁니다. 판정 시각은 `observed_at`·원본에 남깁니다. 그래야 "메일 → 실행 → C2" 순서가 맞습니다.
-- 이 필드는 센서 로그 형식 검토의 P1 항목(`sensor_id`, `rule`, `severity_id`, 근거의 `dst_name`)을 전제로 합니다. 이 중 `rule`·`severity_id`와 탐지 요약의 계정·목적지 이름·프록시(`accounts`·`dst_names`·`relays`), 계정 나누기(`user_name`·`user_domain`·`user_domain_type`), 상관 탐지의 갈래 합치기·갱신 번호(`revision`)·구성 탐지 id(`member_detection_ids`)는 센서에 반영됐습니다(SRS 5.1.2·6.2·6.3). `sensor_id`(수집 에이전트)와 근거 필드화(E1)는 남았습니다.
+- 이 필드는 센서 로그 형식 검토의 P1 항목(`sensor_id`, `rule`, `severity_id`, 근거의 `dst_name`)을 전제로 합니다. 이 중 `rule`·`severity_id`와 탐지 요약의 계정·목적지 이름·프록시(`accounts`·`dst_names`·`relays`), 계정 나누기(`user_name`·`user_domain`·`user_domain_type`), 상관 탐지의 갈래 합치기·갱신 번호(`revision`)·구성 탐지 id(`member_detection_ids`)는 센서에 반영됐습니다(SRS 5.1.2·6.2·6.3). 근거 공통 필드(`src_port`·`dst_port`·`proto`·`community_id`·`dst_name`·`proxy`·`bytes`·`window_s`, E1)도 반영됐고, `sensor_id`(수집 에이전트)가 남았습니다.
 
 ---
 
@@ -91,7 +91,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | IP | 주소 + 시각 | → PC: 위 점유 구간 역조회 | NAT·프록시·VPN 뒤면 낮음 |
 | 파일 | SHA-256 | 제품 사이 그대로 일치 | 높음(95) |
 | 외부 대상 | 등록 도메인·URL·외부 IP | 제품 사이 그대로 일치(도메인은 등록 도메인으로도) | 도메인 90, IP 70(공유 호스팅·CDN) |
-| 연결 | `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)` | MDS 네트워크 장비가 본 연결(파일 다운로드 등) ↔ NSM 근거. **MDS에는 Community ID가 없어** 주소·포트·시각으로 맞춤(NSM 근거에 `src_port`·`dst_port` 필드 필요, [로그 형식 검토](LOG_SCHEMA_REVIEW.md) N5). Community ID는 Suricata 경보 ↔ Zeek 연결 조인에만 씀 | 같은 시각 창 안 유일하면 80, 프록시·NAT 뒤면 쓰지 않음 |
+| 연결 | `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)` | MDS 네트워크 장비가 본 연결(파일 다운로드 등) ↔ NSM 근거. **MDS에는 Community ID가 없어** 주소·포트·시각으로 맞춤(NSM 근거의 `src_port`·`dst_port`, [로그 형식 검토](LOG_SCHEMA_REVIEW.md) N5). NSM 근거에는 `community_id`도 있어, Suricata 경보나 Community ID를 가진 제품과는 그 값으로 바로 맞춤. MDS 이벤트에 출발 포트가 있으면 Manager가 같은 방식(seed 0)으로 계산해 붙일 수 있음 | 같은 시각 창 안 유일하면 80, 프록시·NAT 뒤면 쓰지 않음 |
 
 연결은 이벤트를 받을 때 한 번 계산해 `host`·`user`·`entity_conf`로 붙이고, 연결 경로(`via: mailbox→user→host`)를 남겨 화면에서 보여 줍니다.
 

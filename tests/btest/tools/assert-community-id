@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""evidence.log 의 연결 필드(src_port·dst_port·proto·community_id)를 conn.log 와 대조한다(JSON 또는 TSV).
+
+  assert-community-id [최소 행 수]
+
+  - conn.log 에 있는 uid 를 가진 근거 행은 네 필드가 모두 있어야 한다.
+  - community_id 는 Community ID v1 스펙(seed 0, base64)대로 conn.log 의 5-tuple 에서 계산한 값과 같아야 한다.
+  - src_port·dst_port 는 근거의 src·dst 방향(src 가 연결의 응답 쪽이면 뒤바뀐 값)이어야 한다.
+  대조한 행이 최소 행 수(기본 1)보다 적으면 실패.
+"""
+import base64
+import hashlib
+import ipaddress
+import os
+import struct
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nsmlog  # noqa: E402
+
+PROTO = {"tcp": 6, "udp": 17, "icmp": 1}
+# ICMP 는 type/code 를 포트 자리에 쓰고, 요청·응답 짝(8/0 등)이면 양방향으로 본다(스펙). 여기서는 TCP·UDP 만 대조한다.
+
+
+def community_id(sa, da, sp, dp, proto, seed=0):
+    a, b = ipaddress.ip_address(sa).packed, ipaddress.ip_address(da).packed
+    if (a, sp) > (b, dp):
+        a, b, sp, dp = b, a, dp, sp
+    h = hashlib.sha1(struct.pack("!H", seed) + a + b + struct.pack("!BB", PROTO[proto], 0) + struct.pack("!HH", sp, dp))
+    return "1:" + base64.b64encode(h.digest()).decode()
+
+
+want = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+conns = {nsmlog.get(r, "uid"): r for r in nsmlog.read_file("conn.log")} if os.path.exists("conn.log") else {}
+evidence = nsmlog.read_file("evidence.log") if os.path.exists("evidence.log") else []
+
+checked, errors = 0, []
+for e in evidence:
+    c = conns.get(nsmlog.get(e, "uid"))
+    if c is None or nsmlog.get(c, "proto") not in ("tcp", "udp"):
+        continue
+    checked += 1
+    oh, op = nsmlog.get(c, "id.orig_h"), int(nsmlog.get(c, "id.orig_p"))
+    rh, rp = nsmlog.get(c, "id.resp_h"), int(nsmlog.get(c, "id.resp_p"))
+    proto = nsmlog.get(c, "proto")
+    src = nsmlog.get(e, "src")
+    sp, dp = (rp, op) if (src == rh and src != oh) else (op, rp)
+    got = {k: nsmlog.get(e, k) for k in ("src_port", "dst_port", "proto", "community_id")}
+    exp = {"src_port": str(sp), "dst_port": str(dp), "proto": proto, "community_id": community_id(oh, rh, op, rp, proto)}
+    if got != exp:
+        errors.append("%s %s: got %s expected %s" % (nsmlog.get(e, "note"), nsmlog.get(e, "uid"), got, exp))
+
+if errors or checked < want:
+    nsmlog.fail("assert-community-id FAILED: checked=%d (min %d), mismatches=%d\n  %s"
+                % (checked, want, len(errors), "\n  ".join(errors[:10])))
+print("assert-community-id: %d rows ok" % checked)

@@ -66,7 +66,7 @@ function remote_exec_report(c: connection, note: Notice::Type, technique: string
             $technique=technique,
             $src=src,
             $dst=dst,
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $account=remote_exec_account(c, kerb),
             $operation=fmt("%s::%s", ep, op),
             $detail=fmt("endpoint=%s operation=%s port=%s pipe=%s", ep, op, c$id$resp_p, pipe)]);

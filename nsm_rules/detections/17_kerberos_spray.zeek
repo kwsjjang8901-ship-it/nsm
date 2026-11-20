@@ -211,7 +211,7 @@ event krb_error(c: connection, msg: KRB::Error_Msg)
 
     local src = c$id$orig_h;
     local result = krb_failure_codes[msg$error_code];
-    local sample = cat(acct, "|", c$id$resp_h, "|", result, "|", c$uid);
+    local sample = cat(acct, "|", c$id$resp_h, "|", result, "|", NSM::conn_ref(c));
 
     # 예외(예외 파일 + 기존 krb_spray_allowlist). 스프레이·무차별 대입을 따로 판정한다(범위가 다를 수 있음)
     local brute = msg$error_code in krb_bruteforce_codes;

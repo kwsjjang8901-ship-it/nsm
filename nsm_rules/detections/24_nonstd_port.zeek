@@ -124,7 +124,7 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation=fmt("%s_on_nonstandard_port", proto),
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("protocol=%s port=%s%s%s", proto, p, pdst != "" ? cat(" host=", pdst) : "", proxy_detail(c))]);
 
     NOTICE([$note=Nonstandard_Port,
@@ -172,7 +172,7 @@ event ConnThreshold::duration_threshold_crossed(c: connection, threshold: interv
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="long_external_connection",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("duration>=%s port=%s service=%s orig_bytes=%d resp_bytes=%d",
                         threshold, c$id$resp_p, svc, ob, rb)]);
 
