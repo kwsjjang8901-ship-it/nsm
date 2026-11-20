@@ -2669,6 +2669,52 @@ def gen_asset_fingerprint(out):
     cap.write(os.path.join(out, "asset_fingerprint.pcap"))
 
 
+def tcp_dialog(cap, cli, srv, dport, t, steps):
+    """steps: [("s"|"c", bytes), ...] 순서대로 주고받는 TCP 대화."""
+    s = Tcp(cap, cli, srv, dport)
+    t = s.handshake(t)
+    for who, data in steps:
+        t = (s.server_send if who == "s" else s.client_send)(data, t + 0.01)
+    return s.close(t + 0.01)
+
+
+def gen_asset_banners(out):
+    """자산 식별 서비스 배너(10.0.57.x, 클라이언트 .100). 남김: .10 HTTP 401 Basic realm, .12 Digest realm(nonce 는 뺌),
+    .20 SIP User-Agent(전화기)·.21 Server(PBX), .30 FTP 220, .31 SMTP 220(STARTTLS 의 220 은 아님), .32 POP3 +OK, .33 MySQL 8.0.36.
+    안 남김: .11 Negotiate·NTLM 토큰, 프록시 .5:3128 경유 응답의 realm."""
+    cap = Capture()
+    t = T0 + 1
+    C = "10.0.57.100"
+    get = b"GET /admin HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0\r\n\r\n"
+    r401 = "HTTP/1.1 401 Unauthorized\r\n%sContent-Length: 0\r\n\r\n"
+    for srv, port, req, hdr in [
+            ("10.0.57.10", 80, get % b"router", 'WWW-Authenticate: Basic realm="Example Router"\r\n'),
+            ("10.0.57.11", 80, get % b"intranet", "WWW-Authenticate: Negotiate\r\nWWW-Authenticate: NTLM TlRMTVNTUAACAAAADAAMADgAAAA=\r\n"),
+            ("10.0.57.12", 80, get % b"cam", 'WWW-Authenticate: Digest realm="Example Cam", qop="auth", nonce="5f1e2d3c4b5a6978"\r\n'),
+            ("10.0.57.5", 3128, b"GET http://www.example.com/ HTTP/1.1\r\nHost: www.example.com\r\n\r\n", 'WWW-Authenticate: Basic realm="External Site"\r\n')]:
+        t = tcp_dialog(cap, C, srv, port, t + 1, [("c", req), ("s", (r401 % hdr).encode())])
+    sip_req = ("REGISTER sip:pbx.corp.example SIP/2.0\r\nVia: SIP/2.0/UDP 10.0.57.20:5060;branch=z9hG4bK77a1\r\n"
+               "From: <sip:1001@pbx.corp.example>;tag=a1\r\nTo: <sip:1001@pbx.corp.example>\r\nCall-ID: 77a1@10.0.57.20\r\n"
+               "CSeq: 1 REGISTER\r\nContact: <sip:1001@10.0.57.20>\r\nUser-Agent: Example IP Phone 7841/12.8.1\r\nContent-Length: 0\r\n\r\n")
+    sip_rsp = ("SIP/2.0 200 OK\r\nVia: SIP/2.0/UDP 10.0.57.20:5060;branch=z9hG4bK77a1\r\nFrom: <sip:1001@pbx.corp.example>;tag=a1\r\n"
+               "To: <sip:1001@pbx.corp.example>;tag=b2\r\nCall-ID: 77a1@10.0.57.20\r\nCSeq: 1 REGISTER\r\nServer: Example PBX 16.0\r\nContent-Length: 0\r\n\r\n")
+    cap.add(cap.l3("10.0.57.20", "10.0.57.21") / UDP(sport=5060, dport=5060) / Raw(sip_req.encode()), t + 1)
+    cap.add(cap.l3("10.0.57.21", "10.0.57.20") / UDP(sport=5060, dport=5060) / Raw(sip_rsp.encode()), t + 1.01)
+    t += 2
+    t = tcp_dialog(cap, C, "10.0.57.30", 21, t + 1, [("s", b"220 nas01 Example FTP Service (Version 3.0).\r\n"), ("c", b"USER anonymous\r\n"),
+                                                    ("s", b"331 Password required\r\n"), ("c", b"QUIT\r\n"), ("s", b"221 Goodbye\r\n")])
+    t = tcp_dialog(cap, C, "10.0.57.31", 25, t + 1, [("s", b"220 mail.corp.example ESMTP ExampleMail 9.1 ready\r\n"), ("c", b"EHLO pc\r\n"),
+                                                    ("s", b"250-mail.corp.example\r\n250 STARTTLS\r\n"), ("c", b"STARTTLS\r\n"),
+                                                    ("s", b"220 2.0.0 Ready to start TLS\r\n")])
+    t = tcp_dialog(cap, C, "10.0.57.32", 110, t + 1, [("s", b"+OK Example POP3 server v2.3 ready\r\n"), ("c", b"CAPA\r\n"),
+                                                     ("s", b"+OK Capability list follows\r\nUSER\r\n.\r\n"), ("c", b"QUIT\r\n"), ("s", b"+OK bye\r\n")])
+    hs = (b"\x0a" + b"8.0.36\x00" + struct.pack("<I", 9) + b"abcdefgh\x00" + struct.pack("<H", 0xffff) + b"\x21"
+          + struct.pack("<H", 2) + struct.pack("<H", 0xc3ff) + bytes([21]) + b"\x00" * 10 + b"ijklmnopqrst\x00" + b"mysql_native_password\x00")
+    t = tcp_dialog(cap, C, "10.0.57.33", 3306, t + 1, [("s", len(hs).to_bytes(3, "little") + b"\x00" + hs)])
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "asset_banners.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2685,7 +2731,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
               gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
-              gen_asset_fingerprint]
+              gen_asset_fingerprint, gen_asset_banners]
 
 
 def main():

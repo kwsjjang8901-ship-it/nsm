@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.5 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.6 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -54,7 +54,7 @@
 | | `service` | `tcp/445`, `tcp/8081/http` | 역할 추정 |
 | | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
-| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0`, `smb_os:Windows 5.1`, `snmp_sysdescr:…`, `x509_subject:…` | 소프트웨어 정보, 지문 대조 입력(4.11) |
+| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0`, `smb_os:Windows 5.1`, `snmp_sysdescr:…`, `x509_subject:…`, `http_wwwauth:Basic realm="…"`, `sip_ua:…`, `ftp_banner:…`, `mysql:8.0.36` | 소프트웨어 정보, 지문 대조 입력(4.11) |
 | | `tcp_fp` | `syn ittl=128 hops=0 win=64240 ws=8 mss=1460 sack=1 ts=0 df=1` | TCP SYN 모양(OS 계열 추정, 3.19) |
 | | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent`, `policy:edr-cloud` | AhnLab 제품 설치 여부(통신으로 판단), 고객 정의 에이전트 정책(3.17) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
@@ -93,6 +93,7 @@
 | AhnLab MDS Agent | `mds_agent.zeek` | 보안 에이전트(MDS Agent), 장비(MDS) | 단말 → MDS 장비 경로 | 8/9 |
 | SNMP | `snmp.zeek` | 장비 이름, sysDescr·sysObjectID | NMS → 장비 경로 | 8/9 |
 | TCP SYN 지문 | `tcp_fp.zeek` | TCP SYN·SYN-ACK 모양 | 어디서나 | 8/9 |
+| 서비스 배너 | `banners.zeek`, `banners_extra.zeek` | HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전 | 사용자 → 서버 구간 | 8/9 |
 | 고객 정의 에이전트 정책 | `agent_policy.zeek` | 보안 에이전트(`policy:<id>`), 관리 서버 장비 | 단말 → 관리 서버 또는 인터넷·프록시 경로 | 8/9 |
 
 ### 3.2 DHCP (`dhcp`)
@@ -365,6 +366,29 @@
 - **한계:** Zeek가 주는 값에는 TCP 옵션 순서·세부 특이점이 없어 p0f 지문을 그대로 맞출 수 없음(계열 수준). NAT·프록시 뒤 장비는 마지막 장비의 값, 튜닝된 서버·가상 머신은 틀릴 수 있음. SYN마다 이벤트가 생기므로 운영 부하는 실측 필요(`enable_tcp_fp`로 끔)
 - **활용:** OS 근거가 없는 자산의 OS 계열(4.4, 4.11). 식별 키가 아님
 
+### 3.20 서비스 배너 (`http_wwwauth`, `sip`, `ftp`, `smtp`, `pop3`, `mysql`)
+
+지문 대조(4.11 Recog) 입력용 원문입니다. 응답·메시지를 보낸 쪽(서버·장비) IP에 `software`로 남기며 연결마다 처음 한 번만 봅니다.
+
+| 출처 | 트리거 | 값 | 신뢰도 | 파일 |
+|---|---|---|---|---|
+| `http_wwwauth` | HTTP 응답 `WWW-Authenticate` | `http_wwwauth:Basic realm="…"` 또는 `Digest realm="…"`(realm만, nonce 등은 뺌) | 60 | `banners.zeek` |
+| `sip` | SIP 메시지 `User-Agent`·`Server` 헤더(보낸 쪽) | `sip_ua:…`, `sip_server:…` | 60 | `banners.zeek` |
+| `ftp` | 첫 220 응답 본문 | `ftp_banner:…` | 60 | `banners.zeek` |
+| `smtp` | 연결의 첫 응답이 220일 때 그 본문(STARTTLS 응답의 220은 아님) | `smtp_banner:…` | 60 | `banners.zeek` |
+| `pop3` | 첫 `+OK` 응답 본문 | `pop3_banner:…` | 60 | `banners_extra.zeek` |
+| `mysql` | 핸드셰이크의 서버 버전 | `mysql:…` | 70 | `banners_extra.zeek` |
+
+- **남기지 않는 것:** Negotiate·NTLM·Bearer 인증 값(연결마다 바뀌는 토큰), 프록시 경유 응답(외부 사이트 것)
+- **IMAP:** Zeek가 접속 인사를 이벤트로 주지 않아 대상이 아님
+- **POP3:** 클라이언트가 POP3 명령(USER·CAPA 등)을 보내야 Zeek가 프로토콜을 인식함(DPD)
+- **부하 (2026-11-20, Zeek 9.0.1):** 해당 프로토콜만 있는 짧은 연결 2만 개(서버 50대), 5회 평균
+  - 이 기능 없음: 5,742ms
+  - `banners.zeek`: 5,903ms(+2.8%). Zeek 기본 스크립트가 이미 처리하는 이벤트라 핸들러 비용만 추가
+  - `banners_extra.zeek`까지: 6,125ms(+6.7%). POP3·MySQL 이벤트가 새로 생김
+  - 실제 망은 이 프로토콜의 짧은 연결 비율이 훨씬 낮아 차이가 더 작을 것으로 보지만, 운영 pcap으로 확인 필요
+- **끄기:** `enable_http_wwwauth`·`enable_sip`·`enable_service_banners`는 기록만 멈춥니다(이벤트는 그대로 생김). POP3·MySQL 부하를 없애려면 `signals/__load__.zeek`에서 `@load ./banners_extra`를 뺍니다
+
 ---
 
 ## 4. 판정 스펙 (`tools/asset_resolver.py`)
@@ -468,7 +492,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | DB | 입력 신호 | 결과 | 규칙 |
 |---|---|---|---|
 | IEEE OUI 목록 (MA-L·MA-M·MA-S CSV) | `mac` (ARP·DHCP 우선, 라우터 공유 MAC 제외) | 제조사 | 긴 접두어 먼저(MA-S > MA-M > MA-L). 로컬 관리 비트가 켜진 MAC은 제조사 대신 "로컬·랜덤 MAC"(모바일 랜덤 MAC·가상 머신·직접 정한 주소) |
-| Recog (Rapid7 `xml/*.xml`) | `software` `ssh:`(→ `ssh.banner`, `SSH-x.y-` 뗌), `http_server:`(→ `http_header.server`), `smb_os:`·`smb_lm:`(→ `smb.native_os`·`smb.native_lm`), `snmp_sysdescr:`·`snmp_sysobjid:`, `x509_subject:`·`x509_issuer:`(Zeek 순서와 CN 먼저 순서 둘 다), `dhcp_vendor_class` | 제조사·제품·버전·OS·장비 종류(`hw.device`) | 파일 순서대로 처음 맞는 지문 하나. Ruby 정규식을 Python으로 옮기지 못한 지문은 건너뛰고 수를 셈(2026-11 기준 4,336개 모두 변환) |
+| Recog (Rapid7 `xml/*.xml`) | `software` `ssh:`(→ `ssh.banner`, `SSH-x.y-` 뗌), `http_server:`(→ `http_header.server`), `smb_os:`·`smb_lm:`(→ `smb.native_os`·`smb.native_lm`), `snmp_sysdescr:`·`snmp_sysobjid:`, `x509_subject:`·`x509_issuer:`(Zeek 순서와 CN 먼저 순서 둘 다), `dhcp_vendor_class`, `http_wwwauth:`(→ `http_header.wwwauth`), `sip_ua:`·`sip_server:`(→ `sip_header.user_agent`·`sip_header.server`), `ftp_banner:`·`smtp_banner:`·`pop3_banner:`(→ `ftp.banner`·`smtp.banner`·`pop3.banner`), `mysql:`(→ `mysql.banners`) | 제조사·제품·버전·OS·장비 종류(`hw.device`) | 파일 순서대로 처음 맞는 지문 하나. Ruby 정규식을 Python으로 옮기지 못한 지문은 건너뛰고 수를 셈(2026-11 기준 4,336개 모두 변환) |
 | TCP SYN 계열 (DB 없음) | `tcp_fp` | OS 계열 | SYN 먼저. MSS 옵션이 없는 SYN은 판단 안 함(스캐너·직접 만든 패킷). 초기 TTL 128 → Windows, 255 → 네트워크 장비, 64 + 윈도 65535 + 타임스탬프 → macOS·iOS·BSD, 그 밖 64 → Linux·Unix, 32 → 구형·임베디드 |
 
 - **OS 칸 채우기:** 센서 OS 힌트(4.4)가 없을 때만 Recog OS, 그것도 없으면 TCP SYN 계열로 채우고 출처를 표시합니다.
@@ -517,7 +541,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `asset_nets` | `{}` | 자산 대역 (`run_poc.sh -n`) |
 | `suppress_interval` | 1hr | 중복 억제 기간 |
 | `dhcp_xid_timeout` | 5min | DHCP 트랜잭션 보관 |
-| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent, agent_policy, snmp, tcp_fp |
+| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent, agent_policy, snmp, tcp_fp, http_wwwauth, sip, service_banners |
 | `service_ports` | 주요 포트 | 포트만으로 서비스 인정 |
 | `ignore_service_ports` | 137,138,1900,5353,5355/udp | 거의 모든 단말이 응답하는 포트 |
 | `nested_analyzers` | ntlm, gssapi, krb, … | 다른 프로토콜 안에서 확인되는 분석기 |
@@ -564,5 +588,6 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
+| 0.6 | 2026-11-20 | 서비스 배너(3.20): HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전과 Recog 연결(4.11), 부하 측정 |
 | 0.5 | 2026-11-20 | 지문 대조 입력 신호: SMB1 native OS·LM 원문(클라이언트·서버), 인증서 주체·발급자, SNMP(3.18), TCP SYN 지문(3.19). 지문 DB 보강 규칙(4.11: OUI, Recog, TCP SYN 계열)과 라이선스 메모 |
 | 0.4 | 2026-11-19 | 고객 정의 에이전트 정책(3.17, `agent_policy_file`, `asset_agent_policy.log`), Manager의 에이전트 미확인 판정 규칙(4.10) |

@@ -44,6 +44,9 @@ export {
 	option enable_smb_guid = T;     ##< SMB2 NEGOTIATE 클라이언트 GUID -> smb_client_guid
 	option enable_mds_agent = T;    ##< AhnLab MDS Agent -> MDS 장비 통신 포트 -> security_agent, device
 	option enable_snmp = T;         ##< SNMP 응답(sysDescr·sysObjectID·sysName) -> software, hostname
+	option enable_http_wwwauth = T; ##< HTTP 401 WWW-Authenticate(Basic·Digest realm) -> software http_wwwauth:
+	option enable_sip = T;          ##< SIP User-Agent·Server 헤더 -> software sip_ua:·sip_server:
+	option enable_service_banners = T; ##< FTP·SMTP·POP3 접속 인사, MySQL 서버 버전 -> software
 	option enable_tcp_fp = T;       ##< TCP SYN·SYN-ACK 특징 -> tcp_fp (IP·방향당 suppress_interval 에 한 번)
 	option enable_agent_policy = T; ##< 고객 정의 에이전트 정책(agent_policy_file) -> security_agent "policy:<id>"
 

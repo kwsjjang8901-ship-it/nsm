@@ -225,7 +225,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 열 | 내용 |
 | --- | --- |
 | 제조사(MAC) | OUI 목록의 제조사. 로컬 관리 비트가 켜진 MAC은 "로컬·랜덤 MAC". 라우터 공유 MAC(IPv4 2개 이상)에는 붙이지 않음 |
-| 지문(제품·장비) | Recog 결과(제조사·제품·버전 · OS [장비 종류]). 칩에 마우스를 올리면 입력 출처(SSH 배너, HTTP Server, SNMP sysDescr, 인증서 주체 등) |
+| 지문(제품·장비) | Recog 결과(제조사·제품·버전 · OS [장비 종류], 제조사가 제품명에 들어 있거나 다른 부분에 포함된 부분은 한 번만). 칩에 마우스를 올리면 입력 출처(SSH 배너, HTTP Server, HTTP 인증 realm, SIP, FTP·SMTP·POP3 접속 인사, MySQL 버전, SNMP sysDescr, 인증서 주체 등) |
 | OS | 센서 OS 힌트. 없으면 지문 OS(`(지문(Recog))`), 그것도 없으면 TCP SYN 계열(`(TCP SYN 추정)`). 힌트가 있으면 TCP 계열을 아래 줄에 참고로 |
 
 관련 탐지 수가 많은 순, 신호 수가 많은 순으로 정렬합니다. 대상이 외부 IP인 탐지는 자산 표에 나오지 않습니다.
@@ -328,6 +328,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-assets-signal` | 신호 모드 자산 표의 MAC·OS 힌트·서비스, MAC 공유 표시 |
 | `rules/report-assets-routed` | 라우팅 뒤 구간을 표 위에 한 번만 설명하고 행은 `(라우터)` |
 | `rules/report-mds-agent` | 보안 제품 열의 MDS Agent, 장비 종류 |
+| `rules/report-asset-banners` | 서비스 배너(HTTP 인증 realm, SIP, FTP·SMTP·POP3, MySQL)를 Recog 형식 지문과 맞춤. Negotiate 토큰·프록시 응답은 지문 없음 |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
