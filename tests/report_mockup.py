@@ -3,7 +3,8 @@
 
 목업 파일을 그대로 템플릿으로 쓰고, <script type="application/json" id="report-data"> 에 이 pcap 의 탐지·공격 스토리·
 자산·예외·센서 상태를 목업의 예시 데이터와 같은 모양으로 넣는다. 목업의 applyReport() 가 예시 데이터를 이 값으로 바꾼다.
-위험도·탐지명·공격 단계는 목업의 룰 표(RULES, 룰별 기본값)에서 채운다.
+등급은 센서 값(단독 탐지 Information, 상관 탐지 Suspicious)을 그대로 쓰고, 탐지명·공격 단계·탐지 기준은
+목업의 룰 표(RULES, 룰별 기본값)에서 채운다.
 
 리포트에 없는 것(Manager 기능): 대응 현황·조치, 보고서·로그 메뉴, MDS·MTA 탐지, 정책·예외 편집과 배포, 과거 기록 검색.
 화면에서 숨기거나 읽기 전용으로 둔다. 기존 리포트(report_pcap.py 의 PAGE)는 그대로 함께 만든다.
@@ -89,6 +90,8 @@ def build(data, zeek_dir, tz=9.0):
              "y": dt(ts).strftime("%Y") if ts else "", "diag": d.get("diagnosis") or "", "src": src or "-",
              "dst": vics[0] if vics else "(대상 여러 곳)", "sensor": data.get("pcap") or "NSM", "occ": d.get("occurrences") or 1,
              "port": port.group(1) if port else "-", "proto": "",
+             # 등급은 센서 값(nsm_detection.log severity: 단독 Information, 상관 Suspicious)
+             "sev": d.get("severity") or ("Suspicious" if corr else "Information"),
              "ev": [[str(x.get("operation") or "-"), str(x.get("detail") or "")[:300]] for x in evs[:20]]}
         if len(vics) > 1:
             e["victims"] = vics
@@ -112,7 +115,7 @@ def build(data, zeek_dir, tz=9.0):
             stages = [s.strip() for s in re.split(r"->|→|,", str(d.get("stages") or "")) if s.strip()]
             e.update({"note": "Correlated_KillChain", "corr": True, "stages": stages or ["Impact"],
                       "stage": stages[-1] if stages else "Impact", "name": f"여러 단계로 이어진 공격({len(stages)}단계)",
-                      "sev": "Critical" if len(stages) >= 3 else "High", "tech": str(d.get("techniques") or "")})
+                      "tech": str(d.get("techniques") or "")})
             e["victims"] = vics or [e["dst"]]
         else:
             e["note"] = note or (d.get("diagnosis") or "").split(".")[-1]

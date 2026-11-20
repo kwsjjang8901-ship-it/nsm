@@ -16,7 +16,8 @@
 `tests/run_pcap.sh`(또는 `tests/report_pcap.py`)는 기존 통합 리포트(`<pcap 이름>_report.html`)와 함께 **같은 데이터를 이 목업 화면으로 그린 리포트**(`<pcap 이름>_report_mockup.html`)를 만듭니다. 목업 파일을 그대로 템플릿으로 쓰므로, 목업 화면을 고치면 다음에 만드는 리포트도 같이 바뀝니다.
 
 - 만드는 방법: `tests/report_mockup.py`가 `report_pcap.collect()` 결과를 목업 예시 데이터와 같은 모양으로 바꿔 `<script type="application/json" id="report-data">`에 넣습니다. 목업의 `applyReport()`가 예시 데이터를 이 값으로 바꾼 뒤 화면을 그립니다. 데이터 블록이 없으면 목업 그대로입니다.
-- 위험도·탐지명·공격 단계·탐지 기준: 목업의 룰 표(`RULES`, 룰별 기본값)에서 채웁니다. 센서는 모든 탐지를 `Information`으로 내므로, 위험도는 이 표가 기준입니다.
+- 등급: 센서 값(`nsm_detection.log`의 `severity`)을 그대로 씁니다. 단독 탐지는 `Information`, 여러 단계가 이어진 상관 탐지는 `Suspicious`입니다. 리포트 모드에서는 등급 체계·필터·대시보드(먼저 확인할 탐지 = Suspicious)가 이 두 단계로 바뀝니다. 공격 스토리는 상관 탐지로 확정된 단계가 있으면 `Suspicious`입니다.
+- 탐지명·공격 단계·탐지 기준: 목업의 룰 표(`RULES`, 룰별 기본값)에서 채웁니다. 룰 정책 화면의 위험도 칸(Critical·High 등)은 Manager에서 정할 우선순위 예시이며 리포트 등급에는 쓰지 않습니다.
 - 끄기: `report_pcap.py --no-mockup`. 다른 경로: `--mockup-out <파일>`.
 
 | 화면 | 리포트에서 |

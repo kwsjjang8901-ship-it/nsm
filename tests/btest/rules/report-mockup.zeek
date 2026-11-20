@@ -1,4 +1,4 @@
-# @TEST-DOC: 목업형 리포트 — report_pcap.py 가 기존 리포트와 함께 ui/mockup/mdsm_nsm_mockup.html 을 템플릿으로 같은 데이터를 목업 화면용으로 넣은 *_mockup.html 을 만든다. 7단계 공격(killchain_story): 탐지 행 id 는 시각순 NSM-00001…, 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건(6단계, 피해까지), 스토리 1개(단계·이벤트 id 연결), 대상이 없는 비콘은 근거의 목적지, 내부 주소 목록. 프록시 경유(proxy_c2): 대상은 프록시, 실제 목적지(host)와 via. --no-mockup 이면 만들지 않는다
+# @TEST-DOC: 목업형 리포트 — 등급은 센서 값(단독 Information, 상관 Suspicious). report_pcap.py 가 기존 리포트와 함께 ui/mockup/mdsm_nsm_mockup.html 을 템플릿으로 같은 데이터를 목업 화면용으로 넣은 *_mockup.html 을 만든다. 7단계 공격(killchain_story): 탐지 행 id 는 시각순 NSM-00001…, 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건(6단계, 피해까지), 스토리 1개(단계·이벤트 id 연결), 대상이 없는 비콘은 근거의 목적지, 내부 주소 목록. 프록시 경유(proxy_c2): 대상은 프록시, 실제 목적지(host)와 via. --no-mockup 이면 만들지 않는다
 # @TEST-EXEC: zeek -C -r $TRACES/killchain_story.pcap $PKG $SETUP
 # @TEST-EXEC: python3 $PKG/../tests/report_pcap.py . -o kc.html --pcap killchain_story.pcap > out.txt
 # @TEST-EXEC: test -s kc.html && test -s kc_mockup.html && grep -q '목업형 리포트: kc_mockup.html' out.txt
@@ -15,6 +15,8 @@ d = json.loads(re.search(r'id="report-data">(\{.*?)</script>', page, re.S).group
 ev = d["ev"]
 assert [e["id"] for e in ev] == [f"NSM-{i:05d}" for i in range(1, len(ev) + 1)], [e["id"] for e in ev]
 assert all(e["prod"] == "NSM" and e["t"] and e["d"] for e in ev)
+# 등급은 센서 값: 단독 Information, 상관 Suspicious
+assert all(e["sev"] == ("Suspicious" if e.get("corr") else "Information") for e in ev), {(e["note"], e["sev"]) for e in ev}
 if sys.argv[2] == "kc":
     corr = [e for e in ev if e.get("corr")]
     assert len(corr) == 1 and len(corr[0]["stages"]) == 6 and corr[0]["stages"][-1] == "Impact" and corr[0]["src"] == "172.16.0.66", corr
