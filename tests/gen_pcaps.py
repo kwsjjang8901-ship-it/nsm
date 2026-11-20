@@ -2754,6 +2754,65 @@ def gen_asset_device_class(out):
     cap.write(os.path.join(out, "asset_device_class.pcap"))
 
 
+# --------------------------------------------------------------------------- 07·09·24·30·33 명시적 프록시 경유 C2·AI
+
+def proxy_tls(cap, src, proxy, t, target, tport=443, sni="", cert=None, up=200, down=100, upload=0, pport=3128):
+    """PC -> 프록시: CONNECT 대상:포트 -> 200 -> TLS. sni="" 면 대상 이름, None 이면 SNI 없음."""
+    s = Tcp(cap, src, proxy, pport)
+    t = s.handshake(t)
+    req = "CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\nUser-Agent: Mozilla/5.0\r\n\r\n" % (target, tport, target, tport)
+    t = s.client_send(req.encode(), t)
+    t = s.server_send(b"HTTP/1.1 200 Connection established\r\n\r\n", t + 0.01)
+    t = s.client_send(client_hello(target if sni == "" else sni), t + 0.01)
+    t = s.server_send(server_hello(cert_der=cert), t + 0.02)
+    t = s.client_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.server_send(tls_record(20, b"\x01") + tls_record(22, rand_bytes(40)), t + 0.01)
+    t = s.client_send(tls_record(23, rand_bytes(up)), t + 0.01)
+    if upload:
+        t = s.client_send(tls_record(23, rand_bytes(200)), t + 1, skip=upload)
+    t = s.server_send(tls_record(23, rand_bytes(down)), t + 0.05)
+    return s.close(t + 0.01)
+
+
+def proxy_http(cap, src, proxy, t, hosts, pport=3128):
+    """PC -> 프록시 평문 HTTP 연결 하나에 절대 URL 요청 여러 개(hosts 순서대로)."""
+    s = Tcp(cap, src, proxy, pport)
+    t = s.handshake(t)
+    for h in hosts:
+        req = "GET http://%s/check HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0\r\nProxy-Connection: keep-alive\r\n\r\n" % (h, h)
+        t = s.client_send(req.encode(), t + 0.05)
+        t = s.server_send(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", t + 0.02)
+    return s.close(t + 0.01)
+
+
+def gen_proxy_c2(out):
+    """명시적 프록시(10.0.60.5:3128, 내부 대역) 경유 C2·AI(07·09·24·30·33).
+    .10 CONNECT cdn.sync-relay.net 60초마다 같은 크기 40회(30 탐지, proxy_aware_beacon 일 때).
+    .11 CONNECT update.code.visualstudio.com 60초마다 40회(30, 기본 예외 목록으로 빠짐).
+    .12 평문 HTTP 30초마다 연결 14개, 연결마다 beacon.relay-check.net 2회 + 프록시 자신(PAC) 1회(07 탐지, 30초 주기).
+    .13 프록시 자신(PAC)만 30초마다 14회(07 미탐). .14 첫 요청을 못 본 프록시 연결 60초마다 40회(목적지 모름, 30 미탐).
+    .15 평문 HTTP www.msftconnecttest.com 30초마다 14회(07, 기본 예외 목록으로 빠짐).
+    .16 CONNECT 93.184.215.170:443, SNI 없음 + 자체서명(09 탐지). .17 CONNECT files.relay-drop.net:4444(24 탐지),
+    .18 CONNECT www.example.com:443(24 미탐). .19 CONNECT api.openai.com 12MB 업로드(33 탐지)."""
+    cap = Capture()
+    P = "10.0.60.5"
+    t0 = T0 + 1
+    for i in range(40):
+        proxy_tls(cap, "10.0.60.10", P, t0 + 60 * i, "cdn.sync-relay.net", up=300, down=1200)
+        proxy_tls(cap, "10.0.60.11", P, t0 + 2 + 60 * i, "update.code.visualstudio.com", up=400, down=900)
+        proxy_upload(cap, "10.0.60.14", P, t0 + 4 + 60 * i, "", connect=False)
+    for i in range(14):
+        proxy_http(cap, "10.0.60.12", P, t0 + 6 + 30 * i, ["beacon.relay-check.net", "beacon.relay-check.net", P])
+        proxy_http(cap, "10.0.60.13", P, t0 + 8 + 30 * i, [P])
+        proxy_http(cap, "10.0.60.15", P, t0 + 10 + 30 * i, ["www.msftconnecttest.com"])
+    proxy_tls(cap, "10.0.60.16", P, t0 + 500, "93.184.215.170", sni=None, cert=self_signed_cert_der("c2.invalid"))
+    proxy_tls(cap, "10.0.60.17", P, t0 + 510, "files.relay-drop.net", tport=4444)
+    proxy_tls(cap, "10.0.60.18", P, t0 + 520, "www.example.com")
+    proxy_tls(cap, "10.0.60.19", P, t0 + 530, "api.openai.com", upload=12 * 1000 * 1000)
+    cap.tick(T0 + 2700)
+    cap.write(os.path.join(out, "proxy_c2.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2770,7 +2829,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
               gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
-              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class]
+              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class, gen_proxy_c2]
 
 
 def main():

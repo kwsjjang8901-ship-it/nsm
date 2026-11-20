@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 130개(자산 식별·선별 전송 포함), 합성 pcap 63개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 132개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -69,7 +69,7 @@ flowchart LR
 | --- | --- | --- |
 | 로더 | `nsm_rules/__load__.zeek` | 모든 구성 요소를 정해진 순서로 로드(7.1절) |
 | 공통 정의 | `detections/main.zeek` | 탐지 유형(notice) 목록, 공통 파라미터·함수, 킬체인 단계명 |
-| 탐지 룰 | `detections/01~24_*.zeek`, `web_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14 공용) |
+| 탐지 룰 | `detections/01~24_*.zeek`, `web_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14, C2·AI 07·09·24·30·33 공용) |
 | 근거·요약 | `evidence_log.zeek`, `detection_log.zeek`, `attack_mapping.zeek` | 근거 기록, 탐지 요약, ATT&CK 매핑 |
 | 상관·묶기 | `correlation_killchain.zeek`, `notice_aggregation.zeek` | 킬체인 상관, 중복 묶기 |
 | 설정 | `nsm_config_fixed.zeek`, `nsm_config_custom.zeek`, `intel_ja3.zeek` | 운영 기본값, 고객별 값, JA3 목록(7장) |
@@ -647,7 +647,8 @@ SMB 관리 공유(2대)·WinRM·DCOM(3대) 확산은 여러 대를 노려야 탐
 - 주체: `src` = 감염 host, `dst` = C2 서버.
 - 집계·억제: 상태 추적. 주기가 끊겼다가 다시 생기면 재탐지할 수 있고, 같은 (출발지, 목적지)는 30분 억제.
 - 제외·오탐 통제: 내부 → 외부 HTTP만(암호화 C2는 09). 3초보다 짧은 간격(한 페이지의 여러 객체)은 연속 횟수에 넣지 않습니다. 예외 목적지 `beacon_allowlist`, 도메인 예외 `beacon_allowlist_domains`(업데이트·텔레메트리). 예외는 예외 엔진(5.4절)으로 집계 전에 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 워커에서 연결이 끝날 때 판정하므로 HTTP Host(`domain` 축)를 씁니다.
-- 근거: 기준 주기, 연속 횟수, Host, uid.
+- 근거: 기준 주기, 연속 횟수, Host, uid. 프록시 경유면 `via_proxy=주소:포트`.
+- 명시적 프록시 경유(`proxy_aware_beacon`, **기본 끔**): 켜면 PC → 프록시 평문 HTTP도 실제 목적지(절대 URL·Host) 기준으로 봅니다. 프록시는 연결 하나로 여러 사이트를 오가므로, 연결마다 요청 Host별 첫 요청 시각(`http_message_done`의 `c$http$ts`)을 (출발지, Host) 관측 1건으로 셉니다. 목적지를 모르는 요청과 프록시 자신·내부 주소로 가는 요청(PAC·상태 페이지)은 세지 않습니다. CONNECT 터널(HTTPS)은 30이 봅니다. 예외는 실제 목적지 이름(`domain`)·포트로 판정합니다(`dst` 축 없음). 고객 프록시 환경 1.4시간 측정에서 켜면 새 탐지 10건이 모두 Windows 연결 확인(NCSI)·업데이트·VS 원격 측정이라 기본으로 끄고, 켤 때는 기본 예외 목록(7.8절)을 함께 씁니다.
 
 ##### DNS 터널링 (`DNS_Tunneling`, T1071.004) · 08_dns_tunneling
 
@@ -680,10 +681,11 @@ TLS로 감싼 C2는 본문을 볼 수 없어 핸드셰이크 메타데이터로 
 - TLS 1.3은 인증서가 암호화돼 자체서명·불일치 신호가 없습니다. 이때는 SNI 없음과 지문만 점수에 들어갑니다(JA3는 SNI 없음과 함께여야 탐지).
 - JA3 가중치를 3에서 2로 낮춘 이유: 공개 데이터셋 CIC-IDS2017 Monday(공격 없는 날)에서 차단목록의 "Adware" 해시 3개가 정상 브라우저 지문과 같아 JA3 단독으로 1,176건이 오탐됐습니다. 지문만으로 판정하려면 JA4 차단목록(3)을 씁니다.
 - 자체서명이면서 SNI가 맞지 않으면 불일치는 0점으로 셉니다(`enc_c2_w_mismatch_selfsigned`). 호스팅 업체의 기본 자체서명 인증서(Plesk, `localhost.localdomain` 등)를 쓰는 일반 웹사이트는 자체서명이면 SNI도 당연히 맞지 않아 같은 원인을 두 번 세게 됩니다. CIC-IDS2017 5일 동안 이 조합만으로 3점이 된 일반 사이트 접속이 52건(암호화 C2 오탐 56건 중)이었습니다. SNI 없는 자체서명(Cobalt Strike 기본 설정 등)은 그대로 3점입니다. 자체서명 인증서에 다른 이름의 SNI를 쓰는 C2까지 잡으려면 1로 되돌립니다(이전 동작).
-- 주체: `src` = 감염 host, `dst` = C2 서버.
-- 집계·억제: 연결 단위 단건. (출발지, 목적지) 단위 1시간 억제.
-- 제외·오탐 통제: 내부 → 외부만. 예외는 예외 엔진(5.4절)으로 거릅니다(축: 목적지, SNI, JA4 등). 기존 `enc_c2_allowlist`(목적지)·`enc_c2_allowlist_sni`(SNI)는 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 점수, 신호 목록, SNI, 발급자, 지문.
+- 명시적 프록시 경유(`proxy_aware_enc_c2`, 기본 켬): CONNECT가 성공하면 Zeek가 같은 연결의 나머지를 TLS로 해석하므로 터널 안 인증서·SNI·지문이 그대로 보입니다. 실제 목적지(CONNECT 대상)를 알 때만 보고, 대상이 프록시 자신·내부 주소면 뺍니다.
+- 주체: `src` = 감염 host, `dst` = C2 서버(프록시 경유면 프록시 주소, 실제 목적지는 근거의 `host=`).
+- 집계·억제: 연결 단위 단건. (출발지, 목적지) 단위 1시간 억제. 프록시 경유는 목적지 대신 CONNECT 대상 이름.
+- 제외·오탐 통제: 내부 → 외부 또는 프록시 경유만. 예외는 예외 엔진(5.4절)으로 거릅니다(축: 목적지, SNI, JA4 등. 프록시 경유는 실제 목적지 이름·포트, `dst` 축 없음). 기존 `enc_c2_allowlist`(목적지)·`enc_c2_allowlist_sni`(SNI)는 그대로 동작합니다(drop 예외로 자동 등록).
+- 근거: 점수, 신호 목록, SNI, 발급자, 지문. 프록시 경유면 `host=`·`via_proxy=`.
 
 ##### DGA 도메인 (`DGA_Domain`, T1568.002) · 13_dga
 
@@ -711,11 +713,11 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 
 - SSH는 Zeek가 NEWKEYS(키 교환 완료) 시점에 확인합니다.
 - QUIC(HTTP/3, DNS over QUIC)은 Zeek가 핸드셰이크를 SSL 분석기로 넘겨 UDP 연결도 `ssl`로 확인됩니다. 그래서 443/udp·853/udp를 SSL 표준 포트로 둡니다(이전에는 정상 HTTP/3가 모두 비표준 포트로 잡힘). 다른 UDP 포트의 QUIC은 탐지합니다. 단, Zeek 8.x는 QUIC을 443/udp에서만 분석하므로 그 경우는 Zeek 9 이상에서만 보입니다.
-- HTTP 프록시 터널(`CONNECT`) 안의 TLS는 프록시 포트(80·8080·3128 등)에서 `ssl`로 확인되지만 비표준 포트 사용이 아니므로 제외합니다(같은 연결의 HTTP 메서드가 `CONNECT`).
-- 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
-- 집계·억제: 단건. (출발지, 목적지, 포트, 프로토콜) 단위 1시간 억제.
+- HTTP 프록시 터널(`CONNECT`) 안의 TLS는 프록시 포트(80·8080·3128 등)에서 `ssl`로 확인됩니다. 프록시 포트가 아니라 **CONNECT 대상 포트**(`CONNECT 호스트:4444`의 4444, 없으면 443)를 표준 포트와 비교합니다(`proxy_aware_nonstd`, 기본 켬). 대상을 모르거나 프록시 자신·내부 주소면 보지 않습니다. 끄면 이전처럼 터널 안 TLS를 모두 뺍니다.
+- 주체: `src` = 내부 출발지, `dst` = 외부 목적지(프록시 경유면 프록시 주소, 실제 목적지는 근거의 `host=`).
+- 집계·억제: 단건. (출발지, 목적지, 포트, 프로토콜) 단위 1시간 억제. 프록시 경유는 목적지 대신 CONNECT 대상 이름.
 - 제외·오탐 통제: 표에 없는 프로토콜은 검사하지 않습니다. 허용 포트·목적지·출발지(기존 `nonstd_port_allowed_ports`·`nonstd_port_allowed_dsts`·`nonstd_port_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록).
-- 근거: 프로토콜, 포트, uid.
+- 근거: 프로토콜, 포트, uid. 프록시 경유면 `host=`·`via_proxy=`.
 
 ##### 장기 외부 연결 (`Long_Connection`, T1572) · 24_nonstd_port
 
@@ -729,6 +731,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 주체: `src` = 내부 출발지, `dst` = 외부 목적지.
 - 집계·억제: 연결 중 실시간 단건. (출발지, 목적지, 포트) 단위로 기준 시간(6시간)만큼 억제.
 - 제외·오탐 통제: 메신저·VPN·클라우드 동기화는 예외로 뺍니다(기존 `long_conn_allowed_dsts`·`long_conn_allowed_ports`·`long_conn_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). 예외는 임계를 넘는 시점에 판정하므로 서비스·SNI 축도 쓸 수 있습니다. 환경에 따라 정상 장기 연결이 많아 초기 튜닝이 필요합니다.
+- 명시적 프록시 경유 터널은 보지 않습니다(PC → 프록시는 내부 연결). 고객 프록시 환경 1.4시간 측정에서 1시간 넘게 열린 터널이 206개였고 메신저·메일(Teams·Outlook) 상시 연결이라, 실제 목적지 기준으로 바꾸면 오탐만 늘어납니다.
 - 근거: 기준 시간, 포트, 서비스, 양방향 바이트.
 
 ##### TLS 비커닝 (`TLS_Beaconing`, T1071.001) · 30_tls_beaconing
@@ -746,7 +749,8 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 집계·억제: (출발지, 목적지) 단위 상태머신, 탐지 후 `beacon_expire`(30분) 억제. 박자나 크기가 벗어나면 연속 수를 다시 셉니다.
 - 제외·오탐 통제: 내부 → 외부만. 업데이트·텔레메트리처럼 주기적이면서 크기가 일정한 정상 서비스가 걸릴 수 있어, 예외 엔진(5.4절, `exception_drop_agg`)의 SNI(`domain`)·목적지 축으로 뺍니다. 07의 주기 파라미터(`beacon_min_interval`·`beacon_max_interval`·`beacon_jitter`·`beacon_min_hits`·`beacon_max_missed`)를 같이 씁니다.
 - 지속 시간 조건(`tls_beacon_min_span`): 열어 둔 웹 페이지의 광고·분석·채팅 스크립트도 몇 초\~몇 분 주기로 같은 크기 요청을 보내지만, 탭을 닫으면 멈춥니다. CIC-IDS2017 5일에서 이 조건 없이 오탐 101건이 났고 대부분 연속 구간이 2\~12분이었습니다(30초 미만 주기 71건). 상주 C2는 몇 시간씩 이어지므로 30분 이상 이어진 패턴만 탐지합니다. 대신 60초 주기 C2는 12분이 아니라 30분 뒤에 탐지됩니다.
-- 근거: 주기, 연속 수, 연속 구간 길이(`span`), 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2.
+- 근거: 주기, 연속 수, 연속 구간 길이(`span`), 전체 연결 수, 기준 바이트, SNI, uid. 킬체인 묶음은 C2. 프록시 경유면 `host=`·`via_proxy=`.
+- 명시적 프록시 경유(`proxy_aware_beacon`, **기본 끔**, 07과 같은 스위치): 켜면 CONNECT 터널을 (출발지, CONNECT 대상 이름)으로 묶어 같은 조건으로 판정합니다. 목적지를 모르는 터널(첫 요청을 못 본 연결)은 프록시 하나로 묶이면 주기 오탐이 나므로 세지 않습니다. 예외는 실제 목적지 이름(`domain`)·포트로 판정합니다. 고객 프록시 환경 1.4시간 측정에서 켜면 새 탐지 45건이 모두 흔한 OS·SaaS 주기 통신(VS Code 업데이트 5분, Android·Chrome 동기화, Elastic 원격 측정 1분, Apple 날씨, Application Insights, 열어 둔 ChatGPT 탭 등)이라 기본으로 끄고, 켤 때는 기본 예외 목록(7.8절)을 함께 씁니다.
 
 ##### 서버의 AI 서비스 접속 (`AI_API_From_Server`, T1102) · 33_ai_threats
 
@@ -757,7 +761,8 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 | 서버 학습 | 내부 host가 `ai_server_ports`(DNS 53, Kerberos 88, LDAP 389·636·3268, DB 1433·1521·3306·5432·27017·6379·9200, 메일 25·587)에서 응답: TCP는 `connection_established`, DNS는 `dns_message`(응답), Kerberos는 `krb_as_response`·`krb_tgs_response`·`krb_error`, 그 밖의 UDP는 종료 때 응답 유무. 마지막 응답 후 24시간 기억. PC도 여는 445·139·3389는 넣지 않음 |
 | AI 접속 | `ssl_established`의 `c$ssl$server_name`이 `ai_service_domains`에 맞음 |
 
-- 주체: `src` = 서버, `dst` = AI 서비스 주소.
+- 주체: `src` = 서버, `dst` = AI 서비스 주소(프록시 경유면 프록시 주소).
+- 프록시 경유: 서버가 프록시로 나가는 환경도 CONNECT 대상을 알면 봅니다(`proxy_aware_ai`, 기본 켬). SNI가 터널 안에서 그대로 보입니다.
 - 집계·억제: 단건. (서버, AI 서비스) 단위 24시간 억제.
 - 제외·오탐 통제: 승인된 AI 연동 서버(사내 챗봇 백엔드 등)는 예외 엔진(5.4절, `exception_drop`)으로 출발지·도메인 축 예외를 등록합니다. 서버 학습은 워커별 상태라 클러스터에서는 `ai_server_nets`에 서버 대역을 적는 것을 권장합니다.
 - 근거: AI 서비스, SNI, 서버로 본 이유(`learned_server_port=…` 또는 `server_net`), uid. 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.AiApiFromServer`.
@@ -904,13 +909,14 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 
 | 데이터 | 값을 얻는 방법 (Zeek 9.0.1·8.0.9 확인) |
 | --- | --- |
-| 서비스 | `connection_state_remove`에서 SNI(없으면 HTTP Host)가 `ai_service_domains`에 맞는 내부 → 외부 연결 |
+| 서비스 | `connection_state_remove`에서 SNI(없으면 HTTP Host, 그다음 프록시 CONNECT 대상)가 `ai_service_domains`에 맞는 내부 → 외부 연결 또는 프록시 경유 연결(`proxy_aware_ai`, 기본 켬. 목적지를 모르는 프록시 연결은 제외) |
 | 업로드 | `c$orig$size`(페이로드)를 SumStats SUM으로 (출발지, AI 서비스)별 합산, 임계를 넘는 순간 탐지 |
 
 - 주체: `src` = 올린 host, `dst` = 표본 연결의 AI 서비스 주소.
 - 집계·억제: (출발지, AI 서비스) 1시간 창, 창당 1건.
 - 제외·오탐 통제: 업무용으로 승인한 AI 서비스·부서는 예외 엔진(5.4절, `exception_drop_agg`)으로 도메인·출발지 축 예외를 등록합니다. 승인 여부는 정책 문제라, 탐지는 "누가 어느 AI 서비스로 얼마나 올렸는지"를 남기는 데 목적이 있습니다.
-- 근거: 서비스, 연결별 업로드·합계·연결 수, uid(표본 5개). 킬체인 묶음은 유출. 탐지 요약 진단명 `NSM.Exfiltration.AiServiceUpload`.
+- 근거: 서비스, 연결별 업로드·합계·연결 수, uid(표본 5개), 프록시 경유면 `via_proxy=`. 킬체인 묶음은 유출. 탐지 요약 진단명 `NSM.Exfiltration.AiServiceUpload`.
+- 프록시 경유: 고객 프록시 환경 1.4시간 측정에서 AI 서비스 사용 37쌍이 모두 프록시를 거쳤습니다(최대 3.5MB, 임계 미만). 프록시 인식 전에는 이 사용이 전혀 보이지 않았습니다. 프록시 경유면 `dst`는 프록시 주소입니다.
 
 #### 4.3.7 영향
 
@@ -1316,6 +1322,10 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `proxy_learn` / `proxy_learn_expire` | T / 24hr | \[10·12·14\] 내부 PC의 CONNECT에 2xx로 답하고 이어서 TLS가 시작된 (주소, 포트)를 프록시로 배움 / 기억 시간 |  |
 | `proxy_source_min_clients` | 3 | \[10·12·14\] 배운 프록시를 출발지 제외 대상으로 볼 최소 내부 PC 수 | PC가 적은 시험 환경에서는 프록시 → 인터넷 구간도 함께 탐지될 수 있음(중복이지 누락은 아님) |
 | `exfil_skip_proxy_source` | T | \[10·12·14\] 프록시가 출발지인 외부 전송을 유출 탐지에서 뺌(`proxy_servers` 또는 PC `proxy_source_min_clients`대 이상) | 미러링이 프록시 바깥 구간만 보고 `proxy_servers`를 지정한 환경이면 F |
+| `proxy_aware_ai` | T | \[33\] 프록시 경유 연결을 실제 목적지(SNI·CONNECT 대상)로 보고 AI 업로드·서버의 AI 접속을 판정 |  |
+| `proxy_aware_nonstd` | T | \[24\] CONNECT 터널 안 프로토콜을 CONNECT 대상 포트로 판정 | F면 터널 안 TLS를 모두 뺌(이전 동작) |
+| `proxy_aware_enc_c2` | T | \[09\] CONNECT 터널 안 TLS를 실제 목적지 기준으로 점수 판정 |  |
+| `proxy_aware_beacon` | F | \[07·30\] 프록시 경유 주기 접속을 (출발지, 실제 목적지 이름)으로 판정 | 켤 때는 `docs/examples/exceptions.proxy-beacon.tsv`를 예외 파일에 더함(7.8절) |
 
 #### 13 DGA
 
@@ -1597,6 +1607,8 @@ redef NSM::log_paths += {
 
 열별 쓰임새를 보여 주는 예시 파일: [`docs/examples/exceptions.example.tsv`](examples/exceptions.example.tsv)(설명 [`docs/examples/README.md`](examples/README.md)). pcap으로 확인할 때는 `tests/run_pcap.sh -x <파일>`로 넘깁니다.
 
+기본 예외 목록 [`docs/examples/exceptions.proxy-beacon.tsv`](examples/exceptions.proxy-beacon.tsv): 프록시 경유 주기 접속(`proxy_aware_beacon=T`)을 켤 때 고객 예외 파일 뒤에 행을 붙여 씁니다(예외 파일은 하나). 고객 프록시 환경 측정에서 07·30을 켰을 때 새로 잡힌 흔한 OS·SaaS 주기 통신을 `HTTP_Beaconing`·`TLS_Beaconing`의 도메인 축으로 뺍니다(Windows 연결 확인·업데이트·원격 측정, Bing, VS Code 업데이트, Android·Chrome 동기화, Apple 날씨, Elastic 원격 측정). id는 `EX-pb-`로 시작하고 `owner`는 `nsm-default`입니다. 직접 연결에도 같은 도메인으로 적용됩니다. AI 서비스(열어 둔 ChatGPT 탭)와 고객 고유 업무 서비스는 넣지 않았습니다. AI 사용은 정책 문제라 고객이 정합니다.
+
 축은 하나 이상 있어야 하고, 값이 없으면 `-`, 빈 목록은 `(empty)`로 씁니다(둘 다 "조건 없음").
 
 ```
@@ -1636,7 +1648,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 130개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 84개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 37개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 132개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 86개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 37개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1676,7 +1688,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
 | 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 35 IOC 일치의 범위 | HTTPS URL은 경로가 안 보여 호스트(도메인)까지만 맞음. TLS 지문·파일 해시는 IOC로 쓰지 않음. IOC IP가 CDN·공유 호스팅이면 정상 사이트도 맞음 | URL IOC의 호스트를 도메인 IOC로도 넣음. 피드 품질 관리(공유 IP 제외, 만료일) |
-| 명시적 프록시 인식은 유출 룰(10·12·14)에만 적용 | 07·30 비커닝, 09 암호화 C2, 24 비표준 포트, 33 AI 서비스는 프록시를 거친 통신을 여전히 "목적지 = 프록시"로 봄. 특히 비커닝은 모든 목적지가 프록시 하나로 합쳐짐 | 룰마다 세는 키를 목적지 IP에서 목적지 이름으로 바꾸는 작업이 필요해 오탐 측정 뒤 별도 진행 |
+| 프록시 경유 주기 접속(07·30)은 기본 끔 | 켜지 않으면 프록시를 쓰는 PC의 C2 주기 접속을 놓침. 켜면 흔한 OS·SaaS 주기 통신이 많이 잡힘(고객 환경 1.4시간 측정 07 +10건, 30 +45건) | 기본 예외 목록과 함께 켜고, 고객 환경에서 적중을 보며 목록을 늘림. 프록시 경유 장기 연결(24)은 상시 메신저 연결이 많아 보지 않음 |
 | HTTPS 프록시(PC-프록시 구간도 TLS)와 프록시 바깥 구간만 보는 미러링 | 앞의 것은 CONNECT가 암호화돼 프록시 경유를 모름, 뒤의 것은 출발지가 모두 프록시라 PC를 모름 | 설치 가이드에서 미러링을 PC-프록시 구간으로 잡게 안내. 앞의 것은 "프록시로 올린 양"만 보는 보조 룰 검토 |
 | 50MB 미만 유출 | 12는 1시간 누적 50MB, 14는 1분 50MB라 그보다 작은 유출은 미탐(고객 시험 45MB·43MB) | 고객별 `nsm_config_custom.zeek`에서 임계 조정. 오탐을 보고 결정 |
 | 실제 고객망 성능·오탐률 미측정 | 임계값이 환경에 따라 맞지 않을 수 있음 | 시범 운영으로 주간 notice 건수를 보고 7장 값 튜닝 |

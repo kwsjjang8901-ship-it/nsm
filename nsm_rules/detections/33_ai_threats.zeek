@@ -25,6 +25,7 @@
 @load base/protocols/krb
 @load base/utils/site
 @load ./main
+@load ./proxy_common
 @load ./evidence_log
 @load ./exceptions
 @load ./ai_common
@@ -142,8 +143,8 @@ event zeek_init()
                         $dst=to_addr(p[1]),
                         $uid=p[0],
                         $operation="ai_service_upload",
-                        $detail=fmt("service=%s name=%s conn_upload=%s total_upload=%d conns=%d window=%s",
-                                    svc, p[2], p[3], total, n, ai_upload_epoch)]);
+                        $detail=fmt("service=%s name=%s conn_upload=%s total_upload=%d conns=%d window=%s%s",
+                                    svc, p[2], p[3], total, n, ai_upload_epoch, |p| > 4 ? p[4] : "")]);
                     }
             NOTICE([$note=AI_Service_Upload,
                     $src=src,
@@ -160,9 +161,15 @@ event zeek_init()
 
 event connection_state_remove(c: connection)
     {
-    if ( ! Site::is_local_addr(c$id$orig_h) || ! is_external(c$id$resp_h) )
+    if ( ! Site::is_local_addr(c$id$orig_h) )
         return;
-    local name = conn_service_name(c);
+    # 명시적 프록시 경유도 실제 목적지(SNI·CONNECT 대상)로 본다(proxy_aware_ai). 목적지를 모르면 보지 않음
+    local pdst = proxy_aware_ai ? proxy_c2_dest(c) : "";
+    if ( ! is_external(c$id$resp_h) && pdst == "" )
+        return;
+    local name = sub(conn_service_name(c), /:[0-9]+$/, "");
+    if ( name == "" )
+        name = pdst;
     local svc = ai_service_match(name);
     if ( svc == "" )
         return;
@@ -172,7 +179,8 @@ event connection_state_remove(c: connection)
         local key: SumStats::Key = [$host=c$id$orig_h, $str=svc];
         # 표본을 먼저 넣는다: 합계를 넣는 순간 임계를 넘으면 그 연결도 근거에 남도록
         SumStats::observe("nsm.ai_upload.sample", key,
-                          [$str=cat(c$uid, "|", c$id$resp_h, "|", name, "|", c$orig$size)]);
+                          [$str=cat(c$uid, "|", c$id$resp_h, "|", name, "|", c$orig$size, "|",
+                                    pdst != "" ? cat(" host=", pdst, proxy_detail(c)) : "")]);
         SumStats::observe("nsm.ai_upload", key, [$num=c$orig$size]);
         }
     }
@@ -184,7 +192,9 @@ event ssl_established(c: connection)
     if ( ! detect_ai_api_from_server || ! c$ssl?$server_name )
         return;
     local src = c$id$orig_h;
-    if ( ! Site::is_local_addr(src) || ! is_external(c$id$resp_h) || ! ai_is_server(src) )
+    if ( ! Site::is_local_addr(src) || ! ai_is_server(src) )
+        return;
+    if ( ! is_external(c$id$resp_h) && ! ( proxy_aware_ai && proxy_c2_dest(c) != "" ) )
         return;
     local name = c$ssl$server_name;
     local svc = ai_service_match(name);

@@ -25,6 +25,7 @@
 @load ./evidence_log
 @load ./exceptions
 @load ./ai_common
+@load ./proxy_common
 
 module NSM;
 
@@ -48,6 +49,8 @@ export {
         bytes: count;
         sni:   string &default="-";
         uid:   string &default="";
+        dkey:  string &default="";   # 상태 키 목적지(직접: 목적지 주소, 프록시 경유: CONNECT 대상 이름)
+        via:   string &default="";   # 프록시 경유면 " via_proxy=주소:포트"
     };
 
     global tls_beacon_obs: event(obs: TlsBeaconObs);
@@ -63,7 +66,7 @@ type TlsBeaconState: record {
     fired:       bool     &default=F;
 };
 
-global tls_beacons: table[addr, addr] of TlsBeaconState &write_expire=beacon_expire;
+global tls_beacons: table[addr, string] of TlsBeaconState &write_expire=beacon_expire;
 
 function tls_beacon_size_ok(ref: count, b: count): bool
     {
@@ -79,7 +82,20 @@ event connection_state_remove(c: connection)
         return;
     local orig = c$id$orig_h;
     local resp = c$id$resp_h;
-    if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
+    if ( ! Site::is_local_addr(orig) )
+        return;
+    # 명시적 프록시 터널(CONNECT 안 TLS)은 실제 목적지 이름으로 묶는다(proxy_aware_beacon, 기본 끔).
+    # 목적지를 모르는 터널은 프록시 하나로 묶이면 주기 오탐이 나므로 보지 않는다.
+    local dkey = cat(resp);
+    local via = "";
+    if ( proxy_aware_beacon && conn_via_proxy(c) )
+        {
+        dkey = proxy_c2_dest(c);
+        if ( dkey == "" )
+            return;
+        via = proxy_detail(c);
+        }
+    else if ( ! is_external(resp) )
         return;
     if ( c?$duration && c$duration > tls_beacon_max_duration )
         return;
@@ -87,11 +103,11 @@ event connection_state_remove(c: connection)
     if ( NSM::exception_drop_agg(TLS_Beaconing, c) )
         return;
     local obs = TlsBeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid,
-                             $bytes=c$orig$size + c$resp$size);
+                             $bytes=c$orig$size + c$resp$size, $dkey=dkey, $via=via);
     if ( c$ssl?$server_name )
         obs$sni = c$ssl$server_name;
 @if ( Cluster::is_enabled() )
-    if ( ! Cluster::publish_hrw(Cluster::proxy_pool, cat(orig, "-", resp), tls_beacon_obs, obs) )
+    if ( ! Cluster::publish_hrw(Cluster::proxy_pool, cat(orig, "-", dkey), tls_beacon_obs, obs) )
         Cluster::publish(Cluster::manager_topic, tls_beacon_obs, obs);
 @else
     event tls_beacon_obs(obs);
@@ -103,14 +119,15 @@ event tls_beacon_obs(obs: TlsBeaconObs)
     {
     local orig = obs$orig;
     local resp = obs$resp;
+    local dk = obs$dkey != "" ? obs$dkey : cat(resp);
     local now = obs$ts;
 
-    if ( [orig, resp] !in tls_beacons )
+    if ( [orig, dk] !in tls_beacons )
         {
-        tls_beacons[orig, resp] = [$last_seen=now, $ref_bytes=obs$bytes];
+        tls_beacons[orig, dk] = [$last_seen=now, $ref_bytes=obs$bytes];
         return;
         }
-    local st = tls_beacons[orig, resp];
+    local st = tls_beacons[orig, dk];
     if ( now < st$last_seen )
         return;
     local delta = now - st$last_seen;
@@ -119,7 +136,7 @@ event tls_beacon_obs(obs: TlsBeaconObs)
 
     if ( delta < beacon_min_interval )      # 페이지 로딩 등 연속 연결: 연속 수에 반영하지 않음
         {
-        tls_beacons[orig, resp] = st;
+        tls_beacons[orig, dk] = st;
         return;
         }
     if ( delta > beacon_max_interval )
@@ -128,7 +145,7 @@ event tls_beacon_obs(obs: TlsBeaconObs)
         st$consecutive = 1;
         st$ref_bytes = obs$bytes;
         st$fired = F;
-        tls_beacons[orig, resp] = st;
+        tls_beacons[orig, dk] = st;
         return;
         }
 
@@ -169,7 +186,7 @@ event tls_beacon_obs(obs: TlsBeaconObs)
     if ( st$consecutive >= beacon_min_hits && span >= tls_beacon_min_span && ! st$fired )
         {
         st$fired = T;
-        local eid_base = cat(orig, "|tls-beacon|", resp);
+        local eid_base = cat(orig, "|tls-beacon|", dk);
         local eid = cat(eid_base, "|", time_bucket(beacon_expire));
         local ival_s = interval_to_double(st$base_ival);
         NSM::write_evidence([
@@ -181,20 +198,21 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             $dst=resp,
             $operation="tls_beacon",
             $uid=obs$uid,
-            $detail=fmt("interval=%.1fs consecutive=%d span=%s total=%d bytes~%d sni=%s%s",
+            $detail=fmt("interval=%.1fs consecutive=%d span=%s total=%d bytes~%d sni=%s%s%s",
                         ival_s, st$consecutive, span, st$total, st$ref_bytes, obs$sni,
-                        ai_service_match(obs$sni) != "" ? " ai_service=T" : "")]);
+                        ai_service_match(obs$sni) != "" ? " ai_service=T" : "",
+                        obs$via != "" ? cat(" host=", dk, obs$via) : "")]);
         NOTICE([$note=TLS_Beaconing,
                 $src=orig,
                 $dst=resp,
-                $msg=fmt("TLS beaconing: %s -> %s ~%.1fs interval x%d, ~%d bytes each", orig, resp,
-                         ival_s, st$consecutive, st$ref_bytes),
+                $msg=fmt("TLS beaconing: %s -> %s ~%.1fs interval x%d, ~%d bytes each%s", orig, dk,
+                         ival_s, st$consecutive, st$ref_bytes, obs$via != "" ? " (via proxy)" : ""),
                 $sub=fmt("interval=%.1fs hits=%d bytes~%d sni=%s%s", ival_s, st$consecutive, st$ref_bytes, obs$sni,
                          ai_service_match(obs$sni) != "" ? " ai_service=T" : ""),
                 $identifier=eid_base,
                 $suppress_for=beacon_expire,
                 $evidence_id=eid]);
         }
-    tls_beacons[orig, resp] = st;
+    tls_beacons[orig, dk] = st;
     }
 @endif

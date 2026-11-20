@@ -12,6 +12,14 @@
 | `EX-scanner` | 기간이 정해진 예외에 `expires`(epoch 초)와 근거 `ref`를 남김 |
 | `EX-observe` | `disposition=suppress`: 탐지 기록은 남기고 알림만 끔(관찰용) |
 
+## 기본 예외 목록: 프록시 경유 주기 접속
+
+`exceptions.proxy-beacon.tsv`는 프록시 경유 주기 접속 탐지(`NSM::proxy_aware_beacon=T`, 07·30)를 켤 때 함께 쓰는 **기본 예외**입니다. 고객 프록시 환경 측정에서 새로 잡힌 흔한 OS·SaaS 주기 통신(Windows 연결 확인·업데이트·원격 측정, Bing, VS Code 업데이트, Android·Chrome 동기화, Apple 날씨, Elastic 원격 측정)을 `HTTP_Beaconing`·`TLS_Beaconing`의 도메인 축(하위 도메인 포함)으로 뺍니다. 공개 서비스 이름만 들어 있어 그대로 쓸 수 있습니다.
+
+- 예외 파일은 하나만 읽으므로 고객 예외 파일 뒤에 헤더(`#`로 시작하는 줄)를 빼고 붙입니다: `grep -v '^#' exceptions.proxy-beacon.tsv >> exceptions.tsv`.
+- id는 `EX-pb-`로 시작하고 `owner`는 `nsm-default`입니다. 적중 수는 `nsm_exception.log`의 `kind=hits`로 봅니다.
+- AI 서비스(열어 둔 ChatGPT 탭의 주기 요청)는 넣지 않았습니다. AI 사용 허용은 고객이 정합니다.
+
 ## 쓰는 법
 
 - pcap 확인: `tests/run_pcap.sh -x <예외 파일> <pcap>`. 리포트의 "예외" 절과 `zeek/nsm_exception.log`에서 `loaded`·`rejected`·적중 수를 봅니다.

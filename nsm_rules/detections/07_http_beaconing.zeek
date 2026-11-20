@@ -17,6 +17,14 @@
 ##!     standalone 에서는 로컬에서 바로 처리한다.
 ##!   - 관측 시각이 이전 관측보다 과거(도착 순서 역전, 장기 연결의 늦은 종료)면 무시한다.
 ##!     (이전에는 last_seen 이 과거로 되돌아가 주기 판정이 흐트러졌다)
+##!
+##! 명시적 프록시(proxy_common.zeek, proxy_aware_beacon=T 일 때. 기본 끔)
+##!   - PC 가 프록시로 보내는 평문 HTTP 는 한 연결로 여러 사이트를 오가므로, 연결마다 요청 Host 별
+##!     첫 요청 시각을 (출발지, Host) 관측 1건으로 본다. 목적지를 모르는 요청, 프록시 자신·내부 주소로의
+##!     요청(PAC·상태 페이지)은 뺀다. CONNECT 터널(HTTPS)은 30 이 본다.
+##!   - 예외는 실제 목적지 이름(domain)·포트로 판정한다(dst 축 없음).
+##!   - 켜면 OS·SaaS 연결 확인·업데이트 주기 통신이 함께 잡히므로
+##!     docs/examples/exceptions.proxy-beacon.tsv 를 예외 파일에 더해 쓴다.
 ##! ============================================================================
 
 @load base/frameworks/notice
@@ -28,6 +36,7 @@
 @load ./evidence_log
 @load ./exceptions
 @load ./ai_common
+@load ./proxy_common
 
 module NSM;
 
@@ -54,6 +63,8 @@ export {
         ts:   time;                 # 연결 시작 시각
         host: string &default="-";  # HTTP Host
         uid:  string &default="";
+        dkey: string &default="";   # 상태 키 목적지(직접: 목적지 주소, 프록시 경유: 실제 목적지 이름)
+        via:  string &default="";   # 프록시 경유면 " via_proxy=주소:포트"
     };
 
     ## 관측값을 상태 보유 노드(프록시 HRW / 매니저 / standalone 로컬)로 보낸다.
@@ -71,15 +82,23 @@ type BeaconState: record {
     fired:       bool     &default=F;
 };
 
-## key: (src, dst). 마지막 활동 후 beacon_expire 지나면 만료.
+## key: (src, 목적지). 목적지는 직접 연결이면 주소 문자열, 프록시 경유면 실제 목적지 이름.
+## 마지막 활동 후 beacon_expire 지나면 만료.
 ## (클러스터에서는 관측값을 받는 프록시/매니저에만 상태가 쌓인다)
-global beacons: table[addr, addr] of BeaconState &write_expire=beacon_expire;
+global beacons: table[addr, string] of BeaconState &write_expire=beacon_expire;
+
+# 프록시 경유 평문 HTTP: 연결(uid)마다 Host 별 첫 요청(시각·포트)
+type BeaconProxyReq: record {
+    ts: time;
+    p:  count;
+};
+global beacon_proxy_reqs: table[string] of table[string] of BeaconProxyReq &read_expire=1hr;
 
 function beacon_submit(obs: BeaconObs)
     {
 @if ( Cluster::is_enabled() )
     # 같은 (src,dst) 는 항상 같은 프록시로. 프록시가 없으면(풀 비어 있음) 매니저로.
-    if ( ! Cluster::publish_hrw(Cluster::proxy_pool, cat(obs$orig, "-", obs$resp), beacon_obs, obs) )
+    if ( ! Cluster::publish_hrw(Cluster::proxy_pool, cat(obs$orig, "-", obs$dkey), beacon_obs, obs) )
         Cluster::publish(Cluster::manager_topic, beacon_obs, obs);
 @else
     event beacon_obs(obs);
@@ -97,6 +116,45 @@ event zeek_init()
             [$scope=set("HTTP_Beaconing"), $domain=beacon_allowlist_domains]);
     }
 
+# 프록시 경유 평문 HTTP 요청마다 Host 별 첫 요청을 기억한다(요청 헤더가 끝난 시점).
+event http_message_done(c: connection, is_orig: bool, stat: http_message_stat)
+    {
+    if ( ! is_orig || ! detect_beaconing || ! proxy_aware_beacon )
+        return;
+    if ( ! c?$http || ! c$http?$method || c$http$method == "CONNECT" )
+        return;
+    if ( ! Site::is_local_addr(c$id$orig_h) || ! conn_via_proxy(c) )
+        return;
+    local n = proxy_c2_dest(c);
+    if ( n == "" )
+        return;                            # 목적지 모름·프록시 자신·내부 주소
+    if ( c$uid !in beacon_proxy_reqs )
+        beacon_proxy_reqs[c$uid] = table();
+    if ( n !in beacon_proxy_reqs[c$uid] )
+        beacon_proxy_reqs[c$uid][n] = BeaconProxyReq($ts=c$http$ts, $p=proxy_dest(c)$p);
+    }
+
+# 프록시 경유 연결이 끝나면 Host 별 관측값을 보낸다.
+# (HTTP 기본 스크립트가 남은 요청을 정리하는 -5 보다 뒤라 마지막 요청까지 반영된다)
+event connection_state_remove(c: connection) &priority=-10
+    {
+    if ( c$uid !in beacon_proxy_reqs )
+        return;
+    local reqs = beacon_proxy_reqs[c$uid];
+    delete beacon_proxy_reqs[c$uid];
+    for ( n, r in reqs )
+        {
+        local x = ctx_of_conn(c);
+        delete x$dst;
+        x$dst_port = count_to_port(r$p, tcp);
+        x$domain = n;
+        if ( NSM::exception_drop_ctx(HTTP_Beaconing, x, T) )
+            next;
+        beacon_submit(BeaconObs($orig=c$id$orig_h, $resp=c$id$resp_h, $ts=r$ts, $uid=c$uid,
+                                $host=n, $dkey=n, $via=proxy_detail(c)));
+        }
+    }
+
 # 워커(또는 standalone): HTTP 연결이 끝나면 관측값을 만들어 보낸다.
 event connection_state_remove(c: connection)
     {
@@ -108,6 +166,9 @@ event connection_state_remove(c: connection)
     local orig = c$id$orig_h;
     local resp = c$id$resp_h;
 
+    if ( proxy_aware_beacon && conn_via_proxy(c) )
+        return;                            # 프록시 경유는 위의 Host 별 관측으로
+
     if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
         return;                            # 내부 -> 외부 C2 방향만
     # 예외(예외 파일 + 기존 beacon_allowlist·beacon_allowlist_domains). 워커에서 연결마다 판정해
@@ -115,7 +176,7 @@ event connection_state_remove(c: connection)
     if ( NSM::exception_drop_agg(HTTP_Beaconing, c) )
         return;
 
-    local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid);
+    local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid, $dkey=cat(resp));
     if ( c$http?$host )
         obs$host = c$http$host;
     beacon_submit(obs);
@@ -127,25 +188,26 @@ event beacon_obs(obs: BeaconObs)
     {
     local orig = obs$orig;
     local resp = obs$resp;
+    local dk = obs$dkey != "" ? obs$dkey : cat(resp);
     local now = obs$ts;
 
-    if ( [orig, resp] !in beacons )
+    if ( [orig, dk] !in beacons )
         {
-        beacons[orig, resp] = [$last_seen=now];
+        beacons[orig, dk] = [$last_seen=now];
         return;
         }
 
-    if ( now < beacons[orig, resp]$last_seen )   # 과거 시각(순서 역전) -> 무시
+    if ( now < beacons[orig, dk]$last_seen )   # 과거 시각(순서 역전) -> 무시
         return;
 
-    local st = beacons[orig, resp];
+    local st = beacons[orig, dk];
     local delta = now - st$last_seen;
     st$last_seen = now;
     st$total += 1;
 
     if ( delta < beacon_min_interval )     # 너무 빠름(페이지 다중 객체 등): 스트릭 미반영
         {
-        beacons[orig, resp] = st;
+        beacons[orig, dk] = st;
         return;
         }
     if ( delta > beacon_max_interval )     # 너무 느림: 스트릭 리셋
@@ -153,7 +215,7 @@ event beacon_obs(obs: BeaconObs)
         st$base_ival = 0secs;
         st$consecutive = 1;
         st$fired = F;                      # 주기 변경(예: 30s->60s) 후 재탐지 허용
-        beacons[orig, resp] = st;
+        beacons[orig, dk] = st;
         return;
         }
 
@@ -195,7 +257,7 @@ event beacon_obs(obs: BeaconObs)
         local hoststr = obs$host;
 
         st$fired = T;
-        local eid_base = cat(orig, "|beacon|", resp);
+        local eid_base = cat(orig, "|beacon|", dk);
         local eid = cat(eid_base, "|", time_bucket(beacon_expire));
         local ival_s = interval_to_double(st$base_ival);
 
@@ -208,14 +270,14 @@ event beacon_obs(obs: BeaconObs)
             $dst=resp,
             $operation="http_beacon",
             $uid=obs$uid,
-            $detail=fmt("interval=%.1fs consecutive=%d total=%d host=%s%s",
+            $detail=fmt("interval=%.1fs consecutive=%d total=%d host=%s%s%s",
                         ival_s, st$consecutive, st$total, hoststr,
-                        ai_service_match(split_string1(hoststr, /:/)[0]) != "" ? " ai_service=T" : "")]);
+                        ai_service_match(split_string1(hoststr, /:/)[0]) != "" ? " ai_service=T" : "", obs$via)]);
 
         NOTICE([$note=HTTP_Beaconing,
                 $src=orig,
-                $msg=fmt("HTTP beaconing: %s -> %s ~%.1fs interval x%d hits",
-                         orig, resp, ival_s, st$consecutive),
+                $msg=fmt("HTTP beaconing: %s -> %s ~%.1fs interval x%d hits%s",
+                         orig, dk, ival_s, st$consecutive, obs$via != "" ? " (via proxy)" : ""),
                 $sub=fmt("interval=%.1fs hits=%d host=%s%s", ival_s, st$consecutive, hoststr,
                          ai_service_match(split_string1(hoststr, /:/)[0]) != "" ? " ai_service=T" : ""),
                 $identifier=eid_base,
@@ -223,6 +285,6 @@ event beacon_obs(obs: BeaconObs)
                 $evidence_id=eid]);
         }
 
-    beacons[orig, resp] = st;
+    beacons[orig, dk] = st;
     }
 @endif

@@ -23,6 +23,7 @@
 @load base/protocols/ssl
 @load base/utils/site
 @load ./main
+@load ./proxy_common
 @load ./evidence_log
 @load ./exceptions
 
@@ -78,8 +79,13 @@ event ssl_established(c: connection)
 
     local orig = c$id$orig_h;
     local resp = c$id$resp_h;
-    if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
-        return;                            # 내부 -> 외부 방향만
+    if ( ! Site::is_local_addr(orig) )
+        return;
+    # 내부 -> 외부 방향만. 명시적 프록시 터널(CONNECT) 안의 TLS 는 실제 목적지를 알 때만 본다(proxy_aware_enc_c2).
+    local pdst = proxy_aware_enc_c2 ? proxy_c2_dest(c) : "";
+    if ( ! is_external(resp) && pdst == "" )
+        return;
+    local dkey = pdst != "" ? pdst : cat(resp);
     # 예외(예외 파일 + 기존 enc_c2_allowlist·enc_c2_allowlist_sni). 축: dst, SNI(domain), ja4 등
     if ( NSM::exception_drop(Encrypted_C2, c) )
         return;
@@ -133,11 +139,11 @@ event ssl_established(c: connection)
 
     local sni = has_sni ? c$ssl$server_name : "-";
     local iss = c$ssl?$issuer ? c$ssl$issuer : "-";
-    local eid = cat(orig, "|enc-c2|", resp, "|", time_bucket(suppress_enc_c2));
+    local eid = cat(orig, "|enc-c2|", dkey, "|", time_bucket(suppress_enc_c2));
 
     # 억제 중이면 NOTICE 가 버려지므로 근거도 쓰지 않는다
     #   (이전: 억제 창 동안 TLS 세션마다 근거가 쌓여 어떤 탐지에도 연결되지 않는 행이 생겼다)
-    local nid = cat(orig, resp, "enc-c2");
+    local nid = cat(orig, dkey, "enc-c2");
     if ( NSM::notice_suppressed(Encrypted_C2, nid) )
         return;
 
@@ -150,13 +156,14 @@ event ssl_established(c: connection)
         $dst=resp,
         $operation="tls_c2",
         $uid=c$uid,
-        $detail=fmt("score=%d [%s] sni=%s issuer=%s", score, strip(reasons), sni, iss)]);
+        $detail=fmt("score=%d [%s] sni=%s issuer=%s%s%s", score, strip(reasons), sni, iss,
+                    pdst != "" ? cat(" host=", pdst) : "", proxy_detail(c))]);
 
     NOTICE([$note=Encrypted_C2,
             $conn=c,
             $src=orig,
-            $msg=fmt("Encrypted C2 suspected: %s -> %s (score=%d: %s)",
-                     orig, resp, score, strip(reasons)),
+            $msg=fmt("Encrypted C2 suspected: %s -> %s (score=%d: %s)%s",
+                     orig, dkey, score, strip(reasons), pdst != "" ? " (via proxy)" : ""),
             $sub=fmt("score=%d sni=%s", score, sni),
             $identifier=nid,
             $suppress_for=suppress_enc_c2,
