@@ -34,11 +34,15 @@
 | `value` | string | 정규화된 값 |
 | `source` | string | 출처 (3장 각 프로토콜의 source) |
 | `confidence` | count | 출처 기준 신뢰도 0~100 |
+| `user_name` | string (선택) | 계정 신호(`user_account`·`machine_account`)의 사용자 부분(소문자). 그 밖의 신호는 없음 |
+| `user_domain` | string (선택) | 계정 신호의 도메인 부분. `domain\user`의 domain, `user@realm`의 realm. 도메인 없는 계정은 없음 |
+| `user_domain_type` | string (선택) | `user_domain`에 점이 있으면 `dns`(Kerberos realm, LDAP DNS 도메인), 없으면 `netbios`(NTLM 도메인, RDP 쿠키) |
 
 **공통 규칙 (`AssetID::emit`)**
 - 대상 IP: `asset_nets` → `Site::local_nets` → `Site::private_address_space` 순으로 정한 내부 대역만. 0.0.0.0, 브로드캐스트, 멀티캐스트 제외
 - 중복 억제: 같은 `(ip, signal, value, source)`는 `suppress_interval`(기본 1시간)에 한 번. 계속 관측되면 1시간마다 다시 기록(점유 구간 갱신용)
 - 빈 값은 기록하지 않음. `ignore_hostnames`(localhost 등)는 hostname으로 기록하지 않음
+- 계정 나누기: 계정 신호는 `value`(`domain\user`)와 함께 `user_name`·`user_domain`·`user_domain_type`을 남긴다. 탐지 근거 `evidence.log`의 같은 이름 필드와 규칙이 같아(SRS 6.3) Manager가 자산의 계정과 탐지 계정을 그대로 잇는다. 같은 도메인의 NetBIOS 이름과 DNS 이름(`corp`·`corp.local`)을 맞추는 것은 Manager(`domain` 신호로 대응표를 만든다)
 - 이름 정규화: 소문자, 앞뒤 공백·NUL 제거, 끝의 `.` 제거. MAC은 소문자 `aa:bb:cc:dd:ee:ff`, 00/FF 주소 제외
 
 ### 2.1 신호 종류

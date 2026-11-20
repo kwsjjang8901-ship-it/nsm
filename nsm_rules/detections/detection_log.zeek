@@ -15,15 +15,29 @@ export {
         ts:               time   &log;
         detection_id:     string &log;
         diagnosis:        string &log;
+        ## 탐지를 낸 룰(notice 이름에서 NSM:: 를 뺀 값, 상관 탐지는 Correlated_KillChain).
+        ##   Manager 의 룰 정책·예외 화면과 잇는 키. diagnosis 는 표시용 분류다.
+        rule:             string &log &optional;
         techniques:       vector of string &log &optional;   # ATT&CK 기법(상관은 체인 순서)
         category:         string &log;
         killchain_stages: vector of string &log &optional;   # 킬체인 단계(상관은 체인 순서)
         severity:         string &log;
+        ## severity 의 숫자 값(OCSF severity_id 척도): 단독 1(Information), 상관 3(Suspicious 를 Medium 자리에).
+        ##   다른 제품 이벤트와 같은 척도로 정렬·비교할 때 쓴다.
+        severity_id:      count  &log &optional;
         first_seen:       time   &log &optional;
         last_seen:        time   &log &optional;
         attacker:         addr   &log &optional;
         attacker_subnet:  subnet &log &optional;
         victims:          vector of string &log &optional;   # 피해 host(최대 chain_max_victims)
+        victim_count:     count  &log &optional;             # 피해 host 전체 수(victims 가 잘려도 실제 수)
+        ## 근거(evidence)에서 모은 요약(정렬, 최대 NSM::evidence_summary_max 개). 없으면 칸 없음.
+        ##   accounts : 관련 계정(근거의 account)
+        ##   dst_names: 목적지 이름(근거 detail 의 host·sni·name·DNS 상위 도메인)
+        ##   relays   : 거쳐 간 프록시(주소:포트)
+        accounts:         vector of string &log &optional;
+        dst_names:        vector of string &log &optional;
+        relays:           vector of string &log &optional;
         evidence_count:   count  &log &default=0;
         evidence_ids:     vector of string &log &optional;
         disposition:      string &log &optional;   # suppress 예외에 맞은 탐지: suppressed(Manager 는 알림 안 함)
@@ -108,8 +122,28 @@ function technique_vec(s: string): vector of string
     return out;
     }
 
+# 근거 요약(accounts·dst_names·relays)을 채운다. 값이 없으면 칸을 비워 둔다.
+function fill_summaries(d: DetectionInfo, eids: vector of string)
+    {
+    local v = NSM::evidence_accounts_of(eids);
+    if ( |v| > 0 )
+        d$accounts = v;
+    v = NSM::evidence_names_of(eids);
+    if ( |v| > 0 )
+        d$dst_names = v;
+    v = NSM::evidence_relays_of(eids);
+    if ( |v| > 0 )
+        d$relays = v;
+    }
+
 function write_detection(d: DetectionInfo)
     {
+    if ( ! d?$severity_id )
+        d$severity_id = ( d$category == "Correlated" ) ? 3 : 1;
+    # 단일 탐지는 근거와 같은 노드에서 기록되므로 여기서 요약을 채운다.
+    #   상관 탐지는 단계마다 실어 온 요약을 correlation_killchain 이 채운다(클러스터에서 근거가 다른 노드에 있다).
+    if ( d$category != "Correlated" && d?$evidence_ids && |d$evidence_ids| > 0 )
+        fill_summaries(d, d$evidence_ids);
     Log::write(NSM::DETECTION_LOG, d);
     }
 
@@ -155,6 +189,7 @@ hook Notice::policy(n: Notice::Info) &priority=-6
     else
         d$detection_id = cat(n$note, "-", n$ts);
     d$diagnosis    = diagnosis_map[n$note];
+    d$rule         = sub(cat(n$note), /^NSM::/, "");
     d$category     = "Single";
     d$severity     = "Information";
     d$first_seen   = n$ts;
@@ -195,9 +230,13 @@ hook Notice::policy(n: Notice::Info) &priority=-6
             vout += cat(av);
             }
         d$victims = vout;
+        d$victim_count = |va|;
         }
     else if ( n?$dst )
+        {
         d$victims = vector(cat(n$dst));
+        d$victim_count = 1;
+        }
 
     # evidence_count: evidence.log 에 실제 기록된 근거 행 수를 반영한다.
     #   (evidence_id 별 누적 카운터. 기록이 없으면 최소 1로 둔다)

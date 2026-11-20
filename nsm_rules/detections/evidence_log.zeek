@@ -37,6 +37,12 @@ export {
         killchain_stage: string   &log &optional;  # 킬체인 단계명(note 로 매핑, detection_log 와 동일 체계)
         technique:   string       &log &optional;  # WHAT  (ATT&CK 기법코드)
         account:     string       &log &optional;  # WHO   (가능할 때만)
+        ## account 를 나눈 값(소문자). domain\user 와 user@realm 을 같은 모양으로 맞춘다.
+        ##   account 가 쉼표로 여러 개면 첫 번째 계정. 도메인이 없으면 user_name 만 둔다.
+        ##   user_domain_type: 도메인에 점이 있으면 dns(Kerberos realm·FQDN), 없으면 netbios.
+        user_name:        string  &log &optional;
+        user_domain:      string  &log &optional;
+        user_domain_type: string  &log &optional;
         src:         addr         &log &optional;  # WHERE (출발)
         dst:         addr         &log &optional;  # WHERE (대상)
         operation:   string       &log &optional;  # HOW   (행위/오퍼레이션)
@@ -64,6 +70,27 @@ export {
     ## evidence_id 의 누적 기록 건수(없으면 0).
     global evidence_count_of: function(eid: string): count;
 
+    ## 계정 문자열을 (사용자, 도메인, 도메인 종류)로 나눈 값.
+    type AccountParts: record {
+        user:        string;
+        domain:      string &default="";
+        domain_type: string &default="";   # dns | netbios | ""(도메인 없음)
+    };
+
+    ## "dom\user", "user@realm", "user" 를 나눈다(소문자, 앞뒤 공백 제거).
+    global split_account: function(acct: string): AccountParts;
+
+    ## detection 요약 칸(accounts·dst_names·relays)에 싣는 최대 개수.
+    const evidence_summary_max = 5 &redef;
+
+    ## evidence_id 들의 근거에서 모은 값(정렬, 최대 evidence_summary_max 개).
+    ##   accounts : account 칸(쉼표로 여러 개면 나눠서)
+    ##   names    : detail 의 host=·sni=·name=·parent=(없으면 query=) 값. 소문자, 포트·끝 점 제거, IP 는 뺀다
+    ##   relays   : detail 의 via_proxy= 값(프록시 주소:포트)
+    global evidence_accounts_of: function(eids: vector of string): vector of string;
+    global evidence_names_of:    function(eids: vector of string): vector of string;
+    global evidence_relays_of:   function(eids: vector of string): vector of string;
+
     ## evidence_id 별 이미 적재한 항목 집합(중복 적재 방지).
     ##   threshold_series 는 한 창에서 임계치마다 재발화하므로, 같은 표본이
     ##   여러 번 들어와 evidence_count 가 부풀지 않도록 걸러낸다.
@@ -83,6 +110,13 @@ export {
     global ev_uid: function(uids: table[string] of string, dst: string): string;
 }
 
+# evidence_id 별 요약 값(detection 의 accounts·dst_names·relays). evidence_counts 와 같은 수명.
+#   한 evidence_id 에 값이 아주 많아도 메모리가 늘지 않도록 summary_keep 개까지만 둔다.
+const summary_keep = 32;
+global ev_accounts: table[string] of set[string] &create_expire=evidence_count_expire;
+global ev_names:    table[string] of set[string] &create_expire=evidence_count_expire;
+global ev_relays:   table[string] of set[string] &create_expire=evidence_count_expire;
+
 # 근거용 표본 중복 관측 방지(창 단위 키). 창이 바뀌면 키가 달라 다시 관측된다.
 global ev_observed: set[string] &create_expire=30min;
 
@@ -90,6 +124,111 @@ event zeek_init() &priority=5
     {
     Log::create_stream(NSM::EVIDENCE_LOG, [$columns=EvidenceInfo, $path="evidence"]);
     }
+
+function split_account(acct: string): AccountParts
+    {
+    local a = to_lower(strip(acct));
+    local r = AccountParts($user=a);
+    local p: string_vec;
+    if ( /\\/ in a )
+        {
+        p = split_string1(a, /\\/);
+        r$user = p[1];
+        r$domain = p[0];
+        }
+    else if ( /@/ in a )
+        {
+        p = split_string1(a, /@/);
+        r$user = p[0];
+        r$domain = p[1];
+        }
+    if ( r$domain != "" )
+        r$domain_type = ( /\./ in r$domain ) ? "dns" : "netbios";
+    return r;
+    }
+
+function summary_add(t: table[string] of set[string], eid: string, v: string)
+    {
+    if ( v == "" || v == "-" )
+        return;
+    if ( eid !in t )
+        t[eid] = set();
+    if ( |t[eid]| < summary_keep )
+        add t[eid][v];
+    }
+
+# detail 의 이름 값 정규화. 이름이 아니면 "".
+function summary_name(v: string): string
+    {
+    local n = to_lower(v);
+    while ( |n| > 0 && n[-1] == "." )
+        n = n[:-1];
+    if ( n == "" || n == "-" || is_valid_ip(n) || /^\[/ in n )
+        return "";
+    # host 헤더의 포트(name:8080)
+    if ( /:[0-9]+$/ in n )
+        n = split_string1(n, /:/)[0];
+    return is_valid_ip(n) ? "" : n;
+    }
+
+function summary_collect(ev: EvidenceInfo)
+    {
+    local eid = ev$evidence_id;
+    if ( ev?$account )
+        for ( _i, a in split_string(ev$account, /,/) )
+            summary_add(ev_accounts, eid, to_lower(strip(a)));
+    if ( ! ev?$detail )
+        return;
+    local query = "";
+    local has_parent = F;
+    for ( _j, tok in split_string(ev$detail, / +/) )
+        {
+        if ( /=/ !in tok )
+            next;
+        local kv = split_string1(tok, /=/);
+        switch ( kv[0] ) {
+        case "host", "sni", "name", "parent":
+            if ( kv[0] == "parent" )
+                has_parent = T;
+            summary_add(ev_names, eid, summary_name(kv[1]));
+            break;
+        case "query":
+            query = kv[1];
+            break;
+        case "via_proxy":
+            summary_add(ev_relays, eid, kv[1]);
+            break;
+        }
+        }
+    # DNS 터널링은 긴 질의 대신 상위 도메인(parent)을 쓴다. 상위가 없으면 질의 그대로(DGA).
+    if ( query != "" && ! has_parent )
+        summary_add(ev_names, eid, summary_name(query));
+    }
+
+function summary_of(t: table[string] of set[string], eids: vector of string): vector of string
+    {
+    local all: set[string] = set();
+    for ( _i, eid in eids )
+        if ( eid in t )
+            for ( v in t[eid] )
+                add all[v];
+    local out: vector of string = vector();
+    for ( v in all )
+        out += v;
+    sort(out, function(a: string, b: string): int { return strcmp(a, b); });
+    if ( |out| > evidence_summary_max )
+        out = out[:evidence_summary_max];
+    return out;
+    }
+
+function evidence_accounts_of(eids: vector of string): vector of string
+    { return summary_of(ev_accounts, eids); }
+
+function evidence_names_of(eids: vector of string): vector of string
+    { return summary_of(ev_names, eids); }
+
+function evidence_relays_of(eids: vector of string): vector of string
+    { return summary_of(ev_relays, eids); }
 
 function write_evidence(ev: EvidenceInfo)
     {
@@ -105,10 +244,26 @@ function write_evidence(ev: EvidenceInfo)
         delete ev$uid;
     if ( ev?$account && ev$account == "" )
         delete ev$account;
+    if ( ev?$account && ! ev?$user_name )
+        {
+        local ap = split_account(split_string1(ev$account, /,/)[0]);
+        if ( ap$user != "" )
+            {
+            ev$user_name = ap$user;
+            if ( ap$domain != "" )
+                {
+                ev$user_domain = ap$domain;
+                ev$user_domain_type = ap$domain_type;
+                }
+            }
+        }
 
     # evidence_id 별 실제 기록 건수 누적(detection 의 evidence_count 산출용)
     if ( ev$evidence_id != "" )
+        {
         ++evidence_counts[ev$evidence_id];
+        summary_collect(ev);
+        }
 
     Log::write(NSM::EVIDENCE_LOG, ev);
     }

@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 133개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 137개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1067,6 +1067,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 지문 대조 입력·보강 | 센서가 지문 대조용 원문을 남김: SMB1 native OS·LM(클라이언트·서버), 내부 서버 인증서 주체·발급자, SNMP 응답(sysDescr·sysObjectID·sysName), TCP SYN·SYN-ACK 모양(`tcp_fp`, IP·방향당 1시간에 한 번), 서비스 배너(HTTP 401 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전). 대조는 센서가 아니라 Manager 후처리: IEEE OUI(MAC 제조사, 로컬·랜덤 MAC 표시), Recog(제조사·제품·장비 종류·OS), TCP SYN 계열(OS 근거가 없을 때). PoC는 통합 리포트가 대신함(`run_pcap.sh -u`·`-g`, DB는 저장소 밖). 끄기 `AssetID::enable_snmp`·`enable_tcp_fp`·`enable_http_wwwauth`·`enable_sip`·`enable_service_banners`, POP3·MySQL 부하는 `banners_extra` 로드 제외 (SPEC 3.18\~3.20·4.11) |
 | 고객 정의 에이전트 정책 | 고객이 원하는 제품(EDR·백신 관리 서버·패치·NAC·DLP 등)의 에이전트 통신을 정책 파일(`AssetID::agent_policy_file`, TSV, 비어 있으면 꺼짐, 재시작 없이 다시 읽음)로 정의. 관리 서버 주소·포트(연결 성립), 접속 도메인(SNI·Host·프록시 CONNECT 대상), User-Agent 조건이 맞으면 단말에 `security_agent` `policy:<id>`(서버 주소 90, 도메인·UA 80, 포트만 70). 틀린 정책은 빼고 `asset_agent_policy.log`(기본 유지, `/log/zeek/asset_agent_policy`)에 이유를 남김. 미설치 후보 판정(대상 범위, 기간, 같은 대역 다른 자산의 신호 비율)은 Manager(SPEC 3.17·4.10) |
 | 라우팅 구간 신호 | DC·DHCP가 안 보이는 사용자 → 서버 구간에서도 서버 정보를 더 얻는다. ① Kerberos 서비스 티켓(SMB·LDAP 인증의 AP-REQ)의 서비스 이름 → 서버 `dns_name`(50)과 realm → `domain`(70). `krbtgt`와 도메인 이름 자체로 받은 티켓(DFS 루트)은 제외. LDAP SASL 안 티켓은 Zeek 9.x만. ② HTTP 응답 Server 헤더 → 서버 `software` `http_server:…`(50)와 `os_hint`(45, IIS 버전 → Windows Server 버전, Apache 괄호 안 배포판 → Linux). 프록시 경유 응답은 제외, `enable_http_server`로 끔. ③ DHCP 릴레이(릴레이 ↔ DHCP 서버) 구간만 보여도 단말 DHCP 신호를 남기는 것을 테스트로 확인(SPEC 3.2·3.4·3.11) |
+| 계정 나누기 | 계정 신호(`user_account`·`machine_account`)에 `user_name`·`user_domain`·`user_domain_type`(`dns`·`netbios`)을 함께 남긴다. `evidence.log`와 같은 규칙(6.3절)이라 Manager가 자산의 계정과 탐지 근거의 계정을 그대로 잇는다(SPEC 2장) |
 | 역방향 이름 | PTR 응답은 정규 역방향 이름만 쓴다. RFC 2317 위임 이름 등 주소로 바꿀 수 없는 이름은 무시한다(SPEC 4장 DNS 응답) |
 | 남은 것 | Manager 리졸버(PoC `tools/asset_resolver.py`)는 이 저장소 밖. 선별 전송(메타데이터) 포함 여부는 [메타데이터 SRS](SRS_METADATA_EXPORT.md) P4에서 결정 |
 
@@ -1105,15 +1106,21 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 필드 | 뜻 |
 | --- | --- |
 | `ts` | 탐지 시각 |
-| `detection_id` | 탐지 고유 ID |
+| `detection_id` | 탐지 고유 ID. 단일은 `evidence_id`와 같고, 상관은 `kc-<체인 시작 epoch>-<프로세스 값 6자리 16진수>-<번호>`(재시작·클러스터 노드가 달라도 겹치지 않음). 센서가 여러 대면 Manager 키는 (센서, `detection_id`) |
 | `diagnosis` | 진단명(예: `NSM.CredentialAccess.DcSync`, `NSM.Impact.SmbRansomware`) |
+| `rule` | 탐지를 낸 룰. notice 이름에서 `NSM::`을 뺀 값(예: `Kerberoasting`), 상관은 `Correlated_KillChain`. Manager의 룰 정책·예외와 잇는 키이고 `diagnosis`는 표시용 분류 |
 | `techniques` | ATT&CK 기법 ID 배열(상관은 체인 순서, 예: `["T1210","T1003.006"]`) |
 | `category` | `Single`(단일) 또는 `Correlated`(킬체인 상관) |
 | `killchain_stages` | 킬체인 단계명 배열(상관은 체인 순서, 예: `["Recon","Command and Control"]`) |
 | `severity` | 단일 `Information`, 상관 `Suspicious` |
+| `severity_id` | `severity`의 숫자(OCSF `severity_id` 척도): 단일 1, 상관 3. 다른 제품 이벤트와 같은 척도로 정렬·비교할 때 쓴다 |
 | `first_seen` / `last_seen` | 관측 시작·끝. 같은 사건의 갱신 탐지(`occurrence` > 1)는 `first_seen`이 사건의 첫 탐지 시각 |
 | `attacker` / `attacker_subnet` | 공격 호스트와 그 대역 |
 | `victims` | 피해 호스트 배열(최대 8개. 확산 룰은 주소 순, 상관은 마지막 단계 host가 맨 앞) |
+| `victim_count` | 피해 호스트 전체 수. `victims`가 8개로 잘려도 실제 수(확산 룰은 `lm_targets` 수, 상관은 체인이 지난 피해 호스트 수) |
+| `accounts` | 근거(`evidence.log`의 `account`)에서 모은 계정. 정렬, 최대 5개(`evidence_summary_max`). 없으면 필드 없음 |
+| `dst_names` | 근거 `detail`에서 모은 목적지 이름: `host=`·`sni=`·`name=`, DNS는 상위 도메인(`parent=`, 없으면 `query=`). 소문자, 포트·끝 점 제거, IP 주소는 뺀다. 정렬, 최대 5개 |
+| `relays` | 근거 `detail`의 `via_proxy=` 값(거쳐 간 프록시 `주소:포트`). 프록시 경유를 근거에 남기는 룰(09·10·12·24·33, 켰을 때 07·30)만 |
 | `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 배열 |
 | `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
 | `incident_id` / `occurrence` | 같은 사건 묶기(단일 탐지만). 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
@@ -1125,14 +1132,15 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `ts` | 언제 |
 | `evidence_id` | 어느 탐지의 근거인지(notice와 공유) |
 | `note` / `killchain_stage` / `technique` | 무엇을(탐지 유형·단계·기법) |
-| `account` | 누가(계정, 알 때만. 예: `user01@corp.example`, `corp\admin01`). 확산 근거는 인증 맥락에서 찾은 값(5.6절) |
+| `account` | 누가(계정, 알 때만. 예: `user01@corp.example`, `corp\admin01`). 확산 근거는 인증 맥락에서 찾은 값(5.6절). 여러 개면 쉼표로 잇는다 |
+| `user_name` / `user_domain` / `user_domain_type` | `account`를 나눈 값(소문자). `domain\user`는 (user, domain), `user@realm`은 (user, realm). 도메인이 없으면 `user_name`만. `user_domain_type`은 도메인에 점이 있으면 `dns`(Kerberos realm·FQDN), 없으면 `netbios`. `account`가 여러 개면 첫 계정. 자산 식별 `asset_signal.log`의 계정 신호와 같은 규칙(5.5절)이라 Manager가 계정을 한 형식으로 잇는다. 같은 도메인의 NetBIOS 이름(`corp`)과 DNS 이름(`corp.example`)을 맞추는 것은 Manager(도메인 신호로 대응표를 만든다) |
 | `src` / `dst` | 어디서 → 어디로 |
 | `operation` | 어떻게(예: `kerberos_as_failure`, `drsuapi_DRSGetNCChanges`) |
 | `uid` / `fuid` | conn.log·files.log·선별 전송 로그 조인 키. 집계형 근거는 표본 대상마다 대표 연결 하나 |
 | `parent_id` | 상관 탐지가 묶는 하위 근거 |
 | `detail` | 부가 정보(실패 코드, 파일명, 바이트 등) |
 
-근거 건수 카운터는 2시간(`evidence_count_expire`) 뒤 만료됩니다. 운영에서는 세 로그 모두 JSON으로 나갑니다.
+근거 건수 카운터와 `nsm_detection.log` 요약(`accounts`·`dst_names`·`relays`)용 값은 2시간(`evidence_count_expire`) 뒤 만료됩니다. 요약 값은 근거를 쓴 노드에 있으므로, 단일 탐지는 그 노드에서 채우고, 상관 탐지는 각 단계 탐지의 요약을 상관 이벤트(`NSM::corr_notice`)에 실어 매니저로 보내 체인에 누적합니다(클러스터에서 워커가 쓴 근거도 상관 행에 들어감). 체인당 칸마다 최대 32개를 모으고 5개를 싣습니다. 운영에서는 세 로그 모두 JSON으로 나갑니다.
 
 ### 6.4 nsm_exception.log — 예외 적재·적중
 
@@ -1533,6 +1541,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
+| `evidence_summary_max` | 5 | `nsm_detection.log`의 `accounts`·`dst_names`·`relays`에 싣는 최대 개수 |  |
 | `detection_continue_gap` | 15min | 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지를 같은 사건(`incident_id`)으로 묶는 최대 간격 | 집계형 룰의 창(5·10분)보다 길게 둠 |
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
 | `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
@@ -1648,7 +1657,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 133개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 87개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 37개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 137개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 90개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
