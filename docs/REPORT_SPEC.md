@@ -80,6 +80,7 @@ Zeek는 `-C`(체크섬 무시)로 실행하고, 표준 오류는 `zeek/stderr.tx
 ```
 OUT/
   <pcap 이름>_report.html      통합 리포트(pcap 이름은 확장자를 뺀 파일 이름)
+  <pcap 이름>_report_mockup.html 목업형 리포트(같은 데이터를 MDS Manager 목업 화면으로, 3.8절)
   zeek/
     run_local.zeek  stderr.txt  exceptions.tsv(-x)
     nsm_detection.log  evidence.log  nsm_exception.log  asset_signal.log     Manager 로 가는 로그
@@ -121,6 +122,7 @@ OUT/
 ```
 python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--assets assets.json] [--asset-report 상대 경로]
         [--pcap 이름] [--elapsed 초] [--tz 9] [--nets CIDRS] [--oui OUI.csv ...] [--recog DIR]
+        [--mockup-out 경로] [--no-mockup]
 ```
 
 | 인자 | 뜻 |
@@ -250,6 +252,19 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 ---
 
+### 3.8 목업형 리포트(`report_mockup.py`)
+
+같은 실행에서 `<출력 이름>_mockup.html`(`--mockup-out`로 바꿈, `--no-mockup`로 끔)을 함께 만듭니다. `ui/mockup/mdsm_nsm_mockup.html`(MDS Manager 목업)을 그대로 템플릿으로 쓰고, `collect()` 결과를 목업 예시 데이터와 같은 모양으로 바꿔 `<script type="application/json" id="report-data">`에 넣습니다. 목업의 `applyReport()`가 예시 데이터를 바꾼 뒤 화면을 그립니다. 화면별 범위와 숨기는 Manager 기능은 [`ui/README.md`](../ui/README.md)에 있습니다.
+
+| 목업 데이터 | 만드는 방법 |
+| --- | --- |
+| 탐지(`ev`) | 탐지 요약 한 행 = 한 이벤트, 시각순 id `NSM-00001`…. notice 이름은 근거의 `note`(없으면 `detection_log.zeek`의 진단명 표). 위험도·탐지명·단계·기준은 목업 `RULES` 표. 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건. 대상이 없으면 근거의 목적지, 그것도 없으면 "(대상 여러 곳)". 프록시 경유는 `via`·`host`. 같은 시간대 통신 기록 = 추정 근거(3.3절). 최대 3,000건(최근 것) |
+| 공격 스토리(`stories`) | 3.4·3.5절 스토리. 제목 = 시작 공격자 + 거친 단계, 단계 문장 = 출발 → 대상: 탐지 이름(근거 한 줄). 상태는 모두 "신규" |
+| 자산(`assets`·`devx`·`peers`) | 3.6절 자산 표(최대 2,000개). 식별 근거는 그 IP의 자산 신호 값, 처음·마지막 본 시각은 신호 시각, 주로 통신한 상대는 흐름 요약(탐지·스토리에 나온 host만, 6개) |
+| 예외(`exc`) | `nsm_exception.log`의 적재·거부·적중. 조건(주소·도메인)은 로그에 없어 비어 있음. 기본 예외 목록(`EX-pb-*`)은 따로 표시 |
+| 센서(`sensors`·`sent`) | pcap 1개를 센서 1대로. 최대 캡처 손실, 경고, Manager로 가는 기록량(선별 전송·자산 신호·탐지·예외) |
+| 내부 주소(`internal`) | 내부로 판정된 탐지·스토리·자산 주소. 프록시(중계 장비)는 빼서 외부처럼 그림 |
+
 ## 4. 화면 구성
 
 | 순서 | 섹션 | 내용 |
@@ -333,6 +348,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-device-class` | 장비 유형: 스마트폰·태블릿·모바일(UA), PC 또는 모바일(Apple 연결 확인), PC, 노트북(LAPTOP-·MacBook)·데스크톱(DESKTOP-), 서버(Windows Server), 서버(추정, OS 모르는 웹 서버) |
 | `rules/report-proxy-target` | 프록시 경유 유출 탐지의 대상: CONNECT를 본 연결은 실제 목적지, 못 본 연결은 "목적지 확인 안 됨". 프록시는 관련 탐지 수·스토리 레인에서 중계 장비로 |
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
+| `rules/report-mockup` | 목업형 리포트: 템플릿 + 데이터 블록 하나, 시각순 id, 공격자별 가장 긴 상관 체인 1건, 스토리 단계와 이벤트 id 연결, 대상 없는 비콘의 목적지, 내부 주소, 프록시 경유(`via`·`host`, 프록시는 내부 목록에서 뺌), `--no-mockup` |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
