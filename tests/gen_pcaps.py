@@ -2715,6 +2715,45 @@ def gen_asset_banners(out):
     cap.write(os.path.join(out, "asset_banners.pcap"))
 
 
+def dhcp_ack_relay(cap, relay, server, cli_ip, mac, hostname, vendor, t):
+    """릴레이 구간 DHCP REQUEST/ACK 한 쌍(호스트 이름·vendor class)."""
+    from scapy.layers.dhcp import BOOTP, DHCP
+    xid = RNG.randint(1, 2**31)
+    req = [("message-type", "request"), ("requested_addr", cli_ip), ("client_id", b"\x01" + mac), ("hostname", hostname.encode())]
+    if vendor:
+        req.append(("vendor_class_id", vendor.encode()))
+    for src, dst, op, opts, yi in [(relay, server, 1, req, "0.0.0.0"),
+                                   (server, relay, 2, [("message-type", "ack"), ("server_id", server), ("lease_time", 86400)], cli_ip)]:
+        cap.add(cap.l3(src, dst) / UDP(sport=67, dport=67) / BOOTP(op=op, xid=xid, yiaddr=yi, giaddr=relay, chaddr=mac + b"\x00" * 10)
+                / DHCP(options=opts + ["end"]), t)
+        t += 0.01
+    return t
+
+
+def gen_asset_device_class(out):
+    """자산 장비 유형(10.0.58.x). 웹 서버 .2(nginx, OS 모름)에 HTTP 요청: .10 iPhone, .11 iPad, .12 안드로이드 폰 브라우저,
+    .13 안드로이드 태블릿 브라우저(Mobile 없음), .14 안드로이드 앱(Dalvik), .15 Apple 연결 확인(captive.apple.com),
+    .16 Windows 브라우저 -> IIS 서버 .30. DHCP 이름: .20 LAPTOP-, .21 DESKTOP-, .22 MacBook-Pro."""
+    cap = Capture()
+    t = T0 + 1
+    uas = [("10.0.58.10", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", "10.0.58.2", "intranet"),
+           ("10.0.58.11", "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", "10.0.58.2", "intranet"),
+           ("10.0.58.12", "Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36", "10.0.58.2", "intranet"),
+           ("10.0.58.13", "Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "10.0.58.2", "intranet"),
+           ("10.0.58.14", "Dalvik/2.1.0 (Linux; U; Android 14; SM-S921N Build/UP1A.231005.007)", "10.0.58.2", "intranet"),
+           ("10.0.58.15", "CaptiveNetworkSupport-481.80.2 wispr", "10.0.58.2", "captive.apple.com"),
+           ("10.0.58.16", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "10.0.58.30", "portal")]
+    for cli, ua, srv, host in uas:
+        server = "Microsoft-IIS/10.0" if srv == "10.0.58.30" else "nginx"
+        req = ("GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n" % (host, ua)).encode()
+        t = http_server_reply(cap, cli, srv, 80, req, server, t + 1)
+    for ip, name, vendor, mac in [("10.0.58.20", "LAPTOP-AB12CD3", "MSFT 5.0", "3c5282580020"), ("10.0.58.21", "DESKTOP-9XY8Z7Q", "MSFT 5.0", "3c5282580021"),
+                                  ("10.0.58.22", "MacBook-Pro", "", "3c5282580022")]:
+        t = dhcp_ack_relay(cap, "10.0.58.1", "10.0.58.67", ip, bytes.fromhex(mac), name, vendor, t + 1)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "asset_device_class.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2731,7 +2770,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
               gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
-              gen_asset_fingerprint, gen_asset_banners]
+              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class]
 
 
 def main():

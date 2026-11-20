@@ -270,7 +270,17 @@ def enrich(sig_rows, oui=None, recog=None, shared_macs=()):
         if not ip or not v:
             continue
         e = per.setdefault(ip, {"vendor": "", "mac": "", "mac_local": False, "fp": [], "fp_os": "", "fp_dev": "", "tcp_os": "", "tcp_basis": "",
-                                "proxy_like": ip in proxies})
+                                "proxy_like": ip in proxies, "forms": set(), "os_hints": set(), "names": set(), "svcs": set(), "devs": set()})
+        if k == "form_factor":
+            e["forms"].add(v)
+        elif k == "os_hint":
+            e["os_hints"].add(v.lower())
+        elif k in ("hostname", "machine_account", "fqdn"):
+            e["names"].add(v.lower())
+        elif k == "service":
+            e["svcs"].add("/".join(v.split("/")[:2]))
+        elif k == "device":
+            e["devs"].add(v)
         if k == "mac" and v not in shared_macs and (not e["mac"] or src in ("arp", "dhcp")):
             e["mac"] = v
         if k == "tcp_fp":
@@ -292,3 +302,73 @@ def enrich(sig_rows, oui=None, recog=None, shared_macs=()):
             e["vendor"] = "" if e["mac_local"] else oui.vendor(e["mac"])
         e["tcp_os"], e["tcp_basis"] = tcp_os(tcp.get(ip, ()))
     return per
+
+
+# ---------------------------------------------------------------- 장비 유형
+
+NET_DEVICES = {"cisco-asa", "cisco-ftd", "cisco-ios", "fortinet-fortigate", "fortinet", "paloalto", "utm"}
+NET_HW = ("router", "switch", "firewall", "access point", "wireless", "vpn", "network")
+SERVER_PORTS = {"tcp/22", "tcp/80", "tcp/443", "tcp/8080", "tcp/8443", "tcp/1433", "tcp/1521", "tcp/3306", "tcp/5432",
+                "tcp/6379", "tcp/27017", "tcp/9200", "tcp/25", "tcp/465", "tcp/587", "tcp/110", "tcp/143", "tcp/993",
+                "tcp/995", "tcp/21", "tcp/53", "udp/53", "tcp/88", "tcp/389", "tcp/636", "tcp/3268", "udp/67",
+                "tcp/514", "udp/514"}
+DC_PORTS = {"tcp/88", "tcp/389", "tcp/636", "tcp/3268"}
+MOBILE_NAME = re.compile(r"iphone|ipad|ipod|galaxy|android|^sm-[a-z]\d|pixel|redmi|xiaomi")
+FORM_KO = {"phone": "모바일(스마트폰)", "tablet": "모바일(태블릿)", "mobile": "모바일"}
+
+
+def device_class(e, os_best="", roles=()):
+    """IP 하나의 장비 유형 -> (유형, 근거, 신뢰도). 앞 규칙이 이긴다. 노트북·데스크톱은 기본 컴퓨터 이름이나 기기 모델이 있을 때만 가른다."""
+    names = e.get("names", set())
+    nm = " ".join(sorted(names))
+    hints = e.get("os_hints", set())
+    svcs, devs = e.get("svcs", set()), e.get("devs", set())
+    fp_dev = (e.get("fp_dev") or "").lower()
+    os_l = (os_best or "").lower()
+    if e.get("proxy_like"):
+        return "프록시·중계", "서로 다른 HTTP Server 값으로 응답", "보통"
+    if devs & NET_DEVICES or any(w in fp_dev for w in NET_HW):
+        return "네트워크 장비", "장비 종류 " + (", ".join(sorted(devs & NET_DEVICES)) or e.get("fp_dev")), "높음"
+    if "print" in fp_dev or "mfp" in fp_dev or svcs & {"tcp/9100", "tcp/515", "tcp/631"}:
+        return "프린터", "지문 " + e.get("fp_dev") if fp_dev else "프린터 포트 응답(9100·515·631)", "높음" if fp_dev else "보통"
+    if devs & {"ahnlab-mds", "ahnlab-epp"}:
+        return "보안 장비", "장비 종류 " + ", ".join(sorted(devs & {"ahnlab-mds", "ahnlab-epp"})), "높음"
+    if devs & {"vmware-esxi", "vmware"}:
+        return "서버(가상화)", "VMware 인증서·syslog", "높음"
+    if devs & {"dell-idrac", "hpe-ilo"}:
+        return "서버 관리 포트(BMC)", "장비 종류 " + ", ".join(sorted(devs & {"dell-idrac", "hpe-ilo"})), "높음"
+    if "synology" in devs or "nas" in fp_dev:
+        return "NAS", "장비 종류·지문", "높음"
+    if "camera" in fp_dev:
+        return "카메라·IoT", "지문 " + e.get("fp_dev"), "높음"
+    if "voip" in fp_dev or "phone" in fp_dev:
+        return "IP 전화기", "지문 " + e.get("fp_dev"), "높음"
+    for f in ("phone", "tablet", "mobile"):
+        if f in e.get("forms", set()):
+            return FORM_KO[f], "User-Agent 기기 형태", "높음" if f != "mobile" else "보통"
+    if any(h.startswith(("android", "ios")) for h in hints):
+        return "모바일", "OS 힌트 " + ", ".join(sorted(h for h in hints if h.startswith(("android", "ios")))), "보통"
+    if MOBILE_NAME.search(nm):
+        return ("모바일(태블릿)" if "ipad" in nm else "모바일"), "호스트 이름", "보통"
+    # 기본 컴퓨터 이름(Windows 는 설치 때 본체 종류로 LAPTOP-/DESKTOP- 를 붙임)·기기 모델이 든 이름은 OS 근거 없이도 쓴다
+    if re.search(r"(^|\s)laptop-", nm) or "macbook" in nm:
+        return "PC(노트북)", "호스트 이름(기본 이름·기기 모델)", "보통"
+    if re.search(r"(^|\s)desktop-", nm) or re.search(r"imac|mac-?mini|mac-?pro", nm):
+        return "PC(데스크톱)", "호스트 이름(기본 이름·기기 모델)", "보통"
+    server_roles = [x for x in roles or () if x and "PC" not in str(x)]
+    if "server" in os_l or server_roles or svcs & DC_PORTS:
+        return "서버", ("역할 " + ", ".join(map(str, server_roles))) if server_roles else ("OS " + os_best if "server" in os_l else "도메인 컨트롤러 포트 응답"), "높음"
+    client = any(w in os_l for w in ("windows 10", "windows 11", "windows 7", "windows 8", "windows xp", "macos", "mac os", "chromeos")) \
+        or os_l in ("windows", "apple") or os_l.startswith("windows nt") or os_l == "windows 계열"
+    unix_like = os_l == "" or any(w in os_l for w in ("linux", "unix", "bsd", "ubuntu", "debian", "centos"))
+    if unix_like and svcs & SERVER_PORTS:
+        return "서버(추정)", "서비스 응답 " + ", ".join(sorted(svcs & SERVER_PORTS)[:4]), "보통" if os_l else "낮음"
+    if client or "macos·ios·bsd" in os_l:
+        if "macos·ios·bsd" in os_l:
+            return "PC 또는 모바일(Apple)", "TCP SYN 모양(macOS·iOS 구분 불가)", "낮음"
+        if os_l == "apple":
+            return "PC 또는 모바일(Apple)", "Apple 연결 확인 요청(iPhone·Mac 공통)", "보통"
+        return "PC", "OS " + os_best, "낮음" if "계열" in os_l else "보통"
+    if "linux" in os_l or "unix" in os_l:
+        return "알 수 없음(Linux 계열)", "OS " + os_best, "낮음"
+    return "알 수 없음", "", ""

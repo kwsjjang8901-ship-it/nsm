@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.6 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.7 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -55,6 +55,7 @@
 | | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
 | | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0`, `smb_os:Windows 5.1`, `snmp_sysdescr:…`, `x509_subject:…`, `http_wwwauth:Basic realm="…"`, `sip_ua:…`, `ftp_banner:…`, `mysql:8.0.36` | 소프트웨어 정보, 지문 대조 입력(4.11) |
+| | `form_factor` | `phone`, `tablet`, `mobile` | 기기 형태 힌트(User-Agent, 3.11). 장비 유형 판정(4.12) |
 | | `tcp_fp` | `syn ittl=128 hops=0 win=64240 ws=8 mss=1460 sack=1 ts=0 df=1` | TCP SYN 모양(OS 계열 추정, 3.19) |
 | | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent`, `policy:edr-cloud` | AhnLab 제품 설치 여부(통신으로 판단), 고객 정의 에이전트 정책(3.17) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
@@ -243,6 +244,8 @@
 | Windows 시스템 UA | `Microsoft NCSI`, `WinHttp-Autoproxy-Service`, `Microsoft-CryptoAPI/…` 등 | `os_hint` `windows` | 클라이언트 | 50 |
 | AhnLab 제품 | `v3inet*/<버전>/<제품코드>/`, `MeDCore` | `security_agent` `ahnlab:<제품코드>/<버전>`, `ahnlab:MeDCore` | 클라이언트 | 80 |
 | 서버 이름 | 요청 Host 헤더 | `dns_name` | 서버 | 50 |
+| 기기 형태 | 요청 User-Agent: `iPhone`·`iPod` → `phone`, `iPad` → `tablet`, 안드로이드 브라우저(`Mozilla/`)는 `Mobile`이 있으면 `phone`·없으면 `tablet`, 안드로이드 앱(Dalvik 등) → `mobile` | `form_factor` | 클라이언트 | 50 |
+| Apple 연결 확인 | `CaptiveNetworkSupport…` UA(Wi-Fi 접속 때 captive.apple.com 확인, iOS·macOS 공통) | `os_hint` `apple` | 클라이언트 | 50 |
 | 서버 소프트웨어 | 응답 Server 헤더 | `software` `http_server:<값 앞 64자>` | 서버 | 50 |
 | 서버 OS | 응답 Server 헤더: IIS 10.0 → `windows server 2016+`, 8.5 → `windows server 2012 r2`, 8.0 → `windows server 2012`, 7.5 → `windows server 2008 r2`, 7.0 → `windows server 2008`, 6.0 → `windows server 2003`, `Microsoft-HTTPAPI/…`·`(Win32)`·`(Win64)` → `windows`, `(Ubuntu)`·`(Debian)`·`(CentOS)`·`(Red Hat)`·`(Rocky)` → `linux(…)` | `os_hint` | 서버 | 45 |
 
@@ -499,6 +502,26 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 - **프록시·중계 추정:** 한 IP가 서로 다른 HTTP Server 값 3개 이상으로 응답하면 실제 서버가 아니라 투명 프록시·로드밸런서·NAT 뒤 여러 서버로 봅니다. 이 IP에는 HTTP로 얻은 OS(Recog HTTP Server·인증 realm 지문의 OS, 센서 `http_server` OS 힌트)를 쓰지 않고 "프록시·중계 추정"으로 표시합니다. 지문 목록과 다른 출처(SSH·SMB 등)의 OS는 그대로입니다. 센서의 프록시 제외(CONNECT·절대 URL)로 걸러지지 않는 투명 프록시용입니다.
 - **라이선스(제품 반영 전 법무 확인):** Recog은 BSD-2-Clause(출처 표기, Rapid7은 운영 제품 사용 전 연락 요청). IEEE OUI 목록은 공개 목록이며 이용 조건 확인 필요(Wireshark `manuf`는 GPL 배포물이라 쓰지 않음). p0f(LGPL-2.1) 지문 DB는 쓰지 않음.
 
+### 4.12 장비 유형 판정 (Manager 후처리, PoC는 통합 리포트)
+
+자산마다 장비 유형 하나와 근거·신뢰도를 붙입니다(`tests/asset_enrich.py` `device_class`). 앞 규칙이 이깁니다.
+
+| 순서 | 유형 | 근거 | 신뢰도 |
+|---|---|---|---|
+| 1 | 프록시·중계 | 서로 다른 HTTP Server 값 3개 이상(4.11) | 보통 |
+| 2 | 네트워크 장비 | `device`(Cisco·Fortinet·Palo Alto·UTM), Recog 장비 종류(Router·Switch·Firewall·AP 등) | 높음 |
+| 3 | 프린터 | Recog 장비 종류(Printer·Print Server·MFP), 또는 9100·515·631 응답 | 높음·보통 |
+| 4 | 보안 장비, 서버(가상화), 서버 관리 포트(BMC), NAS, 카메라·IoT, IP 전화기 | `device`(AhnLab MDS·EPP, VMware, iDRAC·iLO, Synology), Recog 장비 종류 | 높음 |
+| 5 | 모바일(스마트폰·태블릿), 모바일 | `form_factor`(3.11) → OS 힌트 `ios`·`android` → 호스트 이름(iPhone·iPad·Galaxy 등) | 높음 → 보통 |
+| 6 | PC(노트북), PC(데스크톱) | 호스트 이름: Windows 기본 이름(`LAPTOP-`·`DESKTOP-`, 설치 때 본체 종류로 정해짐), Apple 기기 모델이 든 이름(MacBook, iMac, Mac mini) | 보통 |
+| 7 | 서버 | OS가 서버(Windows Server 등), 리졸버 역할, 도메인 컨트롤러 포트 응답 | 높음 |
+| 8 | 서버(추정) | OS를 모르거나 Linux·Unix 계열이면서 서버 포트(웹·DB·메일·DNS·SSH 등)에 응답 | 보통·낮음 |
+| 9 | PC, PC 또는 모바일(Apple) | 클라이언트 OS(Windows 10/11·macOS 등). TCP SYN `macOS·iOS·BSD 계열`과 Apple 연결 확인(`apple`)은 Mac과 iPhone을 가를 수 없음 | 보통·낮음 |
+| 10 | 알 수 없음(Linux 계열), 알 수 없음 | 그 밖 | - |
+
+- **노트북·데스크톱 구분의 한계:** 네트워크 트래픽에는 본체 종류가 거의 없습니다. 이름을 회사 규칙으로 바꾸면 "PC"로만 나옵니다. 정확한 구분은 고객 대역 정보(무선·VPN 대역)나 MDS Agent·EPP 자산 정보 연동이 필요합니다.
+- **모바일의 한계:** iPadOS 13 이후 Safari는 Mac UA를 써서 iPad가 macOS로 보일 수 있습니다. 모바일 앱 트래픽 대부분은 HTTPS라 UA가 보이지 않습니다.
+
 ---
 
 ## 5. 품질 지표 (리포트)
@@ -589,6 +612,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
+| 0.7 | 2026-11-20 | 기기 형태 힌트 `form_factor`(3.11), Apple 연결 확인 OS 힌트, 장비 유형 판정 규칙(4.12) |
 | 0.6 | 2026-11-20 | 서비스 배너(3.20): HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전과 Recog 연결(4.11), 부하 측정 |
 | 0.5 | 2026-11-20 | 지문 대조 입력 신호: SMB1 native OS·LM 원문(클라이언트·서버), 인증서 주체·발급자, SNMP(3.18), TCP SYN 지문(3.19). 지문 DB 보강 규칙(4.11: OUI, Recog, TCP SYN 계열)과 라이선스 메모 |
 | 0.4 | 2026-11-19 | 고객 정의 에이전트 정책(3.17, `agent_policy_file`, `asset_agent_policy.log`), Manager의 에이전트 미확인 판정 규칙(4.10) |
