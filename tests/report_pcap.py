@@ -708,6 +708,7 @@ def collect(z, assets_path, args):
 
     detections = []
     heads = {}
+    chain_at = {}                          # 상관 detection_id -> detections 위치(revision 이 가장 큰 행)
     related = collections.Counter()
     for d in sorted(det, key=lambda r: r.get("ts") or 0):
         ts = d.get("ts")
@@ -739,6 +740,17 @@ def collect(z, assets_path, args):
             continue
         if item["incident"] and d.get("category") != "Correlated":
             heads[item["incident"]] = item
+        if d.get("category") == "Correlated" and d.get("revision"):
+            # 상관 탐지는 갱신될 때마다 갈래를 합친 체인 전체를 다시 낸다(revision 1, 2, ...).
+            #   같은 체인은 revision 이 가장 큰 행 하나만 쓴다(Manager 와 같은 규칙). revision 이 없는 옛 로그는 행마다 그대로.
+            item["revision"] = d.get("revision")
+            k = item["id"]
+            if k in chain_at:
+                j = chain_at[k]
+                if (detections[j].get("revision") or 0) <= item["revision"]:
+                    detections[j] = item
+                continue
+            chain_at[k] = len(detections)
         detections.append(item)
     for item in detections:
         mark_proxy_victims(item)

@@ -1002,6 +1002,17 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 - 초기 침투 탐지(03·04·27·28)는 침투 대상 서버를 `lm_targets`로 넘깁니다. 그래서 공격자가 웹서버를 침투한 뒤 그 서버가 C2·확산을 하면, 체인이 공격자에서 시작해 이어집니다(`tests/btest/rules/killchain-7-stages.zeek`: 정찰 → 초기 침투 → C2 → 자격증명 → 확산 → 영향).
 - 회귀 테스트 `tests/btest/rules/correlation-ext-chain.zeek`가 정찰 → C2(DGA·비커닝) → Kerberoasting → DCSync → WinRM 확산 → 유출 → 랜섬웨어의 8단계 체인과, 단독 Kerberoasting·단독 랜섬웨어가 상관으로 이어지지 않는 경우를 검증합니다.
 
+#### 5.1.2 상관 탐지 행: 갈래 합치기와 갱신 번호
+
+체인은 다음 단계 탐지가 이어질 때마다 자라고, 확산 대상 host마다·다음 단계마다 갈래가 나뉩니다(예: 확산 대상 .31은 유출, .32는 랜섬웨어). 갈래마다 내용이 다른 행을 같은 `detection_id`로 내면 Manager가 덮어쓸 때 앞 갈래가 사라지므로, 탐지 요약(`nsm_detection.log`)은 **체인의 모든 갈래를 합친 전체**를 냅니다.
+
+- 체인이 자랄 때마다 같은 `detection_id`로 한 행을 내고 `revision`을 1부터 올립니다. Manager는 `detection_id`별로 **`revision`이 가장 큰 행만** 쓰면 그 체인의 현재 전체가 됩니다(앞 행을 덮어써도 잃는 것이 없음). 사건 규칙도 단독 탐지와 같게 `incident_id` = `detection_id`, `occurrence` = `revision`으로 채웁니다. `revision` = 1에서 새 알림, 2 이상은 같은 공격 스토리의 갱신입니다.
+- 합치는 값: 구성 탐지(`member_detection_ids`, 처음 본 순서), 기법(`techniques`, 구성 탐지마다 하나, 처음 탐지된 시각 순), 단계(`killchain_stages`, 중복 없음), 피해 host(체인 출발지 자신은 빼고, 가장 최근 단계 host가 맨 앞), 계정·목적지 이름·프록시 요약, 시각(`first_seen`은 체인 시작, `last_seen`은 가장 최근 단계).
+- 진단명: `NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>`. 진행 순위는 정찰 < 초기 침투 < C2 < 자격증명 < 확산 < 유출 < 영향(통합 리포트의 단계 순서)이고, 같으면 나중 단계입니다.
+- notice와 체인 근거(`evidence.log`의 `operation=killchain`)는 지금처럼 갈래마다 한 건입니다(notice 1건 = 탐지 1건 계약 유지). 근거의 `detail`은 그 갈래의 단계만 보여 줍니다.
+- 합친 상태는 체인의 마지막 갈래가 만료될 때까지(`chain_max_expire`) 매니저(standalone은 그 프로세스)에 둡니다. 구성 탐지는 체인당 최대 64개.
+- 예(`killchain_story`): 한 체인이 `revision` 1\~8로 자라고, 마지막 행 하나에 7단계 전부(SQL 인젝션·웹셸, 유출 두 룰, 랜섬웨어)와 피해 host 4개가 들어 있습니다. 예전에는 마지막 세 행이 유출 갈래 둘과 피해 갈래 하나로 나뉘어 있었습니다.
+
 ### 5.2 로그 필터 기본값
 
 | 남기는 로그 | 기본 경로(확장자 제외) |
@@ -1109,21 +1120,23 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | `detection_id` | 탐지 고유 ID. 단일은 `evidence_id`와 같고, 상관은 `kc-<체인 시작 epoch>-<프로세스 값 6자리 16진수>-<번호>`(재시작·클러스터 노드가 달라도 겹치지 않음). 센서가 여러 대면 Manager 키는 (센서, `detection_id`) |
 | `diagnosis` | 진단명(예: `NSM.CredentialAccess.DcSync`, `NSM.Impact.SmbRansomware`) |
 | `rule` | 탐지를 낸 룰. notice 이름에서 `NSM::`을 뺀 값(예: `Kerberoasting`), 상관은 `Correlated_KillChain`. Manager의 룰 정책·예외와 잇는 키이고 `diagnosis`는 표시용 분류 |
-| `techniques` | ATT&CK 기법 ID 배열(상관은 체인 순서, 예: `["T1210","T1003.006"]`) |
+| `techniques` | ATT&CK 기법 ID 배열. 상관은 구성 탐지마다 하나, 처음 탐지된 시각 순(같은 기법의 다른 탐지면 반복, 예: 유출 두 룰 `T1041`·`T1041`) |
 | `category` | `Single`(단일) 또는 `Correlated`(킬체인 상관) |
-| `killchain_stages` | 킬체인 단계명 배열(상관은 체인 순서, 예: `["Recon","Command and Control"]`) |
+| `killchain_stages` | 킬체인 단계명 배열(상관은 처음 본 순서, 중복 없음, 예: `["Recon","Command and Control"]`) |
 | `severity` | 단일 `Information`, 상관 `Suspicious` |
 | `severity_id` | `severity`의 숫자(OCSF `severity_id` 척도): 단일 1, 상관 3. 다른 제품 이벤트와 같은 척도로 정렬·비교할 때 쓴다 |
 | `first_seen` / `last_seen` | 관측 시작·끝. 같은 사건의 갱신 탐지(`occurrence` > 1)는 `first_seen`이 사건의 첫 탐지 시각 |
 | `attacker` / `attacker_subnet` | 공격 호스트와 그 대역 |
-| `victims` | 피해 호스트 배열(최대 8개. 확산 룰은 주소 순, 상관은 마지막 단계 host가 맨 앞) |
-| `victim_count` | 피해 호스트 전체 수. `victims`가 8개로 잘려도 실제 수(확산 룰은 `lm_targets` 수, 상관은 체인이 지난 피해 호스트 수) |
+| `victims` | 피해 호스트 배열(최대 8개. 확산 룰은 주소 순, 상관은 가장 최근 단계 host가 맨 앞이고 나머지는 주소 순. 상관은 체인 출발지 자신을 넣지 않고, 아직 피해 호스트가 없으면 출발지 하나) |
+| `victim_count` | 피해 호스트 전체 수. `victims`가 8개로 잘려도 실제 수(확산 룰은 `lm_targets` 수, 상관은 모든 갈래의 피해 호스트 수) |
 | `accounts` | 근거(`evidence.log`의 `account`)에서 모은 계정. 정렬, 최대 5개(`evidence_summary_max`). 없으면 필드 없음 |
 | `dst_names` | 근거 `detail`에서 모은 목적지 이름: `host=`·`sni=`·`name=`, DNS는 상위 도메인(`parent=`, 없으면 `query=`). 소문자, 포트·끝 점 제거, IP 주소는 뺀다. 정렬, 최대 5개 |
 | `relays` | 근거 `detail`의 `via_proxy=` 값(거쳐 간 프록시 `주소:포트`). 프록시 경유를 근거에 남기는 룰(09·10·12·24·33, 켰을 때 07·30)만 |
 | `evidence_count` / `evidence_ids` | 근거 행 수와 근거 키 배열 |
 | `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
-| `incident_id` / `occurrence` | 같은 사건 묶기(단일 탐지만). 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
+| `revision` | 상관 탐지만: 같은 체인의 갱신 번호(1부터). 행마다 갈래를 합친 체인 전체를 담으므로 `detection_id`별 가장 큰 행이 현재 상태(5.1.2) |
+| `member_detection_ids` | 상관 탐지만: 체인을 이루는 단독 탐지의 `detection_id`(처음 본 순서). `evidence_ids`에서 체인 자신의 근거 id(맨 앞)를 뺀 것과 같다 |
+| `incident_id` / `occurrence` | 같은 사건 묶기. 상관 탐지는 `incident_id` = `detection_id`, `occurrence` = `revision`(5.1.2). 아래는 단일 탐지: 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
 
 ### 6.3 evidence.log — 근거
 

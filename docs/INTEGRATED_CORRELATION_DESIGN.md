@@ -75,7 +75,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | `raw_ref` | string | 원본 이벤트 위치(화면 링크) | ✓ | ✓ | ✓ |
 
 - **시각:** MDS는 판정 시각이 아니라 파일이 들어오거나 실행된 시각을 `time`으로 씁니다. 판정 시각은 `observed_at`·원본에 남깁니다. 그래야 "메일 → 실행 → C2" 순서가 맞습니다.
-- 이 필드는 센서 로그 형식 검토의 P1 항목(`sensor_id`, `rule`, `severity_id`, 근거의 `dst_name`)을 전제로 합니다. 이 중 `rule`·`severity_id`와 탐지 요약의 계정·목적지 이름·프록시(`accounts`·`dst_names`·`relays`), 계정 나누기(`user_name`·`user_domain`·`user_domain_type`)는 센서에 반영됐습니다(SRS 6.2·6.3). `sensor_id`(수집 에이전트)와 근거 필드화(E1)는 남았습니다.
+- 이 필드는 센서 로그 형식 검토의 P1 항목(`sensor_id`, `rule`, `severity_id`, 근거의 `dst_name`)을 전제로 합니다. 이 중 `rule`·`severity_id`와 탐지 요약의 계정·목적지 이름·프록시(`accounts`·`dst_names`·`relays`), 계정 나누기(`user_name`·`user_domain`·`user_domain_type`), 상관 탐지의 갈래 합치기·갱신 번호(`revision`)·구성 탐지 id(`member_detection_ids`)는 센서에 반영됐습니다(SRS 5.1.2·6.2·6.3). `sensor_id`(수집 에이전트)와 근거 필드화(E1)는 남았습니다.
 
 ---
 

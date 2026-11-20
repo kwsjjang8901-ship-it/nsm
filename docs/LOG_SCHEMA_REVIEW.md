@@ -4,7 +4,7 @@
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
-- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
+- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -240,7 +240,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | --- | --- | --- |
 | 1 | D1(`severity_id`)·D4(`rule`)·D5(id 충돌·`victim_count`)·N1(`accounts`)·N3(`dst_names`)·N4(`relays`): 탐지 요약에 필드 추가(하위 호환) | 완료(아래 참고) |
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) | 완료(아래 참고) |
-| 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | |
+| 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | 완료(아래 참고) |
 | 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | |
 | 5 | M1·S1(+N6)·G1, X1 | |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 | |
@@ -252,6 +252,14 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 - `victim_count`: 확산 룰은 `lm_targets` 수, 그 밖의 단독 탐지는 1, 상관은 체인이 지난 피해 host 수(`victims`와 같은 기준).
 - `accounts`·`dst_names`·`relays`: 근거에서 모아 정렬한 뒤 최대 5개(`evidence_summary_max`). 이름은 `detail`의 `host=`·`sni=`·`name=`, DNS는 상위 도메인(`parent=`, 없으면 `query=`)이고 IP 주소는 뺍니다. E1(근거 필드화) 전이라 센서 안에서 `detail`을 읽어 만듭니다. 클러스터에서는 단계마다 요약을 상관 이벤트에 실어 보내 상관 행에도 들어갑니다.
 - N2: `evidence.log`와 `asset_signal.log`(계정 신호)에 `user_name`·`user_domain`·`user_domain_type`. 원문 `account`·`value`는 그대로입니다. 근거 `account`가 여러 개(쉼표)면 첫 계정을 나눕니다.
+
+3단계에서 정한 것(D3 제안 1, [SRS 5.1.2](SRS.md)):
+
+- 상관 행은 매번 갈래를 합친 체인 전체를 담고 `revision`(1부터)을 붙입니다. Manager는 `detection_id`별 `revision`이 가장 큰 행만 쓰면 됩니다. 단독 탐지와 같은 사건 규칙으로도 처리되도록 `incident_id` = `detection_id`, `occurrence` = `revision`을 채웁니다.
+- N7: `member_detection_ids`(구성 단독 탐지 id, 처음 본 순서). `evidence_ids`에서 체인 자신의 근거 id를 뺀 것과 같습니다.
+- 합친 값: 기법은 구성 탐지마다 하나(처음 탐지된 시각 순), 단계명은 중복 없이, 피해 host는 출발지 자신을 빼고 모든 갈래의 합집합. 진단명의 뒤 단계는 가장 많이 진행된 단계입니다.
+- notice와 체인 근거(`operation=killchain`)는 갈래마다 한 건 그대로입니다(notice 1건 = 탐지 1건).
+- 통합 리포트도 같은 체인은 `revision`이 가장 큰 행 하나만 씁니다(`revision`이 없는 옛 로그는 행마다).
 
 ### 6.5 결정 필요 (추가)
 
