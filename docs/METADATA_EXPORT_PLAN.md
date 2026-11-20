@@ -262,10 +262,10 @@ conn·dns는 요약 로그로 보냅니다(2026-11-10 결정). 원본 스트림�
 
 | pcap | 전체 로그 | 선별 전송 | 비율 | 큰 로그 | 처리 시간 |
 | --- | --- | --- | --- | --- | --- |
-| eth5_172-20-31-93(16) | 120.1MB | 6.44MB | 5.36% | flow 39%, dns 33%, http 24%(AD 트래픽 없음) | +8.0%(공유 폴더, 판단 제외) |
-| eth5 | 90.2MB | 7.29MB | 8.08% | dns 46%(9,439행), flow 35%, http 14% | +4.0% |
+| 운영 B | 120.1MB | 6.44MB | 5.36% | flow 39%, dns 33%, http 24%(AD 트래픽 없음) | +8.0%(공유 폴더, 판단 제외) |
+| 운영 A | 90.2MB | 7.29MB | 8.08% | dns 46%(9,439행), flow 35%, http 14% | +4.0% |
 
-3차 조정(2026-11-11): 세 측정 모두 flow·http·dns 요약이 대부분이고, eth5에서는 dns_summary가 절반에 가까웠다. 원인은 dns_summary 키에 질의 유형·결과가 들어 있어 도메인 하나가 A·AAAA·HTTPS·결과별로 여러 행이 되는 것이었다.
+3차 조정(2026-11-11): 세 측정 모두 flow·http·dns 요약이 대부분이고, 운영 A에서는 dns_summary가 절반에 가까웠다. 원인은 dns_summary 키에 질의 유형·결과가 들어 있어 도메인 하나가 A·AAAA·HTTPS·결과별로 여러 행이 되는 것이었다.
 - dns_summary: 키를 (출발지, 등록 도메인)으로, 유형·결과는 `qtypes`·`rcodes` 필드로. 표본 이름·응답 5개 → 3개, `unique_names_capped`는 참일 때만.
 - http: User-Agent를 행에서 빼고 `http_ua_summary`((출발지, UA)별 24시간)로.
 - flow_summary: `ts_end`·`duration` 제거.
