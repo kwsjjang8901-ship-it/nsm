@@ -1,6 +1,6 @@
 # NSM 자산 식별(Zeek) PoC 결과 보고
 
-작성일: 2026-11-06 · 갱신: 2026-11-18 · 기준: nsm main `79d3db2`(PR #97까지) · 대상: NSM 1.0.0 원페이저 "자산식별 기능(Zeek) POC 개발"
+작성일: 2026-11-06 · 갱신: 2026-11-20 · 기준: nsm main `c75d510`(PR #117까지) · 대상: NSM 1.0.0 원페이저 "자산식별 기능(Zeek) POC 개발"
 상세 근거: 스펙 [SPEC.md](SPEC.md) · 설계·측정 기록 [DESIGN.md](DESIGN.md) · 탐지 SRS [5.5절](../SRS.md) · 탐지·메타데이터까지 함께 정리한 통합 보고 [POC_RESULT.md](../POC_RESULT.md) · 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 > 센서 코드는 2026-11-12에 PoC 저장소(`kwsjjang8901-ship-it/claudtest2`)에서 이 저장소로 옮겼다(#47). 센서 코드는 `nsm_rules/asset-id/`, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있다. 판정 도구(리졸버·평가)와 리졸버 테스트는 claudtest2에 남아 있다. 4.1\~4.4절은 머지 전 운영 측정 기록이고, 머지 뒤의 변경과 공개 데이터셋 결과는 3.1·3.2·4.5절에 더했다. 센서 동작을 바꾸면 이 문서, [SPEC.md](SPEC.md), 탐지 SRS 5.5절을 함께 고친다.
@@ -11,7 +11,7 @@
 
 | 항목 | 결과 |
 |---|---|
-| **센서 자산 신호 수집** | 프로토콜 15종 + 연결 정보(L2 주소, 서비스 응답, MDS Agent 연결)에서 신호 출처 34개 구현. nsm_rules에 머지(#47), Zeek 9.0.1·8.0.9 CI 통과, 자산 식별 btest 37개 + 탐지 쪽 연동·리포트 테스트. **운영 데이터로 충분히 확인된 것은 8종**, 소량 6종, 운영 데이터 없음 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트, 공개·합성 pcap으로만 검증, 4.3). 11/19에 더한 라우팅 구간 신호 2개(Kerberos 서비스 티켓의 서버 이름, HTTP Server 헤더)도 아직 공개·합성 pcap으로만 확인 |
+| **센서 자산 신호 수집** | 프로토콜 21종 + 연결 정보(L2 주소, 서비스 응답, MDS Agent 연결)에서 신호 출처 34개 구현. nsm_rules에 머지(#47), Zeek 9.0.1·8.0.9 CI 통과, 자산 식별 btest 37개 + 탐지 쪽 연동·리포트 테스트. **운영 데이터로 충분히 확인된 것은 8종**, 소량 6종, 운영 데이터 없음 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트, 공개·합성 pcap으로만 검증, 4.3). 11/19에 더한 라우팅 구간 신호 2개(Kerberos 서비스 티켓의 서버 이름, HTTP Server 헤더)도 아직 공개·합성 pcap으로만 확인 |
 | **로그량** | 1시간 이상 캡처 기준 Zeek 전체 로그 대비 **0.1\~0.3%**. 공개 데이터셋 CIC-IDS2017 하루(8시간) 233\~256KB, Manager 전송량의 1.2% |
 | **서버·장비 식별** | 운영망에서 동작 확인. 서버 역할 추정 자산 비율 33% → 49%(장비·인증서 신호 추가 후), AhnLab MDS·VMware·Cisco ASA 등 장비 종류 식별 |
 | **AhnLab 제품 설치 현황** | 트래픽만으로 단말별 제품 확인. 활동 단말 중 41\~83%(측정 구간별). **MDS Agent 설치 신호 추가**(#95): 단말 → MDS 장비 에이전트 포트(8290·8291·8293·50007·50502/tcp, 고객 확인) 연결 |
@@ -61,9 +61,9 @@
 
 | 영역 | 내용 |
 |---|---|
-| 센서 신호 (프로토콜 15종 + 연결 정보) | DHCP, ARP·연결 L2, Kerberos, NTLM, CLDAP Netlogon, NBNS/LLMNR/mDNS, DNS 응답, DNS 동적 업데이트, SMB(OS·서버 이름·클라이언트 GUID), RDP, HTTP(OS·소프트웨어·AhnLab 제품·서버 이름), TLS(SNI·인증서), SSH(배너·호스트 키), syslog(장비 이름·종류), 서비스, AhnLab MDS Agent(에이전트 포트 연결) |
+| 센서 신호 (프로토콜 21종 + 연결 정보) | DHCP, ARP·연결 L2, Kerberos(AS-REQ, 서비스 티켓의 서버 이름·realm), NTLM, CLDAP Netlogon, NBNS/LLMNR/mDNS, DNS 응답, DNS 동적 업데이트, SMB(OS·서버 이름·클라이언트 GUID·원문 OS 문자열), RDP, HTTP(OS·소프트웨어·기기 형태·AhnLab 제품·서버 이름·Server 헤더·인증 realm), TLS(SNI·인증서 주체·발급자), SSH(배너·호스트 키), syslog(장비 이름·종류), SNMP(장비 이름·설명), 서비스 배너(SIP·FTP·SMTP·POP3·MySQL), TCP SYN 지문, 서비스, AhnLab MDS Agent(에이전트 포트 연결), 고객 정의 에이전트 정책(관리 서버 주소·도메인·User-Agent) |
 | 판정 | 키 우선순위 결합, IP 점유 구간 분할(DHCP 재할당), 공유(게이트웨이) MAC 제외, 다중 머신 계정 인증 제외, OS 버전·PC/서버 판정, 역할·장비 판정, 최근 로그온 사용자 |
-| 리포트 | PoC 리포트(claudtest2): 자산 목록, 식별 품질(전체·능동·수동, 시간별 곡선, 소요 시간, 구간별, 식별 내역), 캡처 품질 진단, 확인 필요 항목. nsm 통합 리포트: 탐지 공격자·대상의 자산 이름·역할·OS, 자산 표(MAC·OS 힌트·서비스·보안 제품·MDS Agent, 공유 MAC 라우터 추정) |
+| 리포트 | PoC 리포트(claudtest2): 자산 목록, 식별 품질(전체·능동·수동, 시간별 곡선, 소요 시간, 구간별, 식별 내역), 캡처 품질 진단, 확인 필요 항목. nsm 통합 리포트: 탐지 공격자·대상의 자산 이름·역할·OS, 자산 표(MAC·제조사, 장비 유형, 지문, 역할·서비스, 보안 제품·MDS Agent, 공유 MAC 라우터 추정, 프록시·중계 추정). 보강 DB: OUI(제조사), Recog(배너·인증서·SNMP 지문), TCP SYN 모양(OS 계열) |
 | 품질 | 자산 식별 btest 37개(Zeek 공식 테스트 trace 실제 사례 포함), 탐지 쪽 연동·리포트 테스트(`asset-id-integration`, `asset-id-ptr-classless`, `report-assets-*`, `report-mds-agent`), 리졸버 unittest 25개(claudtest2), Zeek 8.0.9·9.0.1 교차 검증 |
 
 ---
@@ -101,7 +101,7 @@
 
 ### 4.3 프로토콜별 검증 근거
 
-운영 리포트 9개와 eth5 pcap 2개의 출처별 신호 건수를 합산한 결과다. 운영 데이터가 없거나 적은 프로토콜은 Zeek 공식 테스트 pcap(실제 트래픽)과 합성 pcap으로 회귀 테스트를 갖추었다.
+운영 리포트 9개와 프록시 구간 캡처 2개의 출처별 신호 건수를 합산한 결과다. 운영 데이터가 없거나 적은 프로토콜은 Zeek 공식 테스트 pcap(실제 트래픽)과 합성 pcap으로 회귀 테스트를 갖추었다.
 
 | 프로토콜 | 운영 데이터 | 운영 신호 수 | 검증 근거 |
 |---|---|---|---|

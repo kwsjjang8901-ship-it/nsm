@@ -48,7 +48,7 @@ Zeek가 미러 트래픽을 프로토콜 이벤트로 바꾸면, nsm_rules 패�
 ```mermaid
 flowchart LR
     T["미러 트래픽"] --> Z["Zeek 9.x<br/>프로토콜 분석기"]
-    Z -->|"이벤트"| R["탐지 룰 01~24"]
+    Z -->|"이벤트"| R["탐지 룰 01~35"]
     CFG["설정<br/>nsm_config_fixed / custom"] --> R
     R --> N["notice.log<br/>탐지 원문"]
     R --> EV["evidence.log<br/>근거 행"]
@@ -69,7 +69,7 @@ flowchart LR
 | --- | --- | --- |
 | 로더 | `nsm_rules/__load__.zeek` | 모든 구성 요소를 정해진 순서로 로드(7.1절) |
 | 공통 정의 | `detections/main.zeek` | 탐지 유형(notice) 목록, 공통 파라미터·함수, 킬체인 단계명 |
-| 탐지 룰 | `detections/01~24_*.zeek`, `web_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14, C2·AI 07·09·24·30·33 공용) |
+| 탐지 룰 | `detections/01~35_*.zeek`, `web_common.zeek`, `ai_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14, C2·AI 07·09·24·30·33 공용) |
 | 근거·요약 | `evidence_log.zeek`, `detection_log.zeek`, `attack_mapping.zeek` | 근거 기록, 탐지 요약, ATT&CK 매핑 |
 | 상관·묶기 | `correlation_killchain.zeek`, `notice_aggregation.zeek` | 킬체인 상관, 중복 묶기 |
 | 설정 | `nsm_config_fixed.zeek`, `nsm_config_custom.zeek`, `intel_ja3.zeek` | 운영 기본값, 고객별 값, JA3 목록(7장) |

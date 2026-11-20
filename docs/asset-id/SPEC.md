@@ -420,7 +420,7 @@
 
 - 표시 이름: 자기 신고 호스트명 → 없으면 `dns_name` 단축명 + `(dns)` 표시(식별 키 아님)
 - NBNS `<00>` 이름이 도메인/워크그룹 이름과 같으면 호스트명 제외
-- 도메인 대표값: NetBIOS 형식과 DNS 형식이 섞이면(`ahnbang`, `ahnbang.ahnlab.com`) DNS 형식 선택
+- 도메인 대표값: NetBIOS 형식과 DNS 형식이 섞이면(`corp`, `corp.example.com`) DNS 형식 선택
 
 ### 4.4 OS 판정
 
