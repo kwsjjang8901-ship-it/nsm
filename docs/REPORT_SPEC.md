@@ -224,6 +224,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 
 | 열 | 내용 |
 | --- | --- |
+| 장비 유형 | 자산 식별 SPEC 4.12 규칙의 유형(네트워크 장비·프린터·모바일·PC(노트북·데스크톱)·서버 등). 마우스를 올리면 근거·신뢰도, 신뢰도 낮음은 기울임. 자산 절 아래에 유형별 개수 |
 | 제조사(MAC) | OUI 목록의 제조사. 로컬 관리 비트가 켜진 MAC은 "로컬·랜덤 MAC". 라우터 공유 MAC(IPv4 2개 이상)에는 붙이지 않음 |
 | 지문(제품·장비) | 프록시·중계 추정 IP(서로 다른 HTTP Server 값 3개 이상)는 맨 앞에 "프록시·중계 추정" 표시, 이때 HTTP로 얻은 OS는 OS 칸에 쓰지 않음. Recog 결과(제조사·제품·버전 · OS [장비 종류], 제조사가 제품명에 들어 있거나 다른 부분에 포함된 부분은 한 번만). 칩에 마우스를 올리면 입력 출처(SSH 배너, HTTP Server, HTTP 인증 realm, SIP, FTP·SMTP·POP3 접속 인사, MySQL 버전, SNMP sysDescr, 인증서 주체 등) |
 | OS | 센서 OS 힌트. 없으면 지문 OS(`(지문(Recog))`), 그것도 없으면 TCP SYN 계열(`(TCP SYN 추정)`). 힌트가 있으면 TCP 계열을 아래 줄에 참고로 |
@@ -239,7 +240,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | `stories` | 스토리마다 시작 공격자(`seed`), 단계(탐지 번호), 확정 단계, 체인 ID, 레인, 같은 인프라(`infra`), 외부 대상 키(`ext_keys`), 확인이 필요한 내부 접속(`observed`), 평소 통신으로 뺀 수(`observed_skip`), 추정 첫 접속(`est_first`) |
 | `stage_order`, `coverage` | 단계 순서, 근거 연결률 |
 | `exceptions` | `nsm_exception.log` 행 그대로 |
-| `assets`, `asset_mode`, `mac_summary`, `asset_report` | 자산 표와 모드, 라우팅 뒤 구간 요약, 자산 리포트 링크. 자산 행의 보강 값: `vendor`, `mac_local`, `fp`(출처·내용), `fp_dev`, `tcp_os`, `tcp_basis`, `os_src`, `proxy_like` |
+| `assets`, `asset_mode`, `mac_summary`, `asset_report` | 자산 표와 모드, 라우팅 뒤 구간 요약, 자산 리포트 링크. 자산 행의 보강 값: `vendor`, `mac_local`, `fp`(출처·내용), `fp_dev`, `tcp_os`, `tcp_basis`, `os_src`, `proxy_like`, `dev_class`·`dev_basis`·`dev_conf`(장비 유형·근거·신뢰도) |
 | `enrich` | 보강 DB 상태: OUI 파일·항목 수·못 읽은 파일(`oui_empty`), Recog 폴더·지문 수·변환 실패 수, 프록시·중계 추정 IP 수(`proxy_like`) |
 | `signal_counts`, `signal_rows`, `signal_ips` | 자산 신호 종류별 건수, 행·IP 수 |
 | `meta`, `mgr`, `local`, `raw` | 선별 전송 로그별 바이트·행, Manager 전송 로그(탐지 요약·근거·예외·자산 신호), 센서 로컬, `-k` 원본 |
@@ -329,6 +330,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-assets-routed` | 라우팅 뒤 구간을 표 위에 한 번만 설명하고 행은 `(라우터)` |
 | `rules/report-mds-agent` | 보안 제품 열의 MDS Agent, 장비 종류 |
 | `rules/report-asset-banners` | 서비스 배너(HTTP 인증 realm, SIP, FTP·SMTP·POP3, MySQL)를 Recog 형식 지문과 맞춤. Negotiate 토큰·프록시 응답은 지문 없음 |
+| `rules/report-device-class` | 장비 유형: 스마트폰·태블릿·모바일(UA), PC 또는 모바일(Apple 연결 확인), PC, 노트북(LAPTOP-·MacBook)·데스크톱(DESKTOP-), 서버(Windows Server), 서버(추정, OS 모르는 웹 서버) |
 | `rules/report-proxy-target` | 프록시 경유 유출 탐지의 대상: CONNECT를 본 연결은 실제 목적지, 못 본 연결은 "목적지 확인 안 됨". 프록시는 관련 탐지 수·스토리 레인에서 중계 장비로 |
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |

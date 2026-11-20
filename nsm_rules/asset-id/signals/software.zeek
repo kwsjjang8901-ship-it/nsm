@@ -34,8 +34,11 @@ function ua_os(ua: string): string
 		}
 		}
 
-	if ( /iPhone|iPad/ in ua )
+	if ( /iPhone|iPad|iPod/ in ua )
 		return "ios";
+	# Apple 기기(iOS·macOS)가 Wi-Fi 에 붙을 때 보내는 연결 확인(captive.apple.com, 평문 HTTP)
+	if ( /^CaptiveNetworkSupport/ in ua )
+		return "apple";
 	if ( /Android [0-9]+/ in ua )
 		{
 		m = find_all_ordered(ua, /Android [0-9]+/);
@@ -53,6 +56,24 @@ function ua_os(ua: string): string
 	     /^(Microsoft NCSI|WinHttp-Autoproxy-Service)/ in ua )
 		return "windows";
 
+	return "";
+	}
+
+## User-Agent 에서 기기 형태. phone(스마트폰), tablet(태블릿), mobile(둘 중 무엇인지 모름), 그 밖은 빈 문자열.
+## 안드로이드 브라우저는 폰이면 "Mobile" 을 붙이고 태블릿이면 안 붙인다. 앱(Dalvik·okhttp 등)은 이 표시가 없어 mobile.
+## iPadOS 13 이후 Safari 는 기본으로 Mac UA 를 써서 iPad 가 macOS 로 보일 수 있다.
+function ua_form(ua: string): string
+	{
+	if ( /iPad/ in ua )
+		return "tablet";
+	if ( /iPhone|iPod/ in ua )
+		return "phone";
+	if ( /Android/ in ua )
+		{
+		if ( /^Mozilla\// in ua )
+			return /Mobile/ in ua ? "phone" : "tablet";
+		return "mobile";
+		}
 	return "";
 	}
 
@@ -121,6 +142,7 @@ event http_header(c: connection, is_orig: bool, original_name: string, name: str
 		return;
 
 	emit(ip, OS_HINT, ua_os(value), "http_ua", 50, c$uid);
+	emit(ip, FORM_FACTOR, ua_form(value), "http_ua", 50, c$uid);
 	emit(ip, SOFTWARE, ua_product(value), "http_ua", 50, c$uid);
 	}
 

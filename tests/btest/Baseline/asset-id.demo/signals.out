@@ -125,3 +125,4 @@
 10.10.0.120	mac	02:1a:11:fe:dc:ba	conn	40
 10.10.0.120	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.0.120	os_hint	android 14	http_ua	50
+10.10.0.120	form_factor	phone	http_ua	50
