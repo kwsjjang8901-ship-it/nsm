@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 127개(자산 식별·선별 전송 포함), 합성 pcap 62개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 128개(자산 식별·선별 전송 포함), 합성 pcap 62개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -835,6 +835,7 @@ DNS 터널링과 같은 방식으로 데이터를 서브도메인에 실어 내�
 - 집계·억제: 연결 종료 시 단건. (출발지, 목적지) 단위 1시간 억제.
 - 제외·오탐 통제: 내부 → 외부(또는 프록시 경유)만. 프록시가 출발지인 연결(프록시 → 인터넷)은 같은 전송을 PC 쪽에서 보므로 뺍니다(`exfil_skip_proxy_source`). 연결이 끝나야 판정하므로 장기 연결은 14번이 보완합니다. 백업·동기화처럼 허용한 대용량 전송은 예외 파일(5.4절)로 뺍니다.
 - 근거: 전송량(MB), 서비스, 목적지 이름(`host=`), 프록시(`via_proxy=주소:포트`), uid(`conn.log`와 바로 조인).
+- 프록시 경유일 때 notice `dst`는 프록시 IP입니다(주소 타입이라 이름을 넣을 수 없음). Manager·리포트는 이 대상을 피해 장비가 아니라 중계 장비로 보여 주고("프록시 경유 → `host=` 이름"), 자산 관련 탐지·같은 인프라 판단에서 뺍니다. 연결이 센서 시작·캡처 시작 전부터 열려 있어 CONNECT를 못 본 연결은 목적지를 알 수 없어 "목적지 확인 안 됨"으로 표시합니다(실시간 센서에서는 드묾, pcap 분석에서는 캡처 경계 때문에 생김).
 
 ###### 명시적 프록시 인식 (`proxy_common.zeek`, 10·12·14 공용)
 
@@ -1634,7 +1635,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 127개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 82개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 36개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 128개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 83개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 36개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
