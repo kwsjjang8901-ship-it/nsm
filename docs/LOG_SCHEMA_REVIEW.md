@@ -227,7 +227,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | N2 | **계정 표기 통일** | 같은 사람이 세 가지로 나옴: Kerberos 자산 신호 `realm\이름`, NTLM `도메인\이름`(NetBIOS), 근거 `이름@realm`(UPN) | 원문은 두고 `user_name`(소문자 이름)·`user_domain`(원래 표기)·`user_domain_type`(`netbios`·`dns`)으로 나눠 씀. NetBIOS ↔ DNS 도메인 대응은 Manager가 디렉터리로(센서는 관측한 도메인 쌍을 자산 신호 `domain`으로 이미 남김) | P1 |
 | N3 | **탐지 단위 목적지 이름** | 근거 `detail`의 `host=`·`sni=`(E1에서 근거 필드로 제안) | E1에 더해 `nsm_detection`에도 `dst_names`(배열). 피싱 URL 메일 → 같은 도메인 접속(C-02)처럼 도메인으로 묶는 상관에 씀 | P1 |
 | N4 | **중계 장비 표시** | 프록시 경유 탐지의 `victims`에 프록시 IP가 들어가고, 프록시라는 표시는 근거 `detail`의 `via_proxy=`에만 있음 | `nsm_detection`에 `relays`(배열: 프록시 `주소:포트`). Manager는 `victims`에서 이 주소를 엔티티로 쓰지 않음(모든 PC가 한 스토리로 묶이는 것을 막음). 센서가 배운 프록시는 자산 신호 `device=proxy`로도 남김 | P1 |
-| N5 | **연결 식별자 `community_id`** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미) | 근거에 `community_id` 추가(Zeek 내장 Community ID). 같은 연결을 보는 다른 장비(MDS 네트워크 장비, Suricata, 방화벽)와 연결 단위로 바로 조인 | P2 |
+| N5 | **연결 단위 조인 키** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미). **MDS는 Community ID가 없음**(2026-11-20 확인) | MDS와 NSM을 연결 단위로 이을 때는 `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)`로 맞춤. 이를 위해 근거에 `src_port`·`dst_port`를 필드로 둠(E1의 `dst_port`와 같은 값). `community_id`는 넣지 않고, [Suricata 연동](SURICATA_INTEGRATION_DESIGN.md)의 conn.log Community ID(경보 ↔ Zeek 연결 조인)에만 씀 | P2 |
 | N6 | **센서 지연** | 없음 | S1 상태 로그에 `capture_lag_s`(벽시계 - 패킷 시각). Manager가 "아직 안 온 이벤트"를 기다릴 시간을 정함 | P2 |
 | N7 | **상관 행의 구성 탐지 id** | 상관 행의 `evidence_ids`가 구성 단독 탐지의 id와 같다는 것이 코드상 규칙일 뿐 문서·필드에 없음 | `member_detection_ids` 필드 추가(또는 SRS에 규칙 명시). 통합 사건이 "이 NSM 상관은 이 단독 탐지들을 포함"을 알게 함 | P2 |
 | N8 | **ATT&CK 전술 id** | 단계는 `killchain_stages` 이름(`Command and Control`) | `tactics`(예: `TA0011`) 추가. 제품마다 단계 이름이 달라도 전술 id로 맞춤 | P3 |
@@ -240,7 +240,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | 1 | D1(`severity_id`)·D4(`rule`)·D5(id 충돌·`victim_count`)·N1(`accounts`)·N3(`dst_names`)·N4(`relays`): 탐지 요약에 필드 추가(하위 호환) |
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) |
 | 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 |
-| 4 | E1·E2: 근거 공통 필드, N5 `community_id` |
+| 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) |
 | 5 | M1·S1(+N6)·G1, X1 |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 |
 
@@ -249,5 +249,5 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | # | 질문 | 제안 |
 | --- | --- | --- |
 | Q5 | 계정을 센서에서 나눠 쓸지(N2), Manager에서 원문을 파싱할지 | 센서에서 나눔. 표기 규칙은 프로토콜을 아는 쪽이 정확함 |
-| Q6 | `community_id`를 넣을지(N5) | MDS 네트워크 장비가 Community ID를 남기면 넣음. 아니면 Suricata 연동 때 함께 |
+| Q6 | `community_id`를 넣을지(N5) | **결정(2026-11-20): 넣지 않음.** MDS에 Community ID가 없어 MDS ↔ NSM은 주소·포트·시각으로 맞춤. Community ID는 Suricata 연동에서만 |
 
