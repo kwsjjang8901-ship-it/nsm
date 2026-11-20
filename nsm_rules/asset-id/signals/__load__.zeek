@@ -12,3 +12,5 @@
 @load ./smb_guid
 @load ./mds_agent
 @load ./agent_policy
+@load ./snmp
+@load ./tcp_fp

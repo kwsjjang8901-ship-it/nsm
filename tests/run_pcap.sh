@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pcap 하나를 운영과 같은 설정으로 한 번 돌려 탐지·자산 식별·메타데이터 선별 전송 결과를 한 화면에 요약한다.
 #
-#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-k] <pcap | 디렉터리> ...
+#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-k] <pcap | 디렉터리> ...
 #
 #     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
 #       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
@@ -14,6 +14,9 @@
 #     -r DIR    자산 식별 PoC(claudtest2) 경로. 주면 asset_signal.log 로 리졸버를 돌려 DIR 출력에
 #               자산 리포트(report.html·report.txt·assets.csv)를 만든다(리졸버는 이 저장소에 없다).
 #     -z ARGS   zeek 에 넘길 추가 인자. 예) -z "AssetID::suppress_interval=30min"
+#     -u FILE   IEEE OUI 목록 CSV(MA-L·MA-M·MA-S, 여러 번 가능). 리포트 자산 표에 MAC 제조사를 붙인다.
+#     -g DIR    Recog 지문 xml 폴더(github.com/rapid7/recog 의 xml/). 배너·헤더로 제품·장비 종류를 붙인다.
+#               (-u·-g 는 Manager 후처리 시제품. DB 는 저장소에 넣지 않으며 라이선스는 docs/asset-id/SPEC.md 4.11)
 #     -k        Zeek 원본 로그를 모두 남긴다(conn·dns·http·ssl·files·weird 등, DIR/zeek/ 에 기본 이름으로).
 #               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
@@ -22,9 +25,9 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,22p' "$0"; exit 2; }
-OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=()
-while getopts "o:n:x:r:z:kh" opt; do
+usage() { sed -n '2,25p' "$0"; exit 2; }
+OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=()
+while getopts "o:n:x:r:z:u:g:kh" opt; do
     case $opt in
         o) OUT=$OPTARG ;;
         n) NETS=$OPTARG; PASS+=(-n "$OPTARG") ;;
@@ -32,6 +35,8 @@ while getopts "o:n:x:r:z:kh" opt; do
         r) RESOLVER_DIR=$OPTARG; PASS+=(-r "$(realpath "$OPTARG")") ;;
         z) ZARGS=$OPTARG; PASS+=(-z "$OPTARG") ;;
         k) KEEP_RAW=1; PASS+=(-k) ;;
+        u) ENRICH+=(--oui "$(realpath "$OPTARG")"); PASS+=(-u "$(realpath "$OPTARG")") ;;
+        g) ENRICH+=(--recog "$(realpath "$OPTARG")"); PASS+=(-g "$(realpath "$OPTARG")") ;;
         *) usage ;;
     esac
 done
@@ -255,7 +260,7 @@ fi
 echo
 echo "[3/3] 통합 리포트"
 REPORT="$OUT/${NAME}_report.html"
-python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} | sed 's/^/      /'
+python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} ${ENRICH[@]+"${ENRICH[@]}"} | sed 's/^/      /'
 echo
 echo "결과: $OUT"
 echo "  - $(basename "$REPORT")    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"

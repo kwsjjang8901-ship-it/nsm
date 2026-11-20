@@ -17,16 +17,29 @@
 10.30.2.10	dns_name	update.example	http	50
 10.30.2.10	dns_name	www.msftconnecttest.com	http	50
 10.30.2.10	service	tcp/80	service	90
+10.30.2.10	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.11	security_agent	ahnlab:V3ES90ASD/5.6.0.55	ahnlab	80
+10.30.3.11	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.12	security_agent	ahnlab:EDRCLIENT/5.6.0.55	ahnlab	80
+10.30.3.12	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.13	security_agent	ahnlab:MeDCore	ahnlab	80
+10.30.3.13	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.14	os_hint	linux	http_ua	50
 10.30.3.14	software	ua:git/2.52.0	http_ua	50
+10.30.3.14	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.15	os_hint	windows	http_ua	50
 10.30.3.15	software	ua:Microsoft NCSI	http_ua	50
+10.30.3.15	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.3.16	os_hint	windows 10/11	http_ua	50
+10.30.3.16	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.4.10	device	ahnlab-mds	x509	70
 10.30.4.10	service	tcp/8006/ssl	service	90
+10.30.4.10	software	x509_issuer:O=AhnLab\\, Inc.,CN=AhnLab MDS	x509	60
+10.30.4.10	software	x509_subject:O=AhnLab\\, Inc.,CN=AhnLab MDS	x509	60
+10.30.4.10	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.30.4.11	device	vmware	x509	70
 10.30.4.11	dns_name	vcsa01.lab.corp	x509	50
 10.30.4.11	service	tcp/443	service	90
+10.30.4.11	software	x509_issuer:O=VMware,CN=10.30.4.11	x509	60
+10.30.4.11	software	x509_subject:O=VMware,CN=10.30.4.11	x509	60
+10.30.4.11	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30

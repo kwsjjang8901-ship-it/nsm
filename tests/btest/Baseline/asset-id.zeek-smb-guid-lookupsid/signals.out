@@ -4,6 +4,8 @@
 192.168.156.10	hostname	win-e6nbm71rful	ntlm	85
 192.168.156.10	os_hint	windows nt 10.0 build 20348	ntlm	80
 192.168.156.10	service	tcp/445	service	90
+192.168.156.10	tcp_fp	synack ittl=128 hops=0 win=65535 ws=8 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
 192.168.156.146	domain	timador	ntlm	60
 192.168.156.146	smb_client_guid	67685a5a-6943-6a63-706d-416b666e7657	smb	70
+192.168.156.146	tcp_fp	syn ittl=64 hops=0 win=64240 ws=9 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
 192.168.156.146	user_account	timador\\administrator	ntlm	70

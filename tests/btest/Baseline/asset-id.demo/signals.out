@@ -43,6 +43,8 @@
 10.10.0.120	domain	corp.local	dhcp	70
 10.10.0.120	mac	00:21:cc:01:02:03	arp	85
 10.10.0.101	user_account	corp.local\\kim.hr	kerberos	70
+10.10.0.101	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
+10.10.1.10	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.1.10	service	tcp/445	service	90
 10.10.1.10	service	tcp/389	service	90
 10.10.1.10	service	tcp/88	service	90
@@ -52,28 +54,43 @@
 10.10.1.10	service	udp/53	service	90
 10.10.0.101	os_hint	windows 10/11	http_ua	50
 10.10.2.50	mac	00:1b:a9:77:88:99	conn	40
+10.10.2.50	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.2.50	service	tcp/9100	service	90
 10.10.1.20	mac	52:54:00:12:34:56	conn	40
+10.10.1.20	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.1.20	service	tcp/443	service	90
 10.10.1.20	service	tcp/22	service	90
 10.10.0.101	software	ssh:SSH-2.0-PuTTY_Release_0.81	ssh	70
 10.10.1.20	software	ssh:SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10	ssh	70
 10.10.1.20	os_hint	linux(ubuntu)	ssh	60
+10.10.0.102	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.0.102	os_hint	macos	http_ua	50
+10.10.0.150	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.0.150	os_hint	windows 10/11	http_ua	50
 10.10.0.120	mac	00:21:cc:01:02:03	conn	40
+10.10.0.120	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.0.120	os_hint	windows 10/11	http_ua	50
 10.20.5.11	mac	00:00:5e:00:01:01	conn	40
+10.20.5.11	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.20.5.12	mac	00:00:5e:00:01:01	conn	40
+10.20.5.12	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.20.5.13	mac	00:00:5e:00:01:01	conn	40
+10.20.5.13	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.20.5.14	mac	00:00:5e:00:01:01	conn	40
+10.20.5.14	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.20.5.15	mac	00:00:5e:00:01:01	conn	40
+10.20.5.15	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.1.30	mac	00:50:56:aa:30:30	conn	40
+10.10.1.30	tcp_fp	synack ittl=128 hops=0 win=64240 ws=0 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
 10.10.1.30	service	tcp/445	service	90
 10.10.1.30	service	tcp/139	service	90
 10.20.5.13	os_hint	mac os x 10.10	smb	70
+10.20.5.13	software	smb_os:Mac OS X 10.10	smb	70
+10.20.5.13	software	smb_lm:SMBFS 3.0.0	smb	70
 10.10.1.30	hostname	test-f7dfbc3fe9	ntlm	85
 10.10.1.30	os_hint	windows nt 5.1 build 2600	ntlm	80
+10.10.1.30	software	smb_os:Windows 5.1	smb	70
+10.10.1.30	software	smb_lm:Windows 2000 LAN Manager	smb	70
 10.20.5.13	hostname	babybook	ntlm	85
 10.20.5.13	user_account	test-f7dfbc3fe9\\test	ntlm	70
 10.20.5.13	domain	test-f7dfbc3fe9	ntlm	60
@@ -91,6 +108,7 @@
 10.20.5.12	fqdn	branch-pc12.corp.local	ldap	80
 10.20.5.12	machine_account	corp.local\\branch-pc12$	ldap	75
 10.10.1.40	mac	00:50:56:aa:40:40	conn	40
+10.10.1.40	tcp_fp	synack ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.1.30	service	tcp/445	service	90
 10.10.1.40	service	tcp/3128/http	service	90
 10.10.1.40	service	tcp/3128/ssl	service	90
@@ -105,4 +123,5 @@
 10.10.1.10	service	udp/67	dhcp	90
 10.10.0.120	mac	02:1a:11:fe:dc:ba	arp	85
 10.10.0.120	mac	02:1a:11:fe:dc:ba	conn	40
+10.10.0.120	tcp_fp	syn ittl=64 hops=0 win=8192 ws=- mss=- sack=0 ts=0 df=0	tcp_fp	30
 10.10.0.120	os_hint	android 14	http_ua	50

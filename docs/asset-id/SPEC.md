@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.4 (2026-11-19) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.5 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -54,7 +54,8 @@
 | | `service` | `tcp/445`, `tcp/8081/http` | 역할 추정 |
 | | `device` | `vmware-esxi`, `ahnlab-mds` | 장비·제품 역할(MDS 장비는 인증서 또는 에이전트 통신으로) |
 | | `dns_name` | `portal.corp.local` | 표시 이름(이름 없는 서버) |
-| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0` | 소프트웨어 정보 |
+| | `software` | `ssh:SSH-2.0-OpenSSH_8.9p1`, `ua:git/2.52.0`, `http_server:Microsoft-IIS/10.0`, `smb_os:Windows 5.1`, `snmp_sysdescr:…`, `x509_subject:…` | 소프트웨어 정보, 지문 대조 입력(4.11) |
+| | `tcp_fp` | `syn ittl=128 hops=0 win=64240 ws=8 mss=1460 sack=1 ts=0 df=1` | TCP SYN 모양(OS 계열 추정, 3.19) |
 | | `security_agent` | `ahnlab:V3ES90ASD/5.6.0.55`, `ahnlab:mds-agent`, `policy:edr-cloud` | AhnLab 제품 설치 여부(통신으로 판단), 고객 정의 에이전트 정책(3.17) |
 | | `user_account` | `corp\kim` | 최근 로그온 사용자 |
 | **검증 중 후보** | `smb_client_guid` | `a1eefcb2-2495-6541-893f-bf5b2c69acd4` | 참고 정보, 공유·변경 통계 |
@@ -82,14 +83,16 @@
 | NBNS / LLMNR / mDNS | `names.zeek` | hostname, domain(워크그룹) | 단말 L2 구간 | 8/9 |
 | DNS 응답 | `names.zeek` | dns_name | DNS 서버 앞 | 8/9 |
 | DNS 동적 업데이트 | `names.zeek` | hostname, fqdn, domain | DC(DNS) 앞 | **9** |
-| SMB | `software.zeek`, `server_names.zeek`, `smb_guid.zeek` | OS(SMB1), 서버 이름, 클라이언트 GUID | 파일 서버·DC 앞 | 8/9 |
+| SMB | `software.zeek`, `server_names.zeek`, `smb_guid.zeek` | OS(SMB1, 클라이언트·서버 원문), 서버 이름, 클라이언트 GUID | 파일 서버·DC 앞 | 8/9 |
 | RDP | `software.zeek` | 클라이언트 hostname, 사용자 | RDP 서버 앞 | 8/9 |
 | HTTP | `software.zeek`, `server_names.zeek` | OS, 소프트웨어, AhnLab 제품, 서버 이름, 서버 소프트웨어·OS(Server 헤더) | 어디서나 (평문 HTTP) | 8/9 |
-| TLS | `server_names.zeek`, `x509.zeek` | 서버 이름, 장비·제품 | 어디서나 (인증서는 TLS 1.2 이하) | 8/9 |
+| TLS | `server_names.zeek`, `x509.zeek` | 서버 이름, 장비·제품, 인증서 주체·발급자 | 어디서나 (인증서는 TLS 1.2 이하) | 8/9 |
 | SSH | `software.zeek` | 소프트웨어, OS, 호스트 키 | 어디서나 | 8/9 (group18 키는 9) |
 | syslog | `syslog.zeek` | 장비 hostname, 장비 종류, 수집 서버 | 장비 → 수집 서버 경로 | UDP 8/9, TCP **9** |
 | 서비스(응답) | `services.zeek` | service | 양방향 미러 | 8/9 |
 | AhnLab MDS Agent | `mds_agent.zeek` | 보안 에이전트(MDS Agent), 장비(MDS) | 단말 → MDS 장비 경로 | 8/9 |
+| SNMP | `snmp.zeek` | 장비 이름, sysDescr·sysObjectID | NMS → 장비 경로 | 8/9 |
+| TCP SYN 지문 | `tcp_fp.zeek` | TCP SYN·SYN-ACK 모양 | 어디서나 | 8/9 |
 | 고객 정의 에이전트 정책 | `agent_policy.zeek` | 보안 에이전트(`policy:<id>`), 관리 서버 장비 | 단말 → 관리 서버 또는 인터넷·프록시 경로 | 8/9 |
 
 ### 3.2 DHCP (`dhcp`)
@@ -217,6 +220,7 @@
 | 항목 | 트리거 | 신호 | 대상 IP | 신뢰도 |
 |---|---|---|---|---|
 | SMB1 native OS | Session Setup AndX 요청 | `os_hint`, `domain`(primary domain) | 클라이언트 | 70 / 60 |
+| SMB1 native OS·LAN Manager 원문 | Session Setup AndX 요청·응답 | `software` `smb_os:<원문>`, `smb_lm:<원문>`(64자) | 클라이언트·서버 | 70 |
 | 서버 이름 | SMB1/2 Tree Connect 경로 `\\server\share` | `dns_name` (IP 형태 제외) | 서버 | 50 |
 | SMB2 클라이언트 GUID | NEGOTIATE 요청(연결 첫 메시지)의 ClientGuid | `smb_client_guid` | 클라이언트 | 70 |
 
@@ -250,6 +254,7 @@
 |---|---|---|---|---|
 | SNI | ClientHello server_name | `dns_name` | 서버 | 50 |
 | 인증서 이름 | 서버 leaf 인증서 CN·SAN DNS (와일드카드·IP·localhost·공백 제외) | `dns_name` | 서버 | 50 |
+| 인증서 주체·발급자 원문 | 서버 leaf 인증서 | `software` `x509_subject:<DN>`, `x509_issuer:<DN>`(160자, Zeek 출력 순서) | 서버 | 60 |
 | 인증서 제품·장비 | 주체/발급자: `CN=AhnLab MDS`, `CN=AhnLab EPP`, VMware, Fortinet, Palo Alto, iDRAC, iLO, Synology | `device` | 서버 | 70 |
 
 - **예외:** 프록시 경유(CONNECT) 연결 제외. 서버 이름 신호(SMB·HTTP·TLS·x509·Kerberos 합계)는 IP당 `max_server_names`(20)개까지
@@ -338,6 +343,28 @@
 - **예외:** 거부·무응답 연결은 세지 않음. 프록시를 거치면 응답측이 프록시이므로 도메인 정책에 `server`를 적으면 맞지 않음(도메인 정책은 보통 `server` 없이). User-Agent는 평문 HTTP에서만 보임. UDP만 쓰는 에이전트는 연결 정책으로 잡히지 않음
 - **활용:** 자산별 에이전트 확인. **신호가 없다고 미설치가 아님** → 미설치 후보 판정은 Manager가 4.10절 규칙으로 함
 
+### 3.18 SNMP (`snmp`)
+
+- **관측 조건:** 관리 서버(NMS)가 장비에 보낸 SNMP 질의와 장비의 응답(161/udp). NMS의 수집 경로가 미러에 걸려야 함. SNMPv3 암호화 응답은 보이지 않음
+- **트리거:** `snmp_response`. 응답한 쪽(장비) IP에 기록
+
+  | OID | 신호 | 신뢰도 |
+  |---|---|---|
+  | sysDescr `1.3.6.1.2.1.1.1.0` | `software` `snmp_sysdescr:<값>`(제어 문자는 공백, 200자) | 70 |
+  | sysObjectID `1.3.6.1.2.1.1.2.0` | `software` `snmp_sysobjid:<OID>`(제조사 번호) | 70 |
+  | sysName `1.3.6.1.2.1.1.5.0` | `hostname`(점이 있으면 `fqdn`도) | 70 |
+- **예외:** 커뮤니티 문자열은 기록하지 않음. 트랩은 보지 않음
+- **활용:** 네트워크 장비·프린터·UPS의 이름과 모델. sysDescr·sysObjectID는 지문 대조(4.11 Recog `snmp_sysdescr`·`snmp_sysobjid`) 입력
+
+### 3.19 TCP SYN 지문 (`tcp_fp`)
+
+- **관측 조건:** 연결을 여는 SYN(클라이언트)과 SYN-ACK(서버). 어느 구간이든 보임
+- **트리거:** `connection_SYN_packet`. IP·방향(syn·synack)마다 `suppress_interval`(1시간)에 첫 패킷 한 번
+- **추출 → 신호:** `tcp_fp`(30) `"<syn|synack> ittl=<추정 초기 TTL> hops=<거리> win=<윈도> ws=<스케일|-> mss=<MSS|-> sack=<0|1> ts=<0|1> df=<0|1>"`. 초기 TTL은 관측 TTL 이상인 32·64·128·255 중 가장 작은 값
+  - 예: `syn ittl=128 hops=0 win=64240 ws=8 mss=1460 sack=1 ts=0 df=1`(Windows 10/11), `synack ittl=64 hops=0 win=65160 ws=7 mss=1460 sack=1 ts=1 df=1`(Linux)
+- **한계:** Zeek가 주는 값에는 TCP 옵션 순서·세부 특이점이 없어 p0f 지문을 그대로 맞출 수 없음(계열 수준). NAT·프록시 뒤 장비는 마지막 장비의 값, 튜닝된 서버·가상 머신은 틀릴 수 있음. SYN마다 이벤트가 생기므로 운영 부하는 실측 필요(`enable_tcp_fp`로 끔)
+- **활용:** OS 근거가 없는 자산의 OS 계열(4.4, 4.11). 식별 키가 아님
+
 ---
 
 ## 4. 판정 스펙 (`tools/asset_resolver.py`)
@@ -370,7 +397,7 @@
 
 ### 4.4 OS 판정
 
-- 출처 우선순위: ntlm > smb > ssh > http_ua > dhcp. `http_server`(서버의 HTTP Server 헤더, 0.3에서 추가)는 리졸버(claudtest2) 우선순위에 아직 없다. nsm 통합 리포트는 신뢰도가 높은 값을 고르므로 다른 출처가 있으면 그것이 쓰인다
+- 출처 우선순위: ntlm > smb > ssh > http_ua > dhcp. 이 근거가 하나도 없으면 지문(Recog) OS, 그다음 TCP SYN 계열(`tcp_fp`)로 채우고 출처를 표시한다(4.11). `http_server`(서버의 HTTP Server 헤더, 0.3에서 추가)는 리졸버(claudtest2) 우선순위에 아직 없다. nsm 통합 리포트는 신뢰도가 높은 값을 고르므로 다른 출처가 있으면 그것이 쓰인다
 - NTLM 빌드 번호 → 버전: Windows 10(1507\~22H2), Windows 11(21H2\~25H2), Server 2016/2019/2022/2025. 표에 없는 빌드는 22000 이상이면 Windows 11
 - PC/서버 공용 빌드(14393, 17763, 26100) 구분
   - 서버: 서버 역할(DC·DNS·DHCP·웹·DB·메일·프록시)이 있거나, 호스트명이 Windows Server 기본 이름(`WIN-` + 11자)
@@ -434,6 +461,19 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 - 대역 조건이 없으면 측정 구간 때문에 대역 전체가 "미설치"로 보이는 오판이 납니다(운영 측정에서 미러 위치에 따라 결과가 크게 달랐던 것과 같은 이유).
 - 정확한 기준은 각 제품 관리 콘솔의 에이전트 목록입니다. 목록을 받을 수 있으면 "콘솔에 있는데 통신 없음", "통신은 있는데 콘솔에 없음"까지 나눕니다(MDS Agent 목록 대조와 같은 작업).
 
+### 4.11 지문 DB 보강 (Manager 후처리, PoC는 통합 리포트)
+
+센서 신호를 외부 지문 DB로 해석해 제조사·제품·장비 종류·OS를 더합니다. 센서(Zeek)에서는 대조하지 않습니다. PoC는 통합 리포트(`tests/report_pcap.py`, `tests/asset_enrich.py`)가 Manager 역할을 대신합니다. DB는 저장소에 넣지 않고 실행 때 경로로 줍니다(`run_pcap.sh -u OUI.csv -g recog/xml`).
+
+| DB | 입력 신호 | 결과 | 규칙 |
+|---|---|---|---|
+| IEEE OUI 목록 (MA-L·MA-M·MA-S CSV) | `mac` (ARP·DHCP 우선, 라우터 공유 MAC 제외) | 제조사 | 긴 접두어 먼저(MA-S > MA-M > MA-L). 로컬 관리 비트가 켜진 MAC은 제조사 대신 "로컬·랜덤 MAC"(모바일 랜덤 MAC·가상 머신·직접 정한 주소) |
+| Recog (Rapid7 `xml/*.xml`) | `software` `ssh:`(→ `ssh.banner`, `SSH-x.y-` 뗌), `http_server:`(→ `http_header.server`), `smb_os:`·`smb_lm:`(→ `smb.native_os`·`smb.native_lm`), `snmp_sysdescr:`·`snmp_sysobjid:`, `x509_subject:`·`x509_issuer:`(Zeek 순서와 CN 먼저 순서 둘 다), `dhcp_vendor_class` | 제조사·제품·버전·OS·장비 종류(`hw.device`) | 파일 순서대로 처음 맞는 지문 하나. Ruby 정규식을 Python으로 옮기지 못한 지문은 건너뛰고 수를 셈(2026-11 기준 4,336개 모두 변환) |
+| TCP SYN 계열 (DB 없음) | `tcp_fp` | OS 계열 | SYN 먼저. MSS 옵션이 없는 SYN은 판단 안 함(스캐너·직접 만든 패킷). 초기 TTL 128 → Windows, 255 → 네트워크 장비, 64 + 윈도 65535 + 타임스탬프 → macOS·iOS·BSD, 그 밖 64 → Linux·Unix, 32 → 구형·임베디드 |
+
+- **OS 칸 채우기:** 센서 OS 힌트(4.4)가 없을 때만 Recog OS, 그것도 없으면 TCP SYN 계열로 채우고 출처를 표시합니다.
+- **라이선스(제품 반영 전 법무 확인):** Recog은 BSD-2-Clause(출처 표기, Rapid7은 운영 제품 사용 전 연락 요청). IEEE OUI 목록은 공개 목록이며 이용 조건 확인 필요(Wireshark `manuf`는 GPL 배포물이라 쓰지 않음). p0f(LGPL-2.1) 지문 DB는 쓰지 않음.
+
 ---
 
 ## 5. 품질 지표 (리포트)
@@ -477,7 +517,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 | `asset_nets` | `{}` | 자산 대역 (`run_poc.sh -n`) |
 | `suppress_interval` | 1hr | 중복 억제 기간 |
 | `dhcp_xid_timeout` | 5min | DHCP 트랜잭션 보관 |
-| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent, agent_policy |
+| `enable_*` | T | 출처별 on/off: dhcp, arp, conn_mac, kerberos, ntlm, ldap, nbns, llmnr, mdns, dns, dns_update, server_names, http_server, rdp, smb, http_ua, ssh, services, agents, syslog, x509, ssh_host_key, smb_guid, mds_agent, agent_policy, snmp, tcp_fp |
 | `service_ports` | 주요 포트 | 포트만으로 서비스 인정 |
 | `ignore_service_ports` | 137,138,1900,5353,5355/udp | 거의 모든 단말이 응답하는 포트 |
 | `nested_analyzers` | ntlm, gssapi, krb, … | 다른 프로토콜 안에서 확인되는 분석기 |
@@ -497,6 +537,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 
 ## 8. 개인정보·보안 고려
 
+- SNMP 커뮤니티 문자열은 기록하지 않는다. 내부 서버 인증서 주체·발급자(회사·부서 이름이 들어 있을 수 있음)는 기록한다
 - 기록하지 않는 것: 인증 응답값(NTLM 해시 등), 비밀번호, syslog 본문, HTTP URL·쿼리 값(MeDCore 파라미터 포함), 프록시 경유 외부 사이트 이름
 - 기록하는 개인 정보: 사용자 계정 이름(로그온 사용자 표시용). Manager 연동 시 보관 기간·접근 권한을 SRS에서 정한다
 - 다중 머신 계정 인증(4.6)은 자산 판정 보호 장치이면서 탐지 관점의 이상 징후다
@@ -523,4 +564,5 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
+| 0.5 | 2026-11-20 | 지문 대조 입력 신호: SMB1 native OS·LM 원문(클라이언트·서버), 인증서 주체·발급자, SNMP(3.18), TCP SYN 지문(3.19). 지문 DB 보강 규칙(4.11: OUI, Recog, TCP SYN 계열)과 라이선스 메모 |
 | 0.4 | 2026-11-19 | 고객 정의 에이전트 정책(3.17, `agent_policy_file`, `asset_agent_policy.log`), Manager의 에이전트 미확인 판정 규칙(4.10) |

@@ -3,10 +3,12 @@
 141.142.192.39	service	tcp/22	service	90
 141.142.192.39	software	ssh:SSH-2.0-OpenSSH_4.3	ssh	70
 141.142.192.39	ssh_host_key	3d:78:7d:cb:f1:44:1a:4d:9e:62:af:5e:6a:3f:df:f3	ssh	80
+141.142.192.39	tcp_fp	synack ittl=128 hops=0 win=64240 ws=- mss=1460 sack=0 ts=0 df=0	tcp_fp	30
 172.16.238.1	hostname	tangent	mdns	70
 172.16.238.1	mac	00:50:56:c0:00:08	arp	85
 172.16.238.1	os_hint	macos	http_ua	50
 172.16.238.1	software	ssh:SSH-2.0-OpenSSH_5.2	ssh	70
+172.16.238.1	tcp_fp	syn ittl=64 hops=0 win=65535 ws=3 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
 172.16.238.131	mac	00:0c:29:bd:6f:01	arp	85
 172.16.238.131	os_hint	linux	http_ua	50
 172.16.238.131	os_hint	linux(ubuntu)	http_server	45
@@ -17,5 +19,7 @@
 172.16.238.131	software	http_server:Apache/2.2.17 (Ubuntu)	http_server	50
 172.16.238.131	software	ssh:SSH-2.0-OpenSSH_5.8p1 Debian-1ubuntu3	ssh	70
 172.16.238.131	ssh_host_key	c9:e7:26:eb:61:c3:c7:2a:e5:a9:a6:0c:ee:6e:71:5f	ssh	80
+172.16.238.131	tcp_fp	syn ittl=64 hops=0 win=14600 ws=6 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
+172.16.238.131	tcp_fp	synack ittl=64 hops=0 win=14480 ws=6 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
 172.16.238.2	mac	00:50:56:fd:dc:57	arp	85
 172.16.238.2	service	udp/53	service	90

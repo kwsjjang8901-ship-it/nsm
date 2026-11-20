@@ -4,6 +4,8 @@
 192.168.1.31	domain	vladg.net	kerberos	90
 192.168.1.31	user_account	vladg.net\\valid_client_principal	kerberos	70
 192.168.1.31	user_account	vladg.net\\enterprise_principal	kerberos	70
+192.168.1.31	tcp_fp	syn ittl=64 hops=0 win=65535 ws=5 mss=1460 sack=1 ts=1 df=1	tcp_fp	30
+192.168.1.32	tcp_fp	synack ittl=64 hops=0 win=9896 ws=7 mss=4960 sack=1 ts=1 df=1	tcp_fp	30
 192.168.1.32	service	tcp/88	service	90
 192.168.1.31	user_account	vladg.net\\invalid_client_principal	kerberos	70
 192.168.1.31	user_account	vladg.net\\expired_client_principal	kerberos	70
