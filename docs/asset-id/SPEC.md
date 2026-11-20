@@ -510,6 +510,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|---|
 | 1 | 프록시·중계 | 서로 다른 HTTP Server 값 3개 이상(4.11) | 보통 |
 | 2 | 네트워크 장비 | `device`(Cisco·Fortinet·Palo Alto·UTM), Recog 장비 종류(Router·Switch·Firewall·AP 등) | 높음 |
+| 2-1 | 네트워크 장비(추정) | TCP SYN 초기 TTL 255(네트워크 장비 계열)이고 SSH·웹 말고 다른 서버 포트 응답이 없음 | 낮음 |
 | 3 | 프린터 | Recog 장비 종류(Printer·Print Server·MFP), 또는 9100·515·631 응답 | 높음·보통 |
 | 4 | 보안 장비, 서버(가상화), 서버 관리 포트(BMC), NAS, 카메라·IoT, IP 전화기 | `device`(AhnLab MDS·EPP, VMware, iDRAC·iLO, Synology), Recog 장비 종류 | 높음 |
 | 5 | 모바일(스마트폰·태블릿), 모바일 | `form_factor`(3.11) → OS 힌트 `ios`·`android` → 호스트 이름(iPhone·iPad·Galaxy 등) | 높음 → 보통 |

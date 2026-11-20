@@ -329,6 +329,8 @@ def device_class(e, os_best="", roles=()):
         return "프록시·중계", "서로 다른 HTTP Server 값으로 응답", "보통"
     if devs & NET_DEVICES or any(w in fp_dev for w in NET_HW):
         return "네트워크 장비", "장비 종류 " + (", ".join(sorted(devs & NET_DEVICES)) or e.get("fp_dev")), "높음"
+    if e.get("tcp_os") == "네트워크 장비 계열" and not (svcs & SERVER_PORTS - {"tcp/22", "tcp/80", "tcp/443"}):
+        return "네트워크 장비(추정)", "TCP SYN 모양(초기 TTL 255)", "낮음"
     if "print" in fp_dev or "mfp" in fp_dev or svcs & {"tcp/9100", "tcp/515", "tcp/631"}:
         return "프린터", "지문 " + e.get("fp_dev") if fp_dev else "프린터 포트 응답(9100·515·631)", "높음" if fp_dev else "보통"
     if devs & {"ahnlab-mds", "ahnlab-epp"}:
