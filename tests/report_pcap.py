@@ -748,7 +748,8 @@ def collect(z, assets_path, args):
     oui = asset_enrich.Oui(args.oui or [])
     recog = asset_enrich.Recog(args.recog)
     enr = asset_enrich.enrich(sig, oui, recog, shared)
-    enrich_info = {"oui_files": oui.files, "oui_entries": len(oui.tab), "recog_dir": os.path.basename(os.path.normpath(args.recog)) if args.recog else "",
+    proxies = asset_enrich.proxy_like_ips(sig)
+    enrich_info = {"oui_files": oui.files, "oui_entries": len(oui.tab), "oui_empty": oui.empty, "proxy_like": len(proxies), "recog_dir": os.path.basename(os.path.normpath(args.recog)) if args.recog else "",
                    "recog_count": recog.count, "recog_bad": recog.bad}
 
     def add_enrich(row):
@@ -756,7 +757,7 @@ def collect(z, assets_path, args):
         if not e:
             return
         row.update({"vendor": e["vendor"], "mac_local": e["mac_local"] and bool(e["mac"]), "fp": e["fp"], "fp_dev": e["fp_dev"],
-                    "tcp_os": e["tcp_os"], "tcp_basis": e["tcp_basis"]})
+                    "tcp_os": e["tcp_os"], "tcp_basis": e["tcp_basis"], "proxy_like": e["proxy_like"]})
         if not row.get("os"):
             if e["fp_os"]:
                 row["os"], row["os_src"] = e["fp_os"], "지문(Recog)"
@@ -794,7 +795,8 @@ def collect(z, assets_path, args):
                 p["macs"][str(v)] += 1
                 if ":" not in str(s.get("ip")):
                     mac_ips[str(v)].add(s.get("ip"))
-            elif k == "os_hint" and v:
+            elif k == "os_hint" and v and not (s.get("source") == "http_server" and s.get("ip") in proxies):
+                # 프록시·중계 추정 IP 의 HTTP Server OS 힌트는 뒤쪽 서버 것이라 쓰지 않는다
                 p["os"][(int(s.get("confidence") or 0), str(v))] += 1
             elif k == "service" and v:
                 p["svc"][str(v)] += 1
@@ -1183,10 +1185,10 @@ table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}
  ['식별 키',a=>esc(a.key),a=>a.key],['IP',a=>a.ips.map(esc).join('<br>'),a=>a.ips.join()],['MAC',a=>a.macs.map(esc).join('<br>'),a=>a.macs.join()],
  ['OS',a=>esc(a.os)+(a.os_src?` <span class="mut" title="센서 OS 힌트가 없어 ${esc(a.os_src)}로 채움">(${esc(a.os_src)})</span>`:'')+(a.tcp_os&&!a.os_src&&a.os?`<div class="mut" title="${esc(a.tcp_basis)}">TCP: ${esc(a.tcp_os)}</div>`:''),a=>a.os],
  ['제조사(MAC)',a=>a.vendor?esc(a.vendor):a.mac_local?'<span class="chip" title="로컬 관리 비트가 켜진 MAC: 모바일 랜덤 MAC·가상 머신·직접 정한 주소">로컬·랜덤 MAC</span>':'',a=>a.vendor||(a.mac_local?'~':'')],
- ['지문(제품·장비)',a=>(a.fp||[]).map(f=>`<span class="chip" title="${esc(f.src)}">${esc(f.text)}</span>`).join(''),a=>(a.fp||[]).map(f=>f.text).join()],['보안 제품',a=>(a.agents||[]).map(g=>`<span class="chip">${esc(g.replace(/^ahnlab:/,'AhnLab '))}</span>`).join(''),a=>(a.agents||[]).join()],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 장비 종류·응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.devices||[]).concat(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
+ ['지문(제품·장비)',a=>(a.proxy_like?'<span class="chip sus" title="서로 다른 HTTP Server 값으로 응답: 투명 프록시·로드밸런서·NAT 뒤 여러 서버로 추정. HTTP로 얻은 OS는 쓰지 않음">프록시·중계 추정</span>':'')+(a.fp||[]).map(f=>`<span class="chip" title="${esc(f.src)}">${esc(f.text)}</span>`).join(''),a=>(a.fp||[]).map(f=>f.text).join()],['보안 제품',a=>(a.agents||[]).map(g=>`<span class="chip">${esc(g.replace(/^ahnlab:/,'AhnLab '))}</span>`).join(''),a=>(a.agents||[]).join()],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 장비 종류·응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.devices||[]).concat(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
 const ms=D.mac_summary,mdsN=D.assets.filter(a=>(a.agents||[]).includes('ahnlab:mds-agent')).length;
 document.getElementById('asmac').innerHTML=ms?`<b>MAC으로는 자산을 구분할 수 없는 캡처 지점입니다.</b> MAC이 관측된 IP ${ms.ips.toLocaleString('en-US')}개 중 ${ms.router_ips.toLocaleString('en-US')}개가 라우터로 보이는 MAC ${ms.router_macs}개를 나눠 씁니다(MAC은 모두 ${ms.macs}개). 센서가 라우팅을 거친 뒤 구간을 보고 있어 이 MAC은 PC가 아니라 라우터(L3 스위치) 것이며, 표에는 <i>(라우터)</i>로만 적었습니다. 자산 구분은 이름·OS 힌트·에이전트 같은 다른 신호로 합니다.`:'';
-const EI=D.enrich||{},einfo=`<div style="margin-top:4px">자산 정보 보강(Manager 후처리 시제품): 제조사는 ${EI.oui_entries?`IEEE OUI 목록 ${EI.oui_entries.toLocaleString('en-US')}개(${esc((EI.oui_files||[]).join(', '))})`:'OUI 목록 미지정(run_pcap.sh -u, 로컬·랜덤 MAC 여부만 표시)'}, 지문은 ${EI.recog_count?`Recog ${EI.recog_count.toLocaleString('en-US')}개${EI.recog_bad?` (Python 정규식으로 못 옮긴 ${EI.recog_bad}개 제외)`:''}`:'Recog 미지정(run_pcap.sh -g)'}, OS 칸이 비면 지문 OS나 TCP SYN 모양(초기 TTL·윈도·옵션, 계열 수준)으로 채웁니다. 라우터 공유 MAC에는 제조사를 붙이지 않습니다.</div>`;
+const EI=D.enrich||{},einfo=((EI.oui_empty||[]).length?`<div class="sus" style="margin-top:4px">OUI 파일에서 제조사를 한 줄도 읽지 못했습니다: ${esc(EI.oui_empty.join(', '))}. 접두어·제조사 열(IEEE: Assignment·Organization Name, maclookup: Mac Prefix·Vendor Name)이 있는 CSV인지 확인하세요.</div>`:'')+(EI.proxy_like?`<div style="margin-top:4px">서로 다른 HTTP Server 값으로 응답한 IP ${EI.proxy_like}개는 프록시·중계 장비로 보고 HTTP로 얻은 OS를 쓰지 않았습니다.</div>`:'')+`<div style="margin-top:4px">자산 정보 보강(Manager 후처리 시제품): 제조사는 ${EI.oui_entries?`IEEE OUI 목록 ${EI.oui_entries.toLocaleString('en-US')}개(${esc((EI.oui_files||[]).join(', '))})`:'OUI 목록 미지정(run_pcap.sh -u, 로컬·랜덤 MAC 여부만 표시)'}, 지문은 ${EI.recog_count?`Recog ${EI.recog_count.toLocaleString('en-US')}개${EI.recog_bad?` (Python 정규식으로 못 옮긴 ${EI.recog_bad}개 제외)`:''}`:'Recog 미지정(run_pcap.sh -g)'}, OS 칸이 비면 지문 OS나 TCP SYN 모양(초기 TTL·윈도·옵션, 계열 수준)으로 채웁니다. 라우터 공유 MAC에는 제조사를 붙이지 않습니다.</div>`;
 document.getElementById('asnote').innerHTML=einfo+(D.asset_mode==='resolver'
  ?`자산 판정은 claudtest2 리졸버 결과입니다. 근거 신호 타임라인·식별 품질은 ${D.asset_report?`<a href="${esc(D.asset_report)}">자산 리포트</a>`:'자산 리포트'}를 보세요.`
  :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 장비 종류와 응답한 서비스(기울임)를 보입니다. IPv4 2개가 같은 MAC이면 공유(이중화 VIP나 IP가 여러 개인 서버일 수 있음), 3개 이상이면 라우터(또는 라우터 뒤 주소)로 표시합니다. ${mdsN?`AhnLab MDS Agent 통신(에이전트 포트 연결)이 보인 IP는 ${mdsN}개입니다. 신호가 없다고 미설치는 아닙니다(경로·관측 시간). `:''}신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join(''));
@@ -1234,6 +1236,11 @@ def main():
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(PAGE.replace("__DATA__", blob))
     print(f"통합 리포트: {args.out} (탐지 {len(data['detections'])}건, 자산 {len(data['assets'])}개, 공격 스토리 {len(data['stories'])}개)")
+    ei = data.get("enrich") or {}
+    if ei.get("oui_empty"):
+        print(f"  경고: OUI 파일에서 제조사를 한 줄도 읽지 못함({', '.join(ei['oui_empty'])}). 접두어·제조사 열이 있는 CSV 인지 확인")
+    if ei.get("oui_files") or ei.get("recog_count"):
+        print(f"  자산 정보 보강: OUI {ei.get('oui_entries', 0)}개, Recog 지문 {ei.get('recog_count', 0)}개, 프록시·중계 추정 IP {ei.get('proxy_like', 0)}개")
     if data["coverage"]:
         # 주소·이름 원문 없이 숫자만(공유해도 되는 형태)
         print("  스토리 근거 연결률(탐지 종류: 건수 | 근거 계정 | 추정 근거 | 추정 계정 | 외부 이름 | 근거 uid)")

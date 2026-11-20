@@ -53,7 +53,7 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `-x FILE` | 없음 | 예외 파일(SRS 7.8절). `zeek/exceptions.tsv`로 복사해 `NSM::exception_file`로 넘김 |
 | `-r DIR` | 없음 | claudtest2 경로. 주면 리졸버로 자산을 판정해 리포트를 자산 단위로 만듦 |
 | `-z ARGS` | 없음 | zeek에 넘길 추가 인자(예: `-z "AssetID::suppress_interval=30min"`) |
-| `-u FILE` | 없음 | IEEE OUI 목록 CSV(MA-L·MA-M·MA-S, 여러 번 가능). 자산 표에 MAC 제조사 |
+| `-u FILE` | 없음 | OUI 목록 CSV(IEEE 원본 `oui.csv`·`mam.csv`·`oui36.csv` 또는 maclookup.app 내보내기, 여러 번 가능). 자산 표에 MAC 제조사. 한 줄도 못 읽은 파일은 화면 요약·리포트에 경고 |
 | `-g DIR` | 없음 | Recog 지문 xml 폴더(github.com/rapid7/recog 의 `xml/`). 자산 표에 제품·장비 종류 |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
@@ -225,7 +225,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 열 | 내용 |
 | --- | --- |
 | 제조사(MAC) | OUI 목록의 제조사. 로컬 관리 비트가 켜진 MAC은 "로컬·랜덤 MAC". 라우터 공유 MAC(IPv4 2개 이상)에는 붙이지 않음 |
-| 지문(제품·장비) | Recog 결과(제조사·제품·버전 · OS [장비 종류], 제조사가 제품명에 들어 있거나 다른 부분에 포함된 부분은 한 번만). 칩에 마우스를 올리면 입력 출처(SSH 배너, HTTP Server, HTTP 인증 realm, SIP, FTP·SMTP·POP3 접속 인사, MySQL 버전, SNMP sysDescr, 인증서 주체 등) |
+| 지문(제품·장비) | 프록시·중계 추정 IP(서로 다른 HTTP Server 값 3개 이상)는 맨 앞에 "프록시·중계 추정" 표시, 이때 HTTP로 얻은 OS는 OS 칸에 쓰지 않음. Recog 결과(제조사·제품·버전 · OS [장비 종류], 제조사가 제품명에 들어 있거나 다른 부분에 포함된 부분은 한 번만). 칩에 마우스를 올리면 입력 출처(SSH 배너, HTTP Server, HTTP 인증 realm, SIP, FTP·SMTP·POP3 접속 인사, MySQL 버전, SNMP sysDescr, 인증서 주체 등) |
 | OS | 센서 OS 힌트. 없으면 지문 OS(`(지문(Recog))`), 그것도 없으면 TCP SYN 계열(`(TCP SYN 추정)`). 힌트가 있으면 TCP 계열을 아래 줄에 참고로 |
 
 관련 탐지 수가 많은 순, 신호 수가 많은 순으로 정렬합니다. 대상이 외부 IP인 탐지는 자산 표에 나오지 않습니다.
@@ -239,8 +239,8 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | `stories` | 스토리마다 시작 공격자(`seed`), 단계(탐지 번호), 확정 단계, 체인 ID, 레인, 같은 인프라(`infra`), 외부 대상 키(`ext_keys`), 확인이 필요한 내부 접속(`observed`), 평소 통신으로 뺀 수(`observed_skip`), 추정 첫 접속(`est_first`) |
 | `stage_order`, `coverage` | 단계 순서, 근거 연결률 |
 | `exceptions` | `nsm_exception.log` 행 그대로 |
-| `assets`, `asset_mode`, `mac_summary`, `asset_report` | 자산 표와 모드, 라우팅 뒤 구간 요약, 자산 리포트 링크. 자산 행의 보강 값: `vendor`, `mac_local`, `fp`(출처·내용), `fp_dev`, `tcp_os`, `tcp_basis`, `os_src` |
-| `enrich` | 보강 DB 상태: OUI 파일·항목 수, Recog 폴더·지문 수·변환 실패 수 |
+| `assets`, `asset_mode`, `mac_summary`, `asset_report` | 자산 표와 모드, 라우팅 뒤 구간 요약, 자산 리포트 링크. 자산 행의 보강 값: `vendor`, `mac_local`, `fp`(출처·내용), `fp_dev`, `tcp_os`, `tcp_basis`, `os_src`, `proxy_like` |
+| `enrich` | 보강 DB 상태: OUI 파일·항목 수·못 읽은 파일(`oui_empty`), Recog 폴더·지문 수·변환 실패 수, 프록시·중계 추정 IP 수(`proxy_like`) |
 | `signal_counts`, `signal_rows`, `signal_ips` | 자산 신호 종류별 건수, 행·IP 수 |
 | `meta`, `mgr`, `local`, `raw` | 선별 전송 로그별 바이트·행, Manager 전송 로그(탐지 요약·근거·예외·자산 신호), 센서 로컬, `-k` 원본 |
 | `sensor` | 최대 캡처 손실(%), NSM 외 notice, Zeek 경고 |
@@ -329,7 +329,8 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-assets-routed` | 라우팅 뒤 구간을 표 위에 한 번만 설명하고 행은 `(라우터)` |
 | `rules/report-mds-agent` | 보안 제품 열의 MDS Agent, 장비 종류 |
 | `rules/report-asset-banners` | 서비스 배너(HTTP 인증 realm, SIP, FTP·SMTP·POP3, MySQL)를 Recog 형식 지문과 맞춤. Negotiate 토큰·프록시 응답은 지문 없음 |
-| `rules/report-asset-enrich` | 테스트용 OUI CSV·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
+| `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
+| `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
 

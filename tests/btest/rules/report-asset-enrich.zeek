@@ -3,6 +3,10 @@
 # @TEST-EXEC: python3 $PKG/../tests/report_pcap.py . -o report.html --oui oui.csv --recog . > /dev/null
 # @TEST-EXEC: python3 check.py report.html full
 # @TEST-EXEC: python3 $PKG/../tests/report_pcap.py . -o bare.html > /dev/null
+# maclookup.app 내보내기 형식도 읽고, 열 이름이 다른 CSV 는 0개로 경고한다
+# @TEST-EXEC: python3 $PKG/../tests/report_pcap.py . -o ml.html --oui maclookup.csv --oui wrong.csv > ml.out
+# @TEST-EXEC: grep -q '경고: OUI 파일에서 제조사를 한 줄도 읽지 못함(wrong.csv)' ml.out
+# @TEST-EXEC: python3 check.py ml.html maclookup
 # @TEST-EXEC: python3 check.py bare.html bare
 
 # @TEST-START-FILE check.py
@@ -15,6 +19,10 @@ assert a["10.0.56.30"]["os"] == "Windows 계열" and a["10.0.56.30"]["os_src"] =
 assert a["10.0.56.32"]["tcp_os"] == "macOS·iOS·BSD 계열", a["10.0.56.32"]
 assert a["10.0.56.33"]["os"] == "windows server 2016+" and "os_src" not in a["10.0.56.33"], a["10.0.56.33"]
 assert a["10.0.56.30"]["mac_local"] is True, a["10.0.56.30"]
+if sys.argv[2] == "maclookup":
+    assert d["enrich"]["oui_empty"] == ["wrong.csv"] and d["enrich"]["oui_entries"] == 2, d["enrich"]
+    assert a["10.0.56.20"]["vendor"] == "Example Networks Inc" and a["10.0.56.21"]["vendor"] == "Example Printers (MA-M)", (a["10.0.56.20"], a["10.0.56.21"])
+    print("ok"); sys.exit(0)
 if sys.argv[2] == "bare":
     assert d["enrich"]["recog_count"] == 0 and d["enrich"]["oui_entries"] == 0, d["enrich"]
     assert not a["10.0.56.20"].get("vendor") and not fp("10.0.56.20"), a["10.0.56.20"]
@@ -96,4 +104,15 @@ MA-M,3C2AF41,Example Printers (MA-M),Example Street
     <param pos="0" name="hw.device" value="NAS"/>
   </fingerprint>
 </fingerprints>
+# @TEST-END-FILE
+
+# @TEST-START-FILE maclookup.csv
+Mac Prefix,Vendor Name,Private,Block Type,Last Update
+00:1B:54,Example Networks Inc,false,MA-L,2026/01/01
+3C:2A:F4:1,Example Printers (MA-M),false,MA-M,2026/01/01
+# @TEST-END-FILE
+
+# @TEST-START-FILE wrong.csv
+prefix_hex;name
+001B54;Example Networks Inc
 # @TEST-END-FILE
