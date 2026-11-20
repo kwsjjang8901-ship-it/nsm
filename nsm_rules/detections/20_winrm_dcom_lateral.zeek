@@ -162,7 +162,7 @@ event connection_established(c: connection)
     if ( c$id$resp_p !in winrm_ports || ! lm_mgmt_target(c, WinRM_Lateral) )
         return;
     SumStats::observe("nsm.winrm_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
-    NSM::ev_observe("nsm.winrm_lm.ev", c$id$orig_h, c$id$resp_h, c$uid, lm_mgmt_epoch);
+    NSM::ev_observe("nsm.winrm_lm.ev", c$id$orig_h, c$id$resp_h, NSM::conn_ref(c), lm_mgmt_epoch);
     }
 
 event dce_rpc_bind(c: connection, fid: count, ctx_id: count, uuid: string, ver_major: count, ver_minor: count)
@@ -181,5 +181,5 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
     if ( ! lm_mgmt_target(c, DCOM_Lateral) )
         return;
     SumStats::observe("nsm.dcom_lm", [$host=c$id$orig_h], [$str=cat(c$id$resp_h)]);
-    NSM::ev_observe("nsm.dcom_lm.ev", c$id$orig_h, c$id$resp_h, c$uid, lm_mgmt_epoch);
+    NSM::ev_observe("nsm.dcom_lm.ev", c$id$orig_h, c$id$resp_h, NSM::conn_ref(c), lm_mgmt_epoch);
     }

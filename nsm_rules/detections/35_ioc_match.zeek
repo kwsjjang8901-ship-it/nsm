@@ -414,7 +414,7 @@ event Intel::match(s: Intel::Seen, items: set[Intel::Item])
         $technique="T1071",
         $src=src,
         $dst=c$id$resp_h,
-        $uid=c$uid,
+        $uid=NSM::conn_ref(c),
         $operation=cat("ioc_", kind),
         $detail=detail]);
 

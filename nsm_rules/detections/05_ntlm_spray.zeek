@@ -168,7 +168,7 @@ function ntlm_failed(c: connection, result: string)
     # 표본을 먼저 넣는다. 임계 판정은 고유 계정 스트림 observe 에서 즉시 일어날 수 있어(Zeek 8),
     #   순서가 반대면 임계를 넘긴 마지막 실패가 근거 표본에서 빠진다.
     SumStats::observe("nsm.ntlm_spray.sample", [$host=c$id$orig_h],
-                      [$str=cat(acct, "|", c$id$resp_h, "|", result, "|", c$uid)]);
+                      [$str=cat(acct, "|", c$id$resp_h, "|", result, "|", NSM::conn_ref(c))]);
     SumStats::observe("nsm.ntlm_spray", [$host=c$id$orig_h], [$str=acct]);
     }
 

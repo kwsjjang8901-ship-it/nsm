@@ -150,7 +150,7 @@ event connection_state_remove(c: connection) &priority=-10
         x$domain = n;
         if ( NSM::exception_drop_ctx(HTTP_Beaconing, x, T) )
             next;
-        beacon_submit(BeaconObs($orig=c$id$orig_h, $resp=c$id$resp_h, $ts=r$ts, $uid=c$uid,
+        beacon_submit(BeaconObs($orig=c$id$orig_h, $resp=c$id$resp_h, $ts=r$ts, $uid=NSM::conn_ref(c),
                                 $host=n, $dkey=n, $via=proxy_detail(c)));
         }
     }
@@ -176,7 +176,7 @@ event connection_state_remove(c: connection)
     if ( NSM::exception_drop_agg(HTTP_Beaconing, c) )
         return;
 
-    local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid, $dkey=cat(resp));
+    local obs = BeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=NSM::conn_ref(c), $dkey=cat(resp));
     if ( c$http?$host )
         obs$host = c$http$host;
     beacon_submit(obs);

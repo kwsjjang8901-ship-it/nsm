@@ -365,6 +365,27 @@ def _norm_host(h):
 
 
 _VIA_PROXY = re.compile(r"via_proxy=(\[[0-9a-fA-F:]+\]|[0-9a-fA-F.:]+?):(\d+)(?:\s|$)")
+_PROXY_FIELD = re.compile(r"^(\[[0-9a-fA-F:]+\]|[0-9a-fA-F.:]+?):(\d+)$")
+
+
+def ev_proxies(e):
+    """근거의 프록시 주소. 센서가 올린 proxy 필드가 있으면 그것을, 없으면(옛 로그) detail 의 via_proxy= 를 쓴다."""
+    if e.get("proxy"):
+        m = _PROXY_FIELD.match(str(e["proxy"]))
+        return [m.group(1).strip("[]")] if m else []
+    return [ip.strip("[]") for ip, _p in _VIA_PROXY.findall(str(e.get("detail") or ""))]
+
+
+def ev_hosts(e):
+    """근거의 목적지 이름. dst_name 필드가 있으면 그것을, 없으면 detail 의 host=·sni= 를 쓴다(주소만 있는 host= 도 포함)."""
+    out = []
+    if e.get("dst_name"):
+        out.append(_norm_host(e["dst_name"]))
+    for m in _HOSTKEY.findall(str(e.get("detail") or "")):
+        h = _norm_host(m)
+        if h and h != "-" and h not in out:
+            out.append(h)
+    return out
 
 
 def mark_proxy_victims(d):
@@ -373,12 +394,10 @@ def mark_proxy_victims(d):
     실제 목적지는 근거의 host= 로 보여 준다. 연결 시작(CONNECT)을 못 본 연결은 목적지를 모른다."""
     via, hosts = set(), []
     for e in d.get("evidence", []):
-        det = str(e.get("detail") or "")
-        for ip, _port in _VIA_PROXY.findall(det):
-            via.add(ip.strip("[]"))
-            for m in _HOSTKEY.findall(det):
-                h = _norm_host(m)
-                if h and h != "-" and h not in hosts:
+        for ip in ev_proxies(e):
+            via.add(ip)
+            for h in ev_hosts(e):
+                if h not in hosts:
                     hosts.append(h)
     for v in d["victims"]:
         if v["ip"] in via:
@@ -392,10 +411,7 @@ def infra_keys(d):
         if v.get("ext") and not v.get("proxy"):
             keys.add(v["ip"])
     for e in d.get("evidence", []):
-        for m in _HOSTKEY.findall(str(e.get("detail") or "")):
-            h = _norm_host(m)
-            if h and h != "-":
-                keys.add(h)
+        keys.update(ev_hosts(e))
     return keys
 
 
@@ -704,7 +720,8 @@ def collect(z, assets_path, args):
 
     ev_by = collections.defaultdict(list)
     for e in ev:
-        ev_by[e.get("evidence_id")].append({k: e.get(k) for k in ("ts", "note", "operation", "src", "dst", "account", "uid", "detail", "technique")})
+        ev_by[e.get("evidence_id")].append({k: e.get(k) for k in ("ts", "note", "operation", "src", "dst", "account", "uid", "detail", "technique",
+                                                                     "dst_name", "proxy", "src_port", "dst_port", "proto", "community_id")})
 
     detections = []
     heads = {}

@@ -102,7 +102,7 @@ event connection_state_remove(c: connection)
     # 예외: 연결이 끝난 시점이라 SNI(domain 축)도 쓸 수 있다.
     if ( NSM::exception_drop_agg(TLS_Beaconing, c) )
         return;
-    local obs = TlsBeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=c$uid,
+    local obs = TlsBeaconObs($orig=orig, $resp=resp, $ts=c$start_time, $uid=NSM::conn_ref(c),
                              $bytes=c$orig$size + c$resp$size, $dkey=dkey, $via=via);
     if ( c$ssl?$server_name )
         obs$sni = c$ssl$server_name;

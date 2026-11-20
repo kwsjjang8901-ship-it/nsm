@@ -179,7 +179,7 @@ event connection_state_remove(c: connection)
         local key: SumStats::Key = [$host=c$id$orig_h, $str=svc];
         # 표본을 먼저 넣는다: 합계를 넣는 순간 임계를 넘으면 그 연결도 근거에 남도록
         SumStats::observe("nsm.ai_upload.sample", key,
-                          [$str=cat(c$uid, "|", c$id$resp_h, "|", name, "|", c$orig$size, "|",
+                          [$str=cat(NSM::conn_ref(c), "|", c$id$resp_h, "|", name, "|", c$orig$size, "|",
                                     pdst != "" ? cat(" host=", pdst, proxy_detail(c)) : "")]);
         SumStats::observe("nsm.ai_upload", key, [$num=c$orig$size]);
         }
@@ -214,7 +214,7 @@ event ssl_established(c: connection)
         $technique="T1102",
         $src=src,
         $dst=c$id$resp_h,
-        $uid=c$uid,
+        $uid=NSM::conn_ref(c),
         $operation="ai_api_from_server",
         $detail=fmt("service=%s sni=%s %s", svc, name, why)]);
     NOTICE([$note=AI_API_From_Server,
@@ -259,7 +259,7 @@ event http_request(c: connection, method: string, original_URI: string, unescape
             $technique="T1190",
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $operation=fmt("ai_service_%s", s$name),
             $detail=fmt("api=%s method=%s uri=%s port=%s source=%s", s$name, m, sub_bytes(original_URI, 1, 200),
                         c$id$resp_p, origin)]);

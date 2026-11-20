@@ -63,7 +63,7 @@ event connection_state_remove(c: connection)
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="outbound_bulk_transfer",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("orig_bytes=%d service=%s %.1fMB%s", c$orig$size, svc, mb, extra)]);
 
         NOTICE([$note=Exfil_Large_Transfer,

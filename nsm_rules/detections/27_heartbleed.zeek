@@ -149,7 +149,7 @@ function hb_report(c: connection, st: HeartbeatState, result: string)
         $technique="T1190",
         $src=c$id$orig_h,
         $dst=c$id$resp_h,
-        $uid=c$uid,
+        $uid=NSM::conn_ref(c),
         $operation=fmt("tls_heartbleed_%s", result),
         $detail=fmt("result=%s requests=%d responses=%d last_request_len=%d max_response_len=%d overread_request=%s encrypted=%s port=%s",
                     result, st$req_n, st$resp_n, st$last_req, st$max_resp, st$overread, st$enc, c$id$resp_p)]);

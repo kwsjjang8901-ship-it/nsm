@@ -165,7 +165,7 @@ function observe_admin_share(c: connection, path: string)
     SumStats::observe("nsm.smb_admin",
        [$host=c$id$orig_h],
        [$str=cat(c$id$resp_h)]);
-    NSM::ev_observe("nsm.smb_admin.ev", c$id$orig_h, c$id$resp_h, c$uid, smb_lm_epoch);
+    NSM::ev_observe("nsm.smb_admin.ev", c$id$orig_h, c$id$resp_h, NSM::conn_ref(c), smb_lm_epoch);
 
     }
 

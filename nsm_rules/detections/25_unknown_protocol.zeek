@@ -84,7 +84,7 @@ function unk_report(c: connection, reason: string)
         $src=c$id$orig_h,
         $dst=c$id$resp_h,
         $operation="unidentified_protocol_outbound",
-        $uid=c$uid,
+        $uid=NSM::conn_ref(c),
         $detail=fmt("port=%s %s orig_bytes=%d resp_bytes=%d orig_ip_bytes=%d resp_ip_bytes=%d duration=%s",
                     c$id$resp_p, reason, ob, rb, oib, rib, dur)]);
 

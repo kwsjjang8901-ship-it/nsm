@@ -74,7 +74,7 @@ event connection_established(c: connection)
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="smb_outbound_connection",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("port=%s", c$id$resp_p)]);
 
     NOTICE([$note=Outbound_SMB,
@@ -114,7 +114,7 @@ event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="ntlm_authenticate_external",
-            $uid=c$uid,
+            $uid=NSM::conn_ref(c),
             $detail=fmt("port=%s workstation=%s", c$id$resp_p,
                         request?$workstation ? request$workstation : "-")]);
 

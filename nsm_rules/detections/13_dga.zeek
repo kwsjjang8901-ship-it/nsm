@@ -263,7 +263,7 @@ event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
     if ( score >= dga_label_min_score )
         {
         SumStats::observe("nsm.dga.nx", [$host=c$id$orig_h],
-                          [$num=1, $str=fmt("%s|%d|%s", qs, score, c$uid)]);
+                          [$num=1, $str=fmt("%s|%d|%s", qs, score, NSM::conn_ref(c))]);
         SumStats::observe("nsm.dga.like", [$host=c$id$orig_h], [$num=1]);
         }
     else

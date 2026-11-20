@@ -170,7 +170,7 @@ function observe_ssh(c: connection)
     SumStats::observe("nsm.ssh_lm",
        [$host=src],
        [$str=cat(dst)]);
-    NSM::ev_observe("nsm.ssh_lm.ev", src, dst, c$uid, ssh_lm_epoch);
+    NSM::ev_observe("nsm.ssh_lm.ev", src, dst, NSM::conn_ref(c), ssh_lm_epoch);
     }
 
 # (1) SSH 인증 성공 -> 확산 관측

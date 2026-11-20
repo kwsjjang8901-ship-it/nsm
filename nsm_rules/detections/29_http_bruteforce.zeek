@@ -102,7 +102,7 @@ function web_bf_observe(c: connection, pw: string, user: string, where: string)
     if ( user != "" )
         SumStats::observe("nsm.http_bf.form.user", key, [$str=user]);
     SumStats::observe("nsm.http_bf.form.sample", key,
-                      [$str=cat(user == "" ? "-" : user, "|", c$uid, "|", where, " ",
+                      [$str=cat(user == "" ? "-" : user, "|", NSM::conn_ref(c), "|", where, " ",
                                 c?$http && c$http?$method ? c$http$method : "-")]);
     }
 
@@ -239,5 +239,5 @@ event http_reply(c: connection, version: string, code: count, reason: string) &p
     local key: SumStats::Key = [$host=c$id$orig_h, $str=cat(c$id$resp_h, "|", web_bf_path(c))];
     SumStats::observe("nsm.http_bf.basic", key, [$num=1]);
     SumStats::observe("nsm.http_bf.basic.user", key, [$str=user]);
-    SumStats::observe("nsm.http_bf.basic.sample", key, [$str=cat(user, "|", c$uid, "|reply=401")]);
+    SumStats::observe("nsm.http_bf.basic.sample", key, [$str=cat(user, "|", NSM::conn_ref(c), "|reply=401")]);
     }

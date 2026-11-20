@@ -155,7 +155,7 @@ event ssl_established(c: connection)
         $src=orig,
         $dst=resp,
         $operation="tls_c2",
-        $uid=c$uid,
+        $uid=NSM::conn_ref(c),
         $detail=fmt("score=%d [%s] sni=%s issuer=%s%s%s", score, strip(reasons), sni, iss,
                     pdst != "" ? cat(" host=", pdst) : "", proxy_detail(c))]);
 

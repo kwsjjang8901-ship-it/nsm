@@ -85,11 +85,14 @@ def build(data, zeek_dir, tz=9.0):
         ts = d.get("first") or d.get("ts")
         det = " ".join(str(e.get("detail") or "") for e in evs)
         port = re.search(r"\bport=(\d+)", det)
+        # 근거 필드(센서가 올린 값): 룰이 detail 에 port= 를 남기지 않았으면 연결의 목적지 포트·프로토콜
+        cev = next((x for x in evs if x.get("dst_port") is not None), None)
         via = next((v for v in d.get("victims") or [] if v.get("proxy")), None)
         e = {"id": "", "key": str(d.get("id") or i), "prod": "NSM", "ts": ts, "t": hm(ts), "d": md(ts),
              "y": dt(ts).strftime("%Y") if ts else "", "diag": d.get("diagnosis") or "", "src": src or "-",
              "dst": vics[0] if vics else "(대상 여러 곳)", "sensor": data.get("pcap") or "NSM", "occ": d.get("occurrences") or 1,
-             "port": port.group(1) if port else "-", "proto": "",
+             "port": port.group(1) if port else (str(cev["dst_port"]) if cev else "-"),
+             "proto": str(cev.get("proto") or "") if cev else "",
              # 등급은 센서 값(nsm_detection.log severity: 단독 Information, 상관 Suspicious)
              "sev": d.get("severity") or ("Suspicious" if corr else "Information"),
              "ev": [[str(x.get("operation") or "-"), str(x.get("detail") or "")[:300]] for x in evs[:20]]}
@@ -107,9 +110,16 @@ def build(data, zeek_dir, tz=9.0):
         m = re.search(r"\bhost=([^ ,]+)", det)
         if m:
             e["host"] = m.group(1)
+        else:
+            dn = next((x["dst_name"] for x in evs if x.get("dst_name")), None)
+            if dn and not e.get("sni"):
+                e["host"] = dn
         if via:
-            vm = re.search(r"via_proxy=(\S+)", det)
-            e["via"] = vm.group(1) if vm else via["ip"]
+            vm = next((x["proxy"] for x in evs if x.get("proxy")), None)
+            if not vm:
+                vm = re.search(r"via_proxy=(\S+)", det)
+                vm = vm.group(1) if vm else None
+            e["via"] = vm or via["ip"]
             e["host"] = (via.get("targets") or [e.get("host") or "목적지 확인 안 됨"])[0]
         if corr:
             stages = [s.strip() for s in re.split(r"->|→|,", str(d.get("stages") or "")) if s.strip()]
