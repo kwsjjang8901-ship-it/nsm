@@ -5,7 +5,7 @@ Zeek 기반 NSM(Network Security Monitoring) 탐지 룰 패키지입니다.
 `notice.log` / `nsm_detection.log` / `evidence.log`로 탐지와 근거를 남깁니다.
 
 - 대상 Zeek 버전: **9.x** (자산 식별 PoC와 동일 기준)
-- 현재 상태: 원본(nsm_rules_4.zip) 반입 + 전체 검토 완료, 정리·확대 작업 진행 예정
+- 현재 상태: PoC 단계. 룰 파일 34개(01\~35, 11은 08에 통합)·탐지 48종, 예외 엔진, 명시적 프록시 인식, 자산 식별 센서, 메타데이터 선별 전송, 통합 리포트(결과는 [docs/POC_RESULT.md](docs/POC_RESULT.md))
 
 ## 구조
 
@@ -23,7 +23,11 @@ nsm_rules/
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
     nsm_config_custom.zeek  # 고객 환경별 설정 — 저장소에서는 빈 파일, 배포 시 별도 기록
     intel_ja3.zeek          # JA3 차단 목록
-    01~24_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
+    exceptions.zeek         # 예외 엔진(예외 파일 TSV, drop·suppress, 재시작 없이 반영)
+    proxy_common.zeek       # 명시적 프록시 인식(CONNECT·절대 URL로 실제 목적지, 유출·C2·AI 룰 공용)
+    web_common.zeek         # 웹 공격 룰(03·04·28·29) 공용: 대상 판정, 입력 정규화
+    ai_common.zeek          # AI 서비스 도메인 목록·이름 판정
+    01~35_*.zeek            # 탐지 룰 (1파일 = 1탐지 주제)
   rules/
     ja3/                    # Salesforce JA3 패키지 (BSD)
     filter_log.zeek         # 로그 출력 필터/경로
@@ -43,7 +47,9 @@ tests/
   measure_meta_export.sh    # 선별 전송·자산 식별 전송량·처리 시간 측정 (pcap 입력, 반복 실행)
   run_pcap.sh               # pcap 1회 실행 결과 요약 + 통합 리포트(<pcap 이름>_report.html): 공격 스토리·탐지·킬체인·자산·선별 전송·전송량·예외·센서 상태
                             #   디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행하고 결과 표·index.html 을 만든다
+                            #   -x 예외 파일, -u OUI 파일(IEEE·maclookup 형식), -g Recog XML 폴더(리포트 자산 보강)
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
+  asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종)
@@ -58,7 +64,7 @@ docs/
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
   SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
-  examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만)
+  examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만), 기본 예외 목록(exceptions.proxy-beacon.tsv)
 ```
 
 ## 탐지 룰
@@ -100,6 +106,10 @@ docs/
 | 34_ad_attacks | AD 공격(강제 인증, 원격 레지스트리 하이브 저장, Zerologon, AD 정보 수집) | T1187 / T1003.002 / T1210 / T1087.002 | 활성 |
 | 35_ioc_match | IOC 일치(위협 정보의 IP·도메인·URL과 일치하는 통신, `ioc_file` 지정 시) | T1071 | 활성 |
 
+PC가 명시적 프록시(예: 3128/tcp)로 나가는 환경에서는 CONNECT 대상·절대 URL로 실제 목적지를 알아내 판정합니다(`proxy_common.zeek`).
+유출 10·12·14와 C2·AI 09·24·33은 기본으로 켜져 있고, 주기 접속 07·30은 `NSM::proxy_aware_beacon`(기본 끔)으로 켭니다.
+켤 때는 기본 예외 목록 `docs/examples/exceptions.proxy-beacon.tsv`를 예외 파일에 붙입니다(SRS 7.8절).
+
 ## 사용
 
 ```zeek
@@ -107,7 +117,8 @@ docs/
 @load /path/to/nsm_rules
 ```
 
-고객 환경 값(내부 대역, 예외 목록, 남길 로그 스트림 등)은 `nsm_rules/detections/nsm_config_custom.zeek`에 `redef`로 둡니다.
+고객 환경 값(내부 대역, 예외 파일 경로 `NSM::exception_file`, IOC 파일 `NSM::ioc_file`, 남길 로그 스트림 등)은 `nsm_rules/detections/nsm_config_custom.zeek`에 `redef`로 둡니다.
+예외는 예외 파일(TSV, 재시작 없이 반영)로 관리합니다. 형식은 [docs/SRS.md](docs/SRS.md) 7.8절, 예시는 [docs/examples/](docs/examples/)에 있습니다.
 이 파일은 저장소에서는 **빈 파일로 유지**하고, 배포 시 고객 환경별로 별도 기록합니다.
 
 ## 테스트

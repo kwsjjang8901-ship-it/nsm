@@ -1,6 +1,6 @@
 # NSM POC 결과 보고서
 
-작성일: 2026-11-14 · 갱신: 2026-11-18 · 기준: main `79d3db2`(PR #97까지) · 자산 식별·탐지·메타데이터 선별 전송을 함께 정리한 통합 보고입니다.
+작성일: 2026-11-14 · 갱신: 2026-11-20 · 기준: main `c75d510`(PR #117까지) · 자산 식별·탐지·메타데이터 선별 전송을 함께 정리한 통합 보고입니다.
 영역별 상세: 탐지 요구사항 [SRS.md](SRS.md) · 선별 전송 요구사항 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) · 자산 식별 [asset-id/POC_RESULT.md](asset-id/POC_RESULT.md) · 영역별 결과 보고 [탐지](DETECTION_POC_RESULT.md)·[선별 전송](METADATA_EXPORT_POC_RESULT.md)
 
 ## 요약
@@ -10,7 +10,7 @@ Zeek 센서 하나로 탐지·자산 식별·메타데이터 선별 전송을 �
 | 영역 | 결과 |
 | --- | --- |
 | 탐지 | 룰 파일 34개, 탐지 유형(notice) 48개, 공격 단계 7개(정찰\~영향). 근거(evidence)·탐지 요약(사건 묶기)·킬체인 상관·예외 엔진 공통 적용 |
-| 자산 식별 | 17종 신호로 자산 키(머신 계정·DHCP·MAC·호스트명)와 역할·OS 판정. 탐지 리포트의 공격자·대상 IP에 이름·역할·OS 표시 |
+| 자산 식별 | 19종 신호로 자산 키(머신 계정·DHCP·MAC·호스트명)와 역할·OS 판정. 탐지 리포트의 공격자·대상 IP에 이름·역할·OS 표시 |
 | 메타데이터 | 조사용 프로토콜 로그 9종(행 단위)과 요약 3종만 골라 전송. CIC 8시간 캡처당 Manager 전송량 21\~24MB(탐지·자산 신호 포함) |
 | 검증 | btest 132개(Zeek 9.0.1·8.0.9 CI), 합성 pcap 64개, 통합 리포트(공격 스토리·킬체인·자산·전송량) |
 | CIC-IDS2017 | 공격 14종 중 탐지 9종. 미탐 5종(DoS 4종·DDoS)은 탐지 범위 밖 |
@@ -26,7 +26,7 @@ flowchart LR
     T["미러 트래픽<br/>SPAN · TAP"] --> A
     subgraph S["Zeek 센서 (nsm_rules, Zeek 9.x)"]
         D["탐지: 룰 34개 · 48종 · 7단계<br/>근거 · 사건 묶기 · 킬체인 상관 · 예외 엔진"]
-        A["자산 식별<br/>프로토콜 15종에서 신호 17종"]
+        A["자산 식별<br/>프로토콜 21종에서 신호 19종"]
         M["메타데이터 선별 전송<br/>행 단위 9종 + 요약 3종"]
     end
     D --> LD["notice · nsm_detection · evidence<br/>하루 수 MB"]
@@ -47,7 +47,7 @@ flowchart LR
 
 | 구성 요소 | 위치 | 하는 일 |
 | --- | --- | --- |
-| 탐지 룰 | `nsm_rules/detections/01~34` | 공격 단계별 탐지. 룰마다 근거 → notice → 탐지 요약 순서로 기록 |
+| 탐지 룰 | `nsm_rules/detections/01~35` | 공격 단계별 탐지. 룰마다 근거 → notice → 탐지 요약 순서로 기록 |
 | 공통 모듈 | `nsm_rules/detections/`(main·evidence\_log·detection\_log·attack\_mapping·correlation\_killchain·exceptions) | ATT&CK 매핑, 억제, 킬체인 상관, 예외 엔진(파일 기반, 재시작 없이 반영) |
 | 자산 식별 | `nsm_rules/asset-id/` | 프로토콜에서 자산 신호를 뽑아 `asset_signal.log`에 기록. 판정은 Manager(PoC에서는 리졸버) |
 | 메타데이터 선별 전송 | `nsm_rules/metadata/` | 조사에 쓰는 로그만 행·필드를 줄여 `meta/`에 기록, conn·DNS는 요약 |
@@ -66,11 +66,11 @@ flowchart LR
 
 센서의 신호 수집과 탐지 리포트 연동은 목표를 충족했습니다. PC 식별률과 판정 정확도는 고객 미러 구간에 DC·DHCP 트래픽이 없어 아직 판단하지 못했습니다.
 
-센서는 프로토콜 15종과 연결 정보에서 17종 신호를 뽑아 `asset_signal.log`에 기록합니다. 판정은 Manager가 하며, 키 우선순위는 머신 계정 > DHCP client-id > MAC > 호스트명 > IP+시간입니다. 강한 키가 서로 다르면 합치지 않는 "오결합보다 중복" 정책을 씁니다.
+센서는 프로토콜 21종과 연결 정보에서 19종 신호를 뽑아 `asset_signal.log`에 기록합니다. 판정은 Manager가 하며, 키 우선순위는 머신 계정 > DHCP client-id > MAC > 호스트명 > IP+시간입니다. 강한 키가 서로 다르면 합치지 않는 "오결합보다 중복" 정책을 씁니다.
 
 | 지표 | 결과 | 근거 |
 | --- | --- | --- |
-| 신호 수집 | 프로토콜 15종과 연결 정보에서 신호 출처 34개 구현(MDS Agent 에이전트 포트 연결, Kerberos 서비스 티켓의 서버 이름, HTTP Server 헤더, 고객 정의 에이전트 정책, SNMP, TCP SYN 지문, 서비스 배너 6종 포함). 리포트에서 OUI·Recog 지문으로 제조사·제품·장비 종류 보강. 운영 데이터로 충분히 확인 8종, 소량 6종, 합성·공개 pcap으로만 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트) | 고객 운영 pcap 9회 분석 |
+| 신호 수집 | 프로토콜 21종과 연결 정보에서 신호 출처 34개 구현(MDS Agent 에이전트 포트 연결, Kerberos 서비스 티켓의 서버 이름, HTTP Server 헤더, 고객 정의 에이전트 정책, SNMP, TCP SYN 지문, 서비스 배너 6종, User-Agent 기기 형태 포함). 리포트에서 OUI·Recog 지문으로 제조사·제품·장비 종류를 보강하고, 장비 유형(PC·노트북·서버·휴대폰·네트워크 장비 등)을 판정. 운영 데이터로 충분히 확인 8종, 소량 6종, 합성·공개 pcap으로만 4종(DHCP·ARP·LLMNR·DNS 동적 업데이트) | 고객 운영 pcap 9회 분석 |
 | 로그량 | Zeek 전체 로그 대비 0.1\~0.3%. CIC 하루(8시간) 233\~256KB | 고객 pcap, CIC 5일 |
 | 서버·장비 식별 | 서버 역할 추정 자산 33% → 49%(장비·인증서 신호 추가 후). AhnLab MDS·VMware·Cisco ASA 등 장비 종류 식별 | 고객 pcap |
 | AhnLab 제품 설치 현황 | 활동 단말 중 41\~83%에서 제품 통신 확인 | 고객 pcap(구간별) |
@@ -93,7 +93,7 @@ flowchart LR
 | 초기 침투 | SQL\_Injection, Cross\_Site\_Scripting, TLS\_Heartbleed, AI\_Service\_Exploit (T1190), Webshell\_Access (T1505.003) | 5 |
 | 자격증명 접근 | NTLM\_Spray, Kerberos\_Spray (T1110.003), Kerberos\_Bruteforce, SSH\_Bruteforce, FTP\_Bruteforce, HTTP\_Bruteforce (T1110.001), Kerberoasting (T1558.003), ASREP\_Roasting (T1558.004), NTLM\_Credential\_Leak (T1187), Name\_Poisoning, Machine\_Account\_Misuse (T1557.001), DCSync (T1003.006), Coerced\_Authentication (T1187), Remote\_Registry\_Dump (T1003.002), Zerologon\_Attempt (T1210) | 15 |
 | 확산 | SMB\_Admin\_Share (T1021.002), RDP\_Lateral (T1021.001), SSH\_Lateral (T1021.004), WinRM\_Lateral (T1021.006), DCOM\_Lateral (T1021.003), Remote\_Service\_Creation (T1569.002), Remote\_Task\_Creation (T1053.005), Remote\_WMI\_Execution (T1047) | 8 |
-| C2 | HTTP\_Beaconing, TLS\_Beaconing (T1071.001), DNS\_Tunneling (T1071.004), Encrypted\_C2 (T1573.002), DGA\_Domain (T1568.002), Nonstandard\_Port (T1571), Long\_Connection (T1572), Unknown\_Protocol (T1095), AI\_API\_From\_Server (T1102) | 9 |
+| C2 | HTTP\_Beaconing, TLS\_Beaconing (T1071.001), DNS\_Tunneling (T1071.004), Encrypted\_C2 (T1573.002), DGA\_Domain (T1568.002), Nonstandard\_Port (T1571), Long\_Connection (T1572), Unknown\_Protocol (T1095), AI\_API\_From\_Server (T1102), IOC\_Match (T1071) | 10 |
 | 유출 | Exfil\_DNS (T1048.003), Exfil\_Large\_Transfer, Exfil\_Volume\_Aggregate (T1041), Exfil\_Web\_Upload (T1567.002), Outbound\_SMB (T1048), AI\_Service\_Upload (T1567) | 6 |
 | 영향 | SMB\_Ransomware (T1486) | 1 |
 
@@ -103,6 +103,7 @@ flowchart LR
 - 탐지 요약: `nsm_detection.log`에 진단명·단계·공격자·피해 호스트를 한 행으로 남깁니다. 같은 (탐지 종류, 공격자, 피해 호스트)가 15분 안에 다시 나오면 같은 사건(`incident_id`, `occurrence`)으로 묶어, 알림은 사건당 1번입니다.
 - 킬체인 상관: 같은 출발지, 또는 초기 침투·확산 대상이 다음 단계의 출발지가 되는 전이를 묶어 상관 탐지를 냅니다. 공격자가 웹서버를 침투하고 그 서버가 C2·확산·유출·암호화를 하면 체인 하나로 7단계가 이어집니다. 클러스터에서는 매니저가 판정합니다.
 - 예외 엔진: 예외 파일(TSV)의 출발지·목적지·포트·서비스·도메인·JA4 축으로 drop 또는 suppress합니다. 재시작 없이 반영되고, 만료·적중 수를 기록합니다.
+- 명시적 프록시 인식: PC가 프록시(예: 3128/tcp)로 나가는 환경에서 CONNECT 대상·절대 URL로 실제 목적지를 알아내 유출(10·12·14)과 C2·AI(09·24·33) 탐지에 씁니다. 근거에는 실제 목적지(`host=`)와 프록시(`via_proxy=`)를 남기고, 리포트는 프록시를 중계 장비로 보여 줍니다. 고객 프록시 환경 1.4시간 측정에서 AI 서비스 사용 37쌍(PC·서비스)이 모두 프록시를 거쳐 이전에는 보이지 않았습니다. 주기 접속(07·30)은 정상 OS·SaaS 주기 통신이 많아(새로 45건) 기본으로 끄고, 켤 때 쓰는 기본 예외 목록을 제공합니다.
 - 통합 리포트: 공격자별 공격 스토리를 킬체인 진행 보드·확산 경로 그래프·세로 내러티브 세 가지로 보여 줍니다. 같은 사건은 한 행(횟수·마지막 시각)으로 보입니다.
 
 테스트는 btest 132개(룰·계약·예외·선별 전송 86개, 클러스터·자산 식별 46개)입니다. Zeek 9.0.1에서 모두 통과하고, 8.0.9에서는 9.x 분석기가 필요한 6개를 빼고 통과합니다. 룰마다 탐지돼야 하는 호스트와 비슷하지만 탐지되면 안 되는 호스트를 한 pcap에 넣어 확인합니다.
@@ -366,6 +367,7 @@ TLS 비콘과 암호화 C2 오탐은 룰 기본값만으로 대부분 사라졌�
 - 클러스터 동작은 테스트(매니저 + 워커 2)로만 확인했습니다. 사건 묶기는 탐지를 낸 노드별이라, 연결 단위 탐지가 여러 워커에 나뉘면 사건도 나뉩니다.
 - 공격 그래프의 메타데이터 관측(같은 인프라에 붙은 host, 확인이 필요한 내부 접속)은 출발지·대상·시간으로 맞춘 추정입니다. 내부 일반 포트 이동은 메타데이터에도 없어 보이지 않습니다. 평소 통신 판정은 리포트에 넣은 로그 기간 안에서만 봅니다. 하루치 pcap이면 그날 아침까지가 기준이고, 운영에서는 Manager에 쌓인 며칠치를 기준으로 삼아야 합니다. CIC-IDS2017에서는 모든 PC가 하루 종일 .50으로 SSH, DC로 SMB를 하는 시험망 배경 통신이 모든 스토리에 내부 이동으로 붙어 이 규칙을 넣었습니다. 넣은 뒤 5일 모두 관측 이동이 0건이 되었고(이전 27건, 스토리마다 뺀 쌍 수만 표시), 시험망에 확인이 필요한 내부 접속이 없어 남아야 할 관측은 합성 pcap으로만 확인했습니다.
 - 암호화 구간(DNS over HTTPS, SMB3 암호화 세션)과 ICMP 터널은 보지 못합니다.
+- 프록시를 쓰는 PC의 주기 접속(07·30)은 기본으로 보지 않습니다. 켜면 기본 예외 목록과 함께 고객 환경에서 적중을 보며 목록을 늘려야 합니다. PC와 프록시 사이도 암호화하는 HTTPS 프록시는 실제 목적지를 알 수 없습니다.
 
 다음 단계(우선순위 순)
 
