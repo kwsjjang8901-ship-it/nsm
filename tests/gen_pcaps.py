@@ -2582,6 +2582,93 @@ def gen_agent_policy(out):
     cap.write(os.path.join(out, "agent_policy.pcap"))
 
 
+def device_cert_der(attrs):
+    """결정적인 자체서명 인증서, 주체·발급자에 여러 속성(장비 인증서 모사). attrs = [(OID 이름, 값), ...]"""
+    from cryptography import x509
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.x509.oid import NameOID
+
+    key = Ed25519PrivateKey.from_private_bytes(bytes(range(2, 34)))
+    name = x509.Name([x509.NameAttribute(getattr(NameOID, k), v) for k, v in attrs])
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(20261120)
+            .not_valid_before(dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+            .not_valid_after(dt.datetime(2027, 1, 1, tzinfo=dt.timezone.utc))
+            .sign(key, None))
+    return cert.public_bytes(serialization.Encoding.DER)
+
+
+def fp_handshake(cap, s, t, syn, synack):
+    """옵션·TTL·윈도를 지정한 3-way handshake. syn/synack = (ttl, window, tcp options, df)."""
+    for who, (ttl, win, opts, df) in (("c", syn), ("s", synack)):
+        src, dst = (s.cli, s.srv) if who == "c" else (s.srv, s.cli)
+        ip = IP(src=src, dst=dst, ttl=ttl, flags="DF" if df else 0)
+        if who == "c":
+            tcp = TCP(sport=s.sport, dport=s.dport, flags="S", seq=s.cseq, window=win, options=opts)
+        else:
+            tcp = TCP(sport=s.dport, dport=s.sport, flags="SA", seq=s.sseq, ack=s.cseq + 1, window=win, options=opts)
+        cap.add(Ether(src=mac_of(src), dst=mac_of(dst)) / ip / tcp, t)
+        t += 0.001
+    s.cseq += 1
+    s.sseq += 1
+    s._c("A", t)
+    return t + 0.001
+
+
+def gen_asset_fingerprint(out):
+    """자산 식별 지문 입력(10.0.56.x). SNMP 응답: 스위치 .20(sysDescr·sysObjectID·sysName), 프린터 .21(sysDescr).
+    TCP SYN 지문: Windows 클라이언트 .30(ittl 128), Linux 서버 .31(SYN-ACK ittl 64, TS), macOS 클라이언트 .32(win 65535 ws 6),
+    Windows 서버 .33(SYN-ACK ittl 128), 네트워크 장비 .20(SYN-ACK ittl 255). 배너·헤더: .31 SSH OpenSSH Ubuntu, .33 IIS 10.0,
+    NAS .34 장비 인증서(O=Example NAS Corp, OU=NAS). 스위치·프린터는 제조사 OUI 가 있는 MAC(전역 관리 주소)."""
+    from scapy.layers.snmp import SNMP, SNMPget, SNMPresponse, SNMPvarbind
+    from scapy.asn1.asn1 import ASN1_OID, ASN1_STRING, ASN1_NULL
+    cap = Capture()
+    t = T0 + 1
+    macs = {"10.0.56.20": "00:1b:54:12:34:20", "10.0.56.21": "3c:2a:f4:12:34:21"}
+    oids = ["1.3.6.1.2.1.1.1.0", "1.3.6.1.2.1.1.2.0", "1.3.6.1.2.1.1.5.0"]
+    for dev, vals in [("10.0.56.20", [ASN1_STRING(b"Example IOS Software, C2960 Software, Version 15.0(2)SE11, RELEASE SOFTWARE (fc3)\r\nTechnical Support: http://www.example.com/techsupport"),
+                                      ASN1_OID("1.3.6.1.4.1.9.1.1208"), ASN1_STRING(b"core-sw01.corp.example")]),
+                      ("10.0.56.21", [ASN1_STRING(b"EXAMPLE ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,JD153"), None, None])]:
+        rid = RNG.randint(1, 30000)
+        req = SNMP(community="public", PDU=SNMPget(id=rid, varbindlist=[SNMPvarbind(oid=ASN1_OID(o), value=ASN1_NULL(0)) for o in oids]))
+        rsp = SNMP(community="public", PDU=SNMPresponse(id=rid, varbindlist=[SNMPvarbind(oid=ASN1_OID(o), value=v) for o, v in zip(oids, vals) if v is not None]))
+        cap.add(Ether(src=mac_of("10.0.56.2"), dst=macs[dev]) / IP(src="10.0.56.2", dst=dev) / UDP(sport=50161, dport=161) / req, t)
+        cap.add(Ether(src=macs[dev], dst=mac_of("10.0.56.2")) / IP(src=dev, dst="10.0.56.2") / UDP(sport=161, dport=50161) / rsp, t + 0.01)
+        t += 1
+    WIN = (128, 64240, [("MSS", 1460), ("NOP", None), ("WScale", 8), ("NOP", None), ("NOP", None), ("SAckOK", b"")], True)
+    MAC_OS = (64, 65535, [("MSS", 1460), ("NOP", None), ("WScale", 6), ("NOP", None), ("NOP", None), ("Timestamp", (1, 0)), ("SAckOK", b""), ("EOL", None)], True)
+    LINUX_SA = (64, 65160, [("MSS", 1460), ("SAckOK", b""), ("Timestamp", (2, 1)), ("NOP", None), ("WScale", 7)], True)
+    WINSRV_SA = (128, 65535, [("MSS", 1460), ("NOP", None), ("WScale", 8), ("SAckOK", b"")], True)
+    NET_SA = (255, 4128, [("MSS", 536)], False)
+    # Windows 클라이언트 -> Linux SSH 서버
+    s = Tcp(cap, "10.0.56.30", "10.0.56.31", 22)
+    t = fp_handshake(cap, s, t, WIN, LINUX_SA)
+    t = s.server_send(b"SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6\r\n", t + 0.01)
+    t = s.client_send(b"SSH-2.0-PuTTY_Release_0.78\r\n", t + 0.01)
+    t = s.close(t + 0.05)
+    # macOS 클라이언트 -> Windows IIS 서버
+    s = Tcp(cap, "10.0.56.32", "10.0.56.33", 80)
+    t = fp_handshake(cap, s, t + 1, MAC_OS, WINSRV_SA)
+    t = s.client_send(b"GET / HTTP/1.1\r\nHost: intranet\r\nUser-Agent: Mozilla/5.0 (Macintosh)\r\n\r\n", t)
+    t = s.server_send(b"HTTP/1.1 200 OK\r\nServer: Microsoft-IIS/10.0\r\nContent-Length: 2\r\n\r\nok", t + 0.01)
+    t = s.close(t + 0.01)
+    # 관리 서버 -> 스위치(SSH 응답만)
+    s = Tcp(cap, "10.0.56.2", "10.0.56.20", 22)
+    t = fp_handshake(cap, s, t + 1, LINUX_SA[:1] + (64240,) + LINUX_SA[2:], NET_SA)
+    t = s.close(t + 0.01)
+    # NAS 장비 인증서
+    cert = device_cert_der([("COMMON_NAME", "nas01.corp.example"), ("ORGANIZATIONAL_UNIT_NAME", "NAS"),
+                            ("ORGANIZATION_NAME", "Example NAS Corp"), ("COUNTRY_NAME", "TW")])
+    s = Tcp(cap, "10.0.56.30", "10.0.56.34", 5001)
+    t = s.handshake(t + 1)
+    t = s.client_send(client_hello("nas01.corp.example"), t)
+    t = s.server_send(server_hello(cert), t + 0.02)
+    t = s.close(t + 0.05)
+    cap.tick(t + 60)
+    cap.write(os.path.join(out, "asset_fingerprint.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2597,7 +2684,8 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_base, gen_story_meta_resolver,
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
-              gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy]
+              gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
+              gen_asset_fingerprint]
 
 
 def main():

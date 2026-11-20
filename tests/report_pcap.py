@@ -22,6 +22,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import asset_enrich  # noqa: E402  (같은 폴더의 자산 정보 보강 모듈)
+
 MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal")
 # 운영에서도 센서에 남는 로그. 나머지(conn·dns 등)는 run_pcap.sh -k 로 남긴 원본이다(운영 전송량·구간 계산에서 뺀다).
 SENSOR_LOCAL = ("notice", "capture_loss", "loaded_scripts", "stats", "reporter")
@@ -736,6 +739,30 @@ def collect(z, assets_path, args):
     for d in detections:
         d.pop("eids", None)
 
+    # 자산 정보 보강(Manager 후처리 시제품): MAC 제조사(OUI), 지문(Recog), TCP SYN OS 계열. 라우터 공유 MAC 은 제조사를 붙이지 않는다.
+    mac_v4 = collections.defaultdict(set)
+    for s in sig:
+        if s.get("signal") == "mac" and s.get("value") and ":" not in str(s.get("ip")):
+            mac_v4[str(s["value"])].add(s.get("ip"))
+    shared = {m for m, ips in mac_v4.items() if len(ips) >= SHARED_MAC_IPS}
+    oui = asset_enrich.Oui(args.oui or [])
+    recog = asset_enrich.Recog(args.recog)
+    enr = asset_enrich.enrich(sig, oui, recog, shared)
+    enrich_info = {"oui_files": oui.files, "oui_entries": len(oui.tab), "recog_dir": os.path.basename(os.path.normpath(args.recog)) if args.recog else "",
+                   "recog_count": recog.count, "recog_bad": recog.bad}
+
+    def add_enrich(row):
+        e = next((enr[ip] for ip in row["ips"] if ip in enr), None)
+        if not e:
+            return
+        row.update({"vendor": e["vendor"], "mac_local": e["mac_local"] and bool(e["mac"]), "fp": e["fp"], "fp_dev": e["fp_dev"],
+                    "tcp_os": e["tcp_os"], "tcp_basis": e["tcp_basis"]})
+        if not row.get("os"):
+            if e["fp_os"]:
+                row["os"], row["os_src"] = e["fp_os"], "지문(Recog)"
+            elif e["tcp_os"]:
+                row["os"], row["os_src"] = e["tcp_os"], "TCP SYN 추정"
+
     # 자산: 리졸버 결과가 있으면 자산 단위, 없으면 IP 별 신호 요약
     asset_rows = []
     mac_summary = None
@@ -749,6 +776,8 @@ def collect(z, assets_path, args):
                 "signals": a.get("signal_count", 0), "detections": related.get(a.get("asset_id"), 0),
             })
         asset_rows.sort(key=lambda r: (-r["detections"], -r["signals"]))
+        for row in asset_rows:
+            add_enrich(row)
     else:
         # 리졸버 없이 신호 값을 그대로 참고값으로: MAC(여러 IP 가 같은 MAC 이면 게이트웨이로 표시), OS 힌트(신뢰도·횟수 순
         # 첫 값), 역할 대신 응답한 서비스(service 신호). 역할 판정은 리졸버가 서비스 조합으로 한다.
@@ -800,6 +829,8 @@ def collect(z, assets_path, args):
                                "roles": [], "services": sorted(p["svc"], key=lambda x: (-p["svc"][x], x))[:6], "users": [], "agents": sorted(p["agents"]), "devices": sorted(p["dev"]),
                                "signals": sum(p["signals"].values()), "detections": det_ips.get(ip, 0)})
         asset_rows.sort(key=lambda r: (-r["detections"], -r["signals"]))
+        for row in asset_rows:
+            add_enrich(row)
 
     # 전송량
     meta_rows = [{"name": k, "bytes": size(p), "rows": nlines(p)} for k, p in meta.items()]
@@ -827,7 +858,7 @@ def collect(z, assets_path, args):
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "detections": detections, "stories": stories, "stage_order": STAGES, "coverage": coverage,
         "exceptions": exc,
-        "assets": asset_rows, "mac_summary": mac_summary, "asset_mode": "resolver" if assets is not None else "signals",
+        "assets": asset_rows, "mac_summary": mac_summary, "enrich": enrich_info, "asset_mode": "resolver" if assets is not None else "signals",
         "asset_report": args.asset_report or "",
         "signal_counts": collections.Counter(s.get("signal") for s in sig).most_common(),
         "signal_rows": len(sig), "signal_ips": len({s.get("ip") for s in sig}),
@@ -1150,12 +1181,15 @@ sel.onchange=drawStory;document.getElementById('storycand').onchange=drawStory;d
 const roleChips=a=>a.roles.length?a.roles.map(r=>`<span class="chip">${esc(r)}</span>`).join(''):(a.devices||[]).map(r=>`<span class="chip" title="장비 종류(인증서·syslog·에이전트 통신)">${esc(r)}</span>`).join('')+(a.services||[]).map(r=>`<span class="chip guess" title="응답한 서비스(역할 판정 전)">${esc(r)}</span>`).join('');
 table('ast',[['관련 탐지',a=>a.detections?`<span class="sus">${a.detections}</span>`:'0',a=>a.detections,'num'],['이름',a=>esc(a.name)||`<span class="mut">${esc(a.id)||'-'}</span>`,a=>a.name||a.id],
  ['식별 키',a=>esc(a.key),a=>a.key],['IP',a=>a.ips.map(esc).join('<br>'),a=>a.ips.join()],['MAC',a=>a.macs.map(esc).join('<br>'),a=>a.macs.join()],
- ['OS',a=>esc(a.os),a=>a.os],['보안 제품',a=>(a.agents||[]).map(g=>`<span class="chip">${esc(g.replace(/^ahnlab:/,'AhnLab '))}</span>`).join(''),a=>(a.agents||[]).join()],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 장비 종류·응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.devices||[]).concat(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
+ ['OS',a=>esc(a.os)+(a.os_src?` <span class="mut" title="센서 OS 힌트가 없어 ${esc(a.os_src)}로 채움">(${esc(a.os_src)})</span>`:'')+(a.tcp_os&&!a.os_src&&a.os?`<div class="mut" title="${esc(a.tcp_basis)}">TCP: ${esc(a.tcp_os)}</div>`:''),a=>a.os],
+ ['제조사(MAC)',a=>a.vendor?esc(a.vendor):a.mac_local?'<span class="chip" title="로컬 관리 비트가 켜진 MAC: 모바일 랜덤 MAC·가상 머신·직접 정한 주소">로컬·랜덤 MAC</span>':'',a=>a.vendor||(a.mac_local?'~':'')],
+ ['지문(제품·장비)',a=>(a.fp||[]).map(f=>`<span class="chip" title="${esc(f.src)}">${esc(f.text)}</span>`).join(''),a=>(a.fp||[]).map(f=>f.text).join()],['보안 제품',a=>(a.agents||[]).map(g=>`<span class="chip">${esc(g.replace(/^ahnlab:/,'AhnLab '))}</span>`).join(''),a=>(a.agents||[]).join()],[D.asset_mode==='resolver'?'역할':'역할(판정 전: 장비 종류·응답한 서비스)',roleChips,a=>(a.roles.length?a.roles:(a.devices||[]).concat(a.services||[])).join()],['신호',a=>a.signals,a=>a.signals,'num']],D.assets,{filter:'asf'});
 const ms=D.mac_summary,mdsN=D.assets.filter(a=>(a.agents||[]).includes('ahnlab:mds-agent')).length;
 document.getElementById('asmac').innerHTML=ms?`<b>MAC으로는 자산을 구분할 수 없는 캡처 지점입니다.</b> MAC이 관측된 IP ${ms.ips.toLocaleString('en-US')}개 중 ${ms.router_ips.toLocaleString('en-US')}개가 라우터로 보이는 MAC ${ms.router_macs}개를 나눠 씁니다(MAC은 모두 ${ms.macs}개). 센서가 라우팅을 거친 뒤 구간을 보고 있어 이 MAC은 PC가 아니라 라우터(L3 스위치) 것이며, 표에는 <i>(라우터)</i>로만 적었습니다. 자산 구분은 이름·OS 힌트·에이전트 같은 다른 신호로 합니다.`:'';
-document.getElementById('asnote').innerHTML=D.asset_mode==='resolver'
+const EI=D.enrich||{},einfo=`<div style="margin-top:4px">자산 정보 보강(Manager 후처리 시제품): 제조사는 ${EI.oui_entries?`IEEE OUI 목록 ${EI.oui_entries.toLocaleString('en-US')}개(${esc((EI.oui_files||[]).join(', '))})`:'OUI 목록 미지정(run_pcap.sh -u, 로컬·랜덤 MAC 여부만 표시)'}, 지문은 ${EI.recog_count?`Recog ${EI.recog_count.toLocaleString('en-US')}개${EI.recog_bad?` (Python 정규식으로 못 옮긴 ${EI.recog_bad}개 제외)`:''}`:'Recog 미지정(run_pcap.sh -g)'}, OS 칸이 비면 지문 OS나 TCP SYN 모양(초기 TTL·윈도·옵션, 계열 수준)으로 채웁니다. 라우터 공유 MAC에는 제조사를 붙이지 않습니다.</div>`;
+document.getElementById('asnote').innerHTML=einfo+(D.asset_mode==='resolver'
  ?`자산 판정은 claudtest2 리졸버 결과입니다. 근거 신호 타임라인·식별 품질은 ${D.asset_report?`<a href="${esc(D.asset_report)}">자산 리포트</a>`:'자산 리포트'}를 보세요.`
- :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 장비 종류와 응답한 서비스(기울임)를 보입니다. IPv4 2개가 같은 MAC이면 공유(이중화 VIP나 IP가 여러 개인 서버일 수 있음), 3개 이상이면 라우터(또는 라우터 뒤 주소)로 표시합니다. ${mdsN?`AhnLab MDS Agent 통신(에이전트 포트 연결)이 보인 IP는 ${mdsN}개입니다. 신호가 없다고 미설치는 아닙니다(경로·관측 시간). `:''}신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('');
+ :`자산 판정 없이 IP별 신호만 보여 줍니다(run_pcap.sh -r &lt;claudtest2 경로&gt; 를 주면 자산 단위로 묶고 OS·역할을 판정합니다). 이름·MAC·OS·서비스는 신호 값을 그대로 옮긴 참고값입니다. MAC은 많이 관측된 2개, OS는 신뢰도가 가장 높은 힌트이며, 역할 칸에는 판정 대신 장비 종류와 응답한 서비스(기울임)를 보입니다. IPv4 2개가 같은 MAC이면 공유(이중화 VIP나 IP가 여러 개인 서버일 수 있음), 3개 이상이면 라우터(또는 라우터 뒤 주소)로 표시합니다. ${mdsN?`AhnLab MDS Agent 통신(에이전트 포트 연결)이 보인 IP는 ${mdsN}개입니다. 신호가 없다고 미설치는 아닙니다(경로·관측 시간). `:''}신호 ${D.signal_rows}행: `+D.signal_counts.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join(''));
 // 전송량
 const mm=Math.max(1,...D.meta.map(m=>m.bytes));const mt=D.meta.reduce((a,b)=>a+b.bytes,0);
 document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="num">바이트</th><th></th></tr>
@@ -1192,6 +1226,8 @@ def main():
     ap.add_argument("--elapsed", type=int, default=0)
     ap.add_argument("--tz", type=float, default=9, help="표시 시간대 UTC 오프셋(시), 기본 9(KST)")
     ap.add_argument("--nets", default="", help="내부 대역(쉼표 구분, run_pcap.sh -n 과 같음). 사설 대역은 항상 내부로 본다")
+    ap.add_argument("--oui", action="append", help="IEEE OUI 목록 CSV(MA-L·MA-M·MA-S, 여러 번 줄 수 있음). MAC 제조사 표시")
+    ap.add_argument("--recog", help="Recog 지문 xml 폴더(github.com/rapid7/recog 의 xml/). 배너·헤더로 제품·장비 종류 표시")
     args = ap.parse_args()
     data = collect(args.zeek_dir, args.assets, args)
     blob = json.dumps(data, ensure_ascii=False, default=list).replace("</", "<\\/")

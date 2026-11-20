@@ -9,6 +9,7 @@
       1 mdns
       3 nbns
       6 ntlm
-      1 smb
+      5 smb
       3 ssh
+     15 tcp_fp
       1 tls

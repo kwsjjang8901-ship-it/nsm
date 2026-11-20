@@ -152,15 +152,37 @@ event ssh_server_host_key(c: connection, hash: string)
 	emit(c$id$resp_h, SSH_HOST_KEY, to_lower(hash), "ssh", 80, c$uid);
 	}
 
+## SMB1 native OS·LAN Manager 원문(NUL·앞뒤 공백 제거, 64자). 비면 빈 문자열(emit 이 버림).
+function smb_raw(prefix: string, v: string): string
+	{
+	local x = strip(gsub(v, /\x00/, ""));
+	return x == "" ? "" : prefix + x[:64];
+	}
+
 event smb1_session_setup_andx_request(c: connection, hdr: SMB1::Header, request: SMB1::SessionSetupAndXRequest)
 	{
 	if ( ! enable_smb )
 		return;
 
 	emit(c$id$orig_h, OS_HINT, normalize_name(request$native_os), "smb", 70, c$uid);
+	# 원문(대소문자 그대로)은 지문 대조(Recog smb_native_os·smb_native_lm)용으로 따로 남긴다.
+	emit(c$id$orig_h, SOFTWARE, smb_raw("smb_os:", request$native_os), "smb", 70, c$uid);
+	emit(c$id$orig_h, SOFTWARE, smb_raw("smb_lm:", request$native_lanman), "smb", 70, c$uid);
 
 	if ( request?$primary_domain )
 		emit(c$id$orig_h, DOMAIN, normalize_name(request$primary_domain), "smb", 60, c$uid);
+	}
+
+# 서버 응답의 native OS·LAN Manager(Samba 버전, NAS·프린터 펌웨어 등)
+event smb1_session_setup_andx_response(c: connection, hdr: SMB1::Header, response: SMB1::SessionSetupAndXResponse)
+	{
+	if ( ! enable_smb )
+		return;
+
+	if ( response?$native_os )
+		emit(c$id$resp_h, SOFTWARE, smb_raw("smb_os:", response$native_os), "smb", 70, c$uid);
+	if ( response?$native_lanman )
+		emit(c$id$resp_h, SOFTWARE, smb_raw("smb_lm:", response$native_lanman), "smb", 70, c$uid);
 	}
 
 event rdp_client_core_data(c: connection, data: RDP::ClientCoreData)

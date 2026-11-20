@@ -62,6 +62,9 @@ function x509_from_conn(c: connection)
 	local ip = c$id$resp_h;
 
 	emit(ip, DEVICE, x509_device(cert$subject, cert$issuer), "x509", 70, c$uid);
+	# 주체·발급자 원문은 지문 대조(Recog x509_subjects·x509_issuers: 장비 제조사·모델)용. 내부 서버만 남는다(emit 대역 필터).
+	emit(ip, SOFTWARE, "x509_subject:" + cert$subject[:160], "x509", 60, c$uid);
+	emit(ip, SOFTWARE, "x509_issuer:" + cert$issuer[:160], "x509", 60, c$uid);
 
 	if ( cert?$cn && x509_name_ok(normalize_name(cert$cn)) )
 		server_name(ip, cert$cn, "x509", c$uid);

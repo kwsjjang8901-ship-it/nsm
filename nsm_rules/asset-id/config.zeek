@@ -43,6 +43,8 @@ export {
 	option enable_ssh_host_key = T; ##< SSH 서버 호스트 키 지문 -> ssh_host_key
 	option enable_smb_guid = T;     ##< SMB2 NEGOTIATE 클라이언트 GUID -> smb_client_guid
 	option enable_mds_agent = T;    ##< AhnLab MDS Agent -> MDS 장비 통신 포트 -> security_agent, device
+	option enable_snmp = T;         ##< SNMP 응답(sysDescr·sysObjectID·sysName) -> software, hostname
+	option enable_tcp_fp = T;       ##< TCP SYN·SYN-ACK 특징 -> tcp_fp (IP·방향당 suppress_interval 에 한 번)
 	option enable_agent_policy = T; ##< 고객 정의 에이전트 정책(agent_policy_file) -> security_agent "policy:<id>"
 
 	## 고객 정의 에이전트 정책 파일(TSV). 비어 있으면 꺼짐. 형식은 signals/agent_policy.zeek, SPEC 3.17.
