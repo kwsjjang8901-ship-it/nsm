@@ -314,8 +314,14 @@ def build_stories(detections, midx, label):
                     others.append(v["ip"])
         lanes = hosts + [o for o in others if not next(v for i in order for v in detections[i]["victims"] if v["ip"] == o).get("ext")] \
             + [o for o in others if next(v for i in order for v in detections[i]["victims"] if v["ip"] == o).get("ext")]
+        lane_rows = [label(h, t(order[0]) if order else None) for h in lanes]
+        for ln in lane_rows:
+            # 프록시 대상(mark_proxy_victims)은 레인에도 같은 표시를 단다
+            pv = next((v for i in order for v in detections[i]["victims"] if v["ip"] == ln["ip"] and v.get("proxy")), None)
+            if pv:
+                ln.update({"proxy": True, "ext": True, "targets": pv.get("targets", [])})
         stories.append({"seed": seed, "steps": order, "confirmed": sorted(conf), "chains": list(dict.fromkeys(chains)),
-                        "lanes": [label(h, t(order[0]) if order else None) for h in lanes]})
+                        "lanes": lane_rows})
     # 다른 스토리에 그대로 들어 있는 작은 스토리는 뺀다(확산 대상이 뒤에 공격자로 나온 경우 등)
     stories.sort(key=lambda s: (-len(s["confirmed"]), -len(s["steps"])))
     kept = []
@@ -358,11 +364,32 @@ def _norm_host(h):
     return h.rsplit(":", 1)[0] if ":" in h else h
 
 
+_VIA_PROXY = re.compile(r"via_proxy=(\[[0-9a-fA-F:]+\]|[0-9a-fA-F.:]+?):(\d+)(?:\s|$)")
+
+
+def mark_proxy_victims(d):
+    """유출 룰(10·12·14)은 명시적 프록시를 거친 연결의 대상을 프록시 IP 로 두고 근거에 via_proxy=, (알면) host= 를 남긴다.
+    이 대상은 피해 장비가 아니라 중계 장비이므로 외부 대상처럼 다루고(스토리·자산 관련 탐지에서 제외),
+    실제 목적지는 근거의 host= 로 보여 준다. 연결 시작(CONNECT)을 못 본 연결은 목적지를 모른다."""
+    via, hosts = set(), []
+    for e in d.get("evidence", []):
+        det = str(e.get("detail") or "")
+        for ip, _port in _VIA_PROXY.findall(det):
+            via.add(ip.strip("[]"))
+            for m in _HOSTKEY.findall(det):
+                h = _norm_host(m)
+                if h and h != "-" and h not in hosts:
+                    hosts.append(h)
+    for v in d["victims"]:
+        if v["ip"] in via:
+            v.update({"proxy": True, "ext": True, "targets": hosts[:5]})
+
+
 def infra_keys(d):
-    """C2·유출 탐지의 외부 목적지 키(IP, 이름)."""
+    """C2·유출 탐지의 외부 목적지 키(IP, 이름). 프록시 IP 는 모든 프록시 사용자가 붙으므로 넣지 않는다."""
     keys = set()
     for v in d["victims"]:
-        if v.get("ext"):
+        if v.get("ext") and not v.get("proxy"):
             keys.add(v["ip"])
     for e in d.get("evidence", []):
         for m in _HOSTKEY.findall(str(e.get("detail") or "")):
@@ -714,8 +741,9 @@ def collect(z, assets_path, args):
             heads[item["incident"]] = item
         detections.append(item)
     for item in detections:
+        mark_proxy_victims(item)
         for who in [item["attacker"]] + item["victims"]:
-            if who and who.get("asset"):
+            if who and who.get("asset") and not who.get("proxy"):
                 related[who["asset"]] += 1
 
     # 공격 스토리: 단계별 추정 근거(선별 전송 로그 조인)와 공격자별 묶음
@@ -823,7 +851,7 @@ def collect(z, assets_path, args):
         det_ips = collections.Counter()
         for d in detections:
             for who in [d["attacker"]] + d["victims"]:
-                if who:
+                if who and not who.get("proxy"):
                     det_ips[who["ip"]] += 1
         for ip, p in per.items():
             asset_rows.append({"id": "", "name": ", ".join(sorted(p["names"]))[:80], "key": "", "ips": [ip],
@@ -964,7 +992,9 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fmtB=b=>b>=1e6?(b/1e6).toFixed(2)+' MB':b>=1e3?(b/1e3).toFixed(1)+' KB':b+' B';
 const fmtT=t=>{if(!t)return'-';const d=new Date((t+D.tz*3600)*1000);return d.toISOString().replace('T',' ').slice(0,19)};
 const whoTip=w=>w.guess?'자산 신호의 이름(판정 전)':['자산 판정 결과',w.asset&&`자산 ${w.asset}`,w.key&&`식별 ${w.key}`,w.os&&`OS ${w.os}`,w.roles&&`역할 ${w.roles.join(', ')}`].filter(Boolean).join('\\n');
-const who=w=>w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip${w.guess?' guess':''}" title="${esc(whoTip(w))}">${esc(w.name||w.asset)}</span>`:''}${(w.roles||[]).map(r=>` <span class="chip role" title="${esc(whoTip(w))}">${esc(r)}</span>`).join('')}${w.os?` <span class="os">${esc(w.os)}</span>`:''}${w.ext?' <span class="chip ext">외부</span>':''}`:'-';
+const proxyTip='명시적 프록시를 거친 연결입니다. 프록시는 중계 장비이고, 실제 목적지는 프록시가 받은 요청(CONNECT·Host)에서 알아냅니다. 연결이 캡처 시작 전부터 열려 있으면 목적지를 알 수 없습니다.';
+const whoProxy=w=>`<span class="chip" title="${esc(proxyTip)}">프록시 경유</span> ${esc(w.ip)}${w.name?` <span class="chip guess">${esc(w.name)}</span>`:''} → ${(w.targets||[]).length?w.targets.map(t=>`<b>${esc(t)}</b>`).join(', '):`<span class="sus" title="${esc(proxyTip)}">목적지 확인 안 됨</span>`}`;
+const who=w=>w&&w.proxy?whoProxy(w):w?`${esc(w.ip)}${(w.name||w.asset)?` <span class="chip${w.guess?' guess':''}" title="${esc(whoTip(w))}">${esc(w.name||w.asset)}</span>`:''}${(w.roles||[]).map(r=>` <span class="chip role" title="${esc(whoTip(w))}">${esc(r)}</span>`).join('')}${w.os?` <span class="os">${esc(w.os)}</span>`:''}${w.ext?' <span class="chip ext">외부</span>':''}`:'-';
 const arrow=s=>esc(String(s??'').replace(/->/g,'→'));
 document.getElementById('sub').textContent=`${D.pcap} · 캡처 ${fmtT(D.start)} ~ ${fmtT(D.end)} (UTC${D.tz>=0?'+':''}${D.tz}, 약 ${(D.span/60).toFixed(1)}분) · 처리 ${D.elapsed}초 · 생성 ${D.generated}`;
 // 표: 열 정의 [제목, 값 함수, 정렬 키 함수, 클래스]
@@ -1021,7 +1051,7 @@ const sel=document.getElementById('storysel');
 sel.innerHTML=ST.length?ST.map((s,i)=>{const a=s.lanes[0];const st=[...new Set(s.steps.map(j=>D.detections[j].stages))].sort((x,y)=>stIdx(x)-stIdx(y));
  return `<option value="${i}">${s.confirmed.length?'확정 체인':'후보'} · ${esc(whoTxt(a))} · ${st.map(x=>STK[x]||x).join('→')} · 탐지 ${s.steps.length}건</option>`}).join(''):'<option>스토리 없음</option>';
 const short=t=>String(t||'').replace(/\\(.*\\)/,'').trim();
-const hostLbl=l=>l.ext?'외부':[l.name||l.asset,(l.roles||[])[0]].filter(Boolean).join(' · ');
+const hostLbl=l=>l.proxy?'프록시 경유':l.ext?'외부':[l.name||l.asset,(l.roles||[])[0]].filter(Boolean).join(' · ');
 function jump(k){const li=document.getElementById('sn'+k);if(!li)return;document.querySelectorAll('#storylist li.on').forEach(x=>x.classList.remove('on'));li.classList.add('on');li.scrollIntoView({block:'center',behavior:'smooth'})}
 const tipHtml=x=>{const d=x.d;return `<b>${x.k}. ${esc(d.ko)}</b> <span class="mut">${esc(STK[d.stages]||d.stages)} · ${esc(d.techniques)}${x.c?' · 확정 체인':' · 체인 밖'}</span><br>${fmtT(d.first||d.ts)}${d.last&&d.last-d.first>=1?` ~ ${fmtT(d.last).slice(11)}`:''}<br>${who(d.attacker)} → ${d.victims.slice(0,6).map(who).join(', ')||'-'}${d.victims.length>6?` 외 ${d.victims.length-6}`:''}<div class="how">${howHtml(d)}</div>`};
 // 진행 보드: 7단계 줄 + 단계별 카드(단계마다 6장까지)
@@ -1078,7 +1108,7 @@ function drawGraph(s,steps){
   g.push(`<rect class="node${cls}" x="${p.x}" y="${p.y}" width="${NW}" height="${p.h}" rx="8"/>`);
   if(n.grp)g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">외 ${n.grp}대</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${n.ext?'외부':'내부'} 대상(번호의 탐지 참고)</text>`);
   else{const l=L[ip]||n,nm=l.ext?ip:(l.name||l.asset||ip);
-   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.ext?'외부':[nm!==ip?ip:'',n.obs?'관측만':(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,30))}</text>`)}
+   g.push(`<text x="${p.x+12}" y="${p.y+22}" style="font-weight:600">${esc(String(nm).slice(0,24))}</text><text class="mt" x="${p.x+12}" y="${p.y+40}">${esc((l.proxy?'프록시 경유'+((l.targets||[]).length?' → '+l.targets[0]:' · 목적지 모름'):l.ext?'외부':[nm!==ip?ip:'',n.obs?'관측만':(l.roles||[])[0]].filter(Boolean).join(' · ')).slice(0,30))}</text>`)}
   if(ip===seed)g.push(`<text class="mt" x="${p.x}" y="${p.y-6}">시작</text>`);
   const lc=local[ip]||[],shown=lc.length>BMAX?lc.slice(0,BMAX-1):lc;
   shown.forEach((x,i)=>nb.push({x,lx:p.x+21+(i%BPR)*22,ly:p.y+NH+8+Math.floor(i/BPR)*24}));

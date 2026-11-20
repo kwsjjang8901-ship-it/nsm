@@ -143,7 +143,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 1 | 로그 읽기 | 탐지 요약·근거·notice·예외·자산 신호, 선별 전송 13종 |
 | 2 | 내부 판정 | 사설 대역 또는 `--nets` 안이면 내부. 대상이 외부면 `ext` 표시(C2·유출·비표준 포트의 연결 대상 서버) |
 | 3 | IP에 이름 붙이기 | 리졸버가 있으면 탐지 시각에 그 IP를 쓰던 자산(IP 점유 구간, 구간 밖이면 가장 가까운 구간)의 이름·역할·OS·대표 키. 없으면 자산 신호의 호스트명 > 머신 계정 > FQDN > DNS 이름을 참고값(`guess`)으로 |
-| 4 | 탐지 정리 | 탐지 요약을 시각순으로 읽고 근거를 `evidence_ids`로 붙임(탐지당 최대 200행). 같은 사건(`incident_id`)의 갱신 탐지(`occurrence` > 1)는 첫 탐지 한 행으로 합쳐 횟수·마지막 시각·근거를 더함. 상관 탐지는 합치지 않음 |
+| 4 | 탐지 정리 | 탐지 요약을 시각순으로 읽고 근거를 `evidence_ids`로 붙임(탐지당 최대 200행). 같은 사건(`incident_id`)의 갱신 탐지(`occurrence` > 1)는 첫 탐지 한 행으로 합쳐 횟수·마지막 시각·근거를 더함. 상관 탐지는 합치지 않음. 근거에 `via_proxy=주소:포트`가 있고 대상이 그 주소면 대상에 `proxy`(중계 장비)를 달고 외부처럼 다룸: 실제 목적지는 근거의 `host=`(`targets`), 없으면 "목적지 확인 안 됨"(연결 시작 CONNECT를 캡처하지 못함). 프록시는 자산 표의 관련 탐지 수와 같은 인프라 키에서 뺌 |
 | 5 | 추정 근거(`enrich`) | 탐지마다 공격자·대상·시간창으로 선별 전송 로그를 맞춰 계정·공유·호출·SNI·바이트를 붙임(3.3절) |
 | 6 | 공격 스토리(`build_stories`) | 공격자별로 확정 체인과 확산으로 이어진 탐지를 묶음(3.4절) |
 | 7 | 메타데이터 관측(`meta_observe`) | 같은 공격 인프라에 붙은 host, 확인이 필요한 내부 접속(3.5절) |
@@ -182,7 +182,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 
 탐지 밖에서 스토리를 넓히는 두 가지입니다. 둘 다 추정이며, 리포트에서 체크 상자로 끌 수 있습니다.
 
-**1) 같은 공격 인프라:** 스토리의 C2·유출 탐지가 연결한 외부 목적지(IP, 근거의 `host=`·`sni=` 이름, 이름의 등록 도메인)에 **스토리 기간 앞뒤 24시간 안에** 접속한 다른 내부 host를 찾습니다(ssl SNI, 외부 http Host, dns\_summary 도메인, 외부 IP).
+**1) 같은 공격 인프라:** 스토리의 C2·유출 탐지가 연결한 외부 목적지(IP, 근거의 `host=`·`sni=` 이름, 이름의 등록 도메인. 프록시 경유 대상은 프록시 IP가 아니라 `host=` 이름만)에 **스토리 기간 앞뒤 24시간 안에** 접속한 다른 내부 host를 찾습니다(ssl SNI, 외부 http Host, dns\_summary 도메인, 외부 IP).
 
 - 상태: `story`(스토리 공격자), `other`(다른 C2·유출 탐지의 공격자), `obs`(관측만).
 - 내부 DNS 서버의 이름 조회는 뺍니다. 자산 신호에서 DNS를 제공한 IP(`service` `udp/53`·`tcp/53`)이거나, 다른 host들이 조회한 도메인(5개 이상)의 절반 이상을 자기도 조회하는 host입니다.
@@ -329,6 +329,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-assets-routed` | 라우팅 뒤 구간을 표 위에 한 번만 설명하고 행은 `(라우터)` |
 | `rules/report-mds-agent` | 보안 제품 열의 MDS Agent, 장비 종류 |
 | `rules/report-asset-banners` | 서비스 배너(HTTP 인증 realm, SIP, FTP·SMTP·POP3, MySQL)를 Recog 형식 지문과 맞춤. Negotiate 토큰·프록시 응답은 지문 없음 |
+| `rules/report-proxy-target` | 프록시 경유 유출 탐지의 대상: CONNECT를 본 연결은 실제 목적지, 못 본 연결은 "목적지 확인 안 됨". 프록시는 관련 탐지 수·스토리 레인에서 중계 장비로 |
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
