@@ -36,18 +36,37 @@ def mac_is_local(mac):
         return False
 
 
+# 접두어·제조사 열 이름(소문자). IEEE 원본(Assignment, Organization Name)과 maclookup.app 내보내기(Mac Prefix, Vendor Name) 등.
+OUI_PREFIX_COLS = ("assignment", "mac prefix", "macprefix", "prefix", "oui")
+OUI_VENDOR_COLS = ("organization name", "vendor name", "vendor", "organization", "company")
+
+
 class Oui:
     def __init__(self, paths=()):
         self.tab = {}            # 접두어(16진 대문자, 6·7·9자리) -> 제조사
         self.files = []
+        self.counts = {}         # 파일 이름 -> 읽은 항목 수(0 이면 형식이 다른 파일)
         for p in paths or ():
-            with open(p, encoding="utf-8", newline="") as f:
-                for r in csv.DictReader(f):
-                    a = (r.get("Assignment") or "").strip().upper()
-                    org = (r.get("Organization Name") or "").strip()
-                    if re.fullmatch(r"[0-9A-F]{6}|[0-9A-F]{7}|[0-9A-F]{9}", a) and org:
-                        self.tab[a] = org
-            self.files.append(os.path.basename(p))
+            name, n = os.path.basename(p), 0
+            with open(p, encoding="utf-8-sig", newline="") as f:
+                rd = csv.DictReader(f)
+                cols = {c.strip().lower(): c for c in (rd.fieldnames or [])}
+                pc = next((cols[c] for c in OUI_PREFIX_COLS if c in cols), None)
+                vc = next((cols[c] for c in OUI_VENDOR_COLS if c in cols), None)
+                if pc and vc:
+                    for r in rd:
+                        a = re.sub(r"[^0-9A-Fa-f]", "", r.get(pc) or "").upper()   # 00:00:0C, 00-00-0C, 00000C 모두
+                        org = (r.get(vc) or "").strip()
+                        if len(a) in (6, 7, 9) and org:
+                            self.tab[a] = org
+                            n += 1
+            self.files.append(name)
+            self.counts[name] = n
+
+    @property
+    def empty(self):
+        """주었지만 한 줄도 못 읽은 파일(열 이름이 다른 형식)"""
+        return [f for f, n in self.counts.items() if n == 0]
 
     def vendor(self, mac):
         h = re.sub(r"[^0-9a-fA-F]", "", mac or "").upper()
@@ -224,17 +243,34 @@ def tcp_os(values):
 # ---------------------------------------------------------------- 묶기
 
 
+# 한 IP 가 서로 다른 HTTP Server 값으로 이만큼 이상 응답하면 실제 서버가 아니라 프록시·중계 장비(투명 프록시, 로드밸런서,
+# NAT 뒤 여러 서버)로 본다. 이때 HTTP 로 얻은 OS(지문·센서 OS 힌트)는 그 IP 의 OS 가 아니다.
+PROXY_HTTP_SERVERS = 3
+HTTP_SOURCES = ("HTTP Server", "HTTP 인증 realm")
+
+
+def proxy_like_ips(sig_rows):
+    srv = {}
+    for s in sig_rows:
+        v = str(s.get("value") or "")
+        if s.get("signal") == "software" and v.startswith("http_server:"):
+            srv.setdefault(s.get("ip"), set()).add(v)
+    return {ip for ip, vs in srv.items() if len(vs) >= PROXY_HTTP_SERVERS}
+
+
 def enrich(sig_rows, oui=None, recog=None, shared_macs=()):
-    """IP -> {"vendor", "mac", "mac_local", "fp": [{"src","text"}], "fp_os", "fp_dev", "tcp_os", "tcp_basis"}"""
+    """IP -> {"vendor", "mac", "mac_local", "fp": [{"src","text"}], "fp_os", "fp_dev", "tcp_os", "tcp_basis", "proxy_like"}"""
     oui = oui or Oui()
     recog = recog or Recog()
+    proxies = proxy_like_ips(sig_rows)
     per = {}
     tcp = {}
     for s in sig_rows:
         ip, k, v, src = s.get("ip"), s.get("signal"), str(s.get("value") or ""), s.get("source")
         if not ip or not v:
             continue
-        e = per.setdefault(ip, {"vendor": "", "mac": "", "mac_local": False, "fp": [], "fp_os": "", "fp_dev": "", "tcp_os": "", "tcp_basis": ""})
+        e = per.setdefault(ip, {"vendor": "", "mac": "", "mac_local": False, "fp": [], "fp_os": "", "fp_dev": "", "tcp_os": "", "tcp_basis": "",
+                                "proxy_like": ip in proxies})
         if k == "mac" and v not in shared_macs and (not e["mac"] or src in ("arp", "dhcp")):
             e["mac"] = v
         if k == "tcp_fp":
@@ -246,7 +282,8 @@ def enrich(sig_rows, oui=None, recog=None, shared_macs=()):
                     t = fp_summary(r)
                     if t and all(x["text"] != t for x in e["fp"]):
                         e["fp"].append({"src": name, "text": t})
-                    e["fp_os"] = e["fp_os"] or fp_os(r)
+                    if not (e["proxy_like"] and name in HTTP_SOURCES):
+                        e["fp_os"] = e["fp_os"] or fp_os(r)
                     e["fp_dev"] = e["fp_dev"] or r.get("hw.device") or r.get("os.device") or ""
                     break
     for ip, e in per.items():

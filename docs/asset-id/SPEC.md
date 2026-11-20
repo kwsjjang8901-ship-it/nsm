@@ -491,11 +491,12 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 
 | DB | 입력 신호 | 결과 | 규칙 |
 |---|---|---|---|
-| IEEE OUI 목록 (MA-L·MA-M·MA-S CSV) | `mac` (ARP·DHCP 우선, 라우터 공유 MAC 제외) | 제조사 | 긴 접두어 먼저(MA-S > MA-M > MA-L). 로컬 관리 비트가 켜진 MAC은 제조사 대신 "로컬·랜덤 MAC"(모바일 랜덤 MAC·가상 머신·직접 정한 주소) |
+| IEEE OUI 목록 (MA-L `oui.csv`·MA-M `mam.csv`·MA-S `oui36.csv`, standards-oui.ieee.org) | `mac` (ARP·DHCP 우선, 라우터 공유 MAC 제외) | 제조사 | 긴 접두어 먼저(MA-S > MA-M > MA-L). IEEE 원본 열(Assignment·Organization Name)과 maclookup.app 내보내기 열(Mac Prefix·Vendor Name)을 모두 읽고, 접두어 구분자(`:`·`-`)는 무시. 한 줄도 못 읽은 파일은 경고. 로컬 관리 비트가 켜진 MAC은 제조사 대신 "로컬·랜덤 MAC"(모바일 랜덤 MAC·가상 머신·직접 정한 주소) |
 | Recog (Rapid7 `xml/*.xml`) | `software` `ssh:`(→ `ssh.banner`, `SSH-x.y-` 뗌), `http_server:`(→ `http_header.server`), `smb_os:`·`smb_lm:`(→ `smb.native_os`·`smb.native_lm`), `snmp_sysdescr:`·`snmp_sysobjid:`, `x509_subject:`·`x509_issuer:`(Zeek 순서와 CN 먼저 순서 둘 다), `dhcp_vendor_class`, `http_wwwauth:`(→ `http_header.wwwauth`), `sip_ua:`·`sip_server:`(→ `sip_header.user_agent`·`sip_header.server`), `ftp_banner:`·`smtp_banner:`·`pop3_banner:`(→ `ftp.banner`·`smtp.banner`·`pop3.banner`), `mysql:`(→ `mysql.banners`) | 제조사·제품·버전·OS·장비 종류(`hw.device`) | 파일 순서대로 처음 맞는 지문 하나. Ruby 정규식을 Python으로 옮기지 못한 지문은 건너뛰고 수를 셈(2026-11 기준 4,336개 모두 변환) |
 | TCP SYN 계열 (DB 없음) | `tcp_fp` | OS 계열 | SYN 먼저. MSS 옵션이 없는 SYN은 판단 안 함(스캐너·직접 만든 패킷). 초기 TTL 128 → Windows, 255 → 네트워크 장비, 64 + 윈도 65535 + 타임스탬프 → macOS·iOS·BSD, 그 밖 64 → Linux·Unix, 32 → 구형·임베디드 |
 
 - **OS 칸 채우기:** 센서 OS 힌트(4.4)가 없을 때만 Recog OS, 그것도 없으면 TCP SYN 계열로 채우고 출처를 표시합니다.
+- **프록시·중계 추정:** 한 IP가 서로 다른 HTTP Server 값 3개 이상으로 응답하면 실제 서버가 아니라 투명 프록시·로드밸런서·NAT 뒤 여러 서버로 봅니다. 이 IP에는 HTTP로 얻은 OS(Recog HTTP Server·인증 realm 지문의 OS, 센서 `http_server` OS 힌트)를 쓰지 않고 "프록시·중계 추정"으로 표시합니다. 지문 목록과 다른 출처(SSH·SMB 등)의 OS는 그대로입니다. 센서의 프록시 제외(CONNECT·절대 URL)로 걸러지지 않는 투명 프록시용입니다.
 - **라이선스(제품 반영 전 법무 확인):** Recog은 BSD-2-Clause(출처 표기, Rapid7은 운영 제품 사용 전 연락 요청). IEEE OUI 목록은 공개 목록이며 이용 조건 확인 필요(Wireshark `manuf`는 GPL 배포물이라 쓰지 않음). p0f(LGPL-2.1) 지문 DB는 쓰지 않음.
 
 ---
