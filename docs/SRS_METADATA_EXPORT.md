@@ -101,6 +101,7 @@ flowchart LR
 | FR-M13 | http는 URL 쿼리 문자열을 뺀 `uri_path`만 보낸다 | `rules/meta-export-summary`(쿼리 값이 선별 로그에 없음) |
 | FR-M14 | 탐지 로그(notice·nsm_detection·evidence)는 이 기능의 켬·끔·상한과 무관하게 기록된다 | 전체 btest |
 | FR-M15 | 클러스터에서 판정·요약은 워커에서 하고, 로거에는 통과한 행과 요약 행만 간다 | `cluster/meta-export-worker` |
+| FR-M16 | 선별 전송 행 로그의 연결 주소·포트는 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 보내고, 센서에 남기는 원본(T2)은 Zeek 이름 그대로 둔다 | `rules/meta-export`, `rules/meta-export-off` |
 
 ### 4.1 스트림별 선별 규칙
 
@@ -153,8 +154,10 @@ flowchart LR
 | --- | --- | --- |
 | ts | 시각 | 원본 로그의 시각 |
 | uid | 문자열 | 연결 ID. T2 원본이나 탐지 근거(evidence)와 조인 |
-| id.orig_h, id.orig_p | 주소, 포트 | 출발지 |
-| id.resp_h, id.resp_p | 주소, 포트 | 목적지 |
+| orig_h, orig_p | 주소, 포트 | 출발지 |
+| resp_h, resp_p | 주소, 포트 | 목적지 |
+
+연결 주소·포트는 Zeek 원래 이름(`id.orig_h` 등) 대신 요약 로그와 같은 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 보냅니다(`meta_field_name_map`, 2026-11 변경). 점이 들어간 이름은 수집기·DB에서 따로 바꿔야 해서 센서에서 통일합니다. 센서에 남기는 원본 로그(T2, `meta_keep_raw_local`)는 Zeek 이름 그대로입니다.
 
 ### 5.2 행 단위 로그별 필드
 
@@ -235,8 +238,8 @@ flowchart LR
 ### 5.7 행 예시
 
 ```json
-{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","id.orig_h":"10.0.0.60","id.orig_p":62228,"id.resp_h":"10.0.0.10","id.resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
-{"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","id.orig_h":"10.0.0.71","id.orig_p":47984,"id.resp_h":"93.184.215.131","id.resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
+{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
+{"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","orig_h":"10.0.0.71","orig_p":47984,"resp_h":"93.184.215.131","resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
 {"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
 {"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":["A","AAAA"],"rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
@@ -254,6 +257,7 @@ flowchart LR
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `meta_export_enable` | T | 기능 전체 토글 | 수집 에이전트가 없는 센서는 F |
+| `meta_field_name_map` | `id.orig_h`→`orig_h`, `id.orig_p`→`orig_p`, `id.resp_h`→`resp_h`, `id.resp_p`→`resp_p` | 선별 전송 행 로그의 필드 이름 바꾸기(5.1절). 원본(T2)에는 적용하지 않음 | 수집기가 Zeek 이름을 기대하면 `{}`로 비움 |
 | `meta_path_prefix` | `/log/zeek/meta/` | 출력 경로 앞부분(선별 로그·요약 로그·`meta_export_stats` 모두) | 에이전트가 읽는 디렉터리에 맞춤. 끝에 `/` 포함 |
 | `meta_export_streams` | 4.1절 | 스트림별 설정 표(6.3절) | 스트림 추가·제거·상한 지정 |
 | `meta_admin_ports` | 22, 88(tcp·udp), 135, 139, 389(tcp·udp), 445, 636, 3268, 3269, 3389, 5985, 5986 | 내부 관리 연결로 보는 목적지 포트 | 사내 관리 포트 `+=` |
@@ -281,7 +285,7 @@ flowchart LR
 | 필드 | 기본값 | 뜻 |
 | --- | --- | --- |
 | `name` | (필수) | 출력 이름 |
-| `fields` | 없음(전체 필드) | 남길 필드 이름 집합. 연결 4-튜플은 `id.orig_h`처럼 적음 |
+| `fields` | 없음(전체 필드) | 남길 필드 이름 집합. Zeek 이름으로 적음(연결 4-튜플은 `id.orig_h`). 보낼 때 `meta_field_name_map`으로 바뀜 |
 | `scope` | `META_ALL` | `META_ALL`, `META_BOUNDARY`, `META_ADMIN_INTERNAL`, `META_BOUNDARY_OR_ADMIN` |
 | `dedup` | 0secs(끔) | 중복 억제 기간. 키는 스트림마다 코드에 정해져 있음(4.1절) |
 | `rate_limit` | 0(무제한) | 노드당 분당 최대 행 수 |

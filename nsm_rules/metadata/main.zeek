@@ -62,7 +62,7 @@ export {
     ## 스트림별 선별 전송 설정
     type MetaSpec: record {
         name:       string;                   ##< 출력 이름(meta_path_prefix 뒤에 붙음)
-        fields:     set[string] &optional;    ##< 남길 필드(없으면 전체). id 는 "id.orig_h" 처럼 적는다
+        fields:     set[string] &optional;    ##< 남길 필드(없으면 전체). id 는 "id.orig_h" 처럼 Zeek 이름으로 적는다(보낼 때 meta_field_name_map 으로 바뀜)
         scope:      MetaScope &default=META_ALL;
         dedup:      interval &default=0secs;  ##< 같은 중복 키를 다시 보내지 않는 기간(0 = 끔)
         rate_limit: count &default=0;         ##< 노드별 분당 최대 행 수(0 = 무제한)
@@ -71,6 +71,17 @@ export {
 
     ## 전체 토글
     const meta_export_enable = T &redef;
+
+    ## 선별 전송 행 로그의 필드 이름 바꾸기(Zeek 이름 -> 보내는 이름).
+    ##   연결 주소·포트를 요약 로그(flow_summary 등)와 같은 orig_h·orig_p·resp_h·resp_p 로 맞춰,
+    ##   수집기·Manager 가 로그마다 이름을 따로 바꾸지 않게 한다(로그 형식 검토 M1).
+    ##   MetaSpec 의 fields 는 Zeek 이름("id.orig_h")으로 적는다. 센서에 남기는 원본 로그(T2)는 바꾸지 않는다.
+    const meta_field_name_map: table[string] of string = {
+        ["id.orig_h"] = "orig_h",
+        ["id.orig_p"] = "orig_p",
+        ["id.resp_h"] = "resp_h",
+        ["id.resp_p"] = "resp_p",
+    } &redef;
 
     ## 출력 경로 앞부분. "/log/zeek/meta/" 면 /log/zeek/meta/kerberos.log 처럼 쓴다.
     const meta_path_prefix = "/log/zeek/meta/" &redef;
@@ -785,6 +796,7 @@ event zeek_init() &priority=-2
                               $config=table(["use_json"] = "T"));
         if ( spec?$fields )
             f$include = spec$fields;
+        f$field_name_map = meta_field_name_map;
         Log::add_filter(id, f);
         }
 

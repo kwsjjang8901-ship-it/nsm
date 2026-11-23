@@ -190,7 +190,7 @@ if dn:
           f"질의 1건뿐인 행 {100*one/len(dn):.0f}%, (other) 행 {other}")
 ht = rows("http")
 if ht:
-    hosts = len({(r["id.orig_h"], r.get("host")) for r in ht})
+    hosts = len({(r.get("orig_h", r.get("id.orig_h")), r.get("host")) for r in ht})
     print(f"  http: (출발지, Host) 조합 {hosts:,}개, 조합당 평균 {len(ht)/hosts:.1f}행")
 sl = rows("ssl")
 if sl:
@@ -204,7 +204,7 @@ cur_http = sizes.get("http", 0)
 if ht:
     RISKY = (".exe", ".dll", ".ps1", ".bat", ".cmd", ".msi", ".scr", ".vbs", ".js", ".hta", ".jar", ".sh", ".elf", ".bin")
     risky = lambda r: r.get("method") in ("POST", "PUT") or str(r.get("uri_path", "")).lower().endswith(RISKY)
-    key = lambda r: (r["id.orig_h"], r.get("host"), r.get("method"), r.get("status_code"), int(r["ts"] // 600))
+    key = lambda r: (r.get("orig_h", r.get("id.orig_h")), r.get("host"), r.get("method"), r.get("status_code"), int(r["ts"] // 600))
     groups = collections.OrderedDict()
     for r in ht:
         groups.setdefault(key(r), []).append(r)
@@ -220,7 +220,7 @@ if ht:
         comp += sum(ROW(r) for r in keep)
         if rest:
             paths = list(dict.fromkeys(str(r.get("uri_path", "")) for r in rest))
-            s = {"ts": rest[0]["ts"], "ts_end": rest[-1]["ts"], "id.orig_h": rest[0]["id.orig_h"],
+            s = {"ts": rest[0]["ts"], "ts_end": rest[-1]["ts"], "orig_h": rest[0].get("orig_h", rest[0].get("id.orig_h")),
                  "host": rest[0].get("host"), "method": rest[0].get("method"),
                  "status_code": rest[0].get("status_code"), "requests": len(rest),
                  "unique_paths": len(paths), "sample_paths": paths[:3],

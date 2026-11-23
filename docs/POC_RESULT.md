@@ -255,7 +255,7 @@ Manager를 PostgreSQL과 ClickHouse로 구성하면 1,000명 규모 1년 보관�
 - 용량은 메타데이터 보관 기간이 정합니다. 메타데이터가 97.7%이고 자산 신호 1.2%, 센서 상태 1.0%, 탐지 로그 0.1%라, 탐지·근거·자산 신호는 몇 년을 보관해도 1년에 수십 GB입니다.
 - ClickHouse 설계: 로그 종류별 테이블(필드는 [선별 전송 명세](SRS_METADATA_EXPORT.md) 5장과 1:1), `ORDER BY (orig_h, ts)`, 일 단위 파티션, IP는 `IPv6`, 반복 값은 `LowCardinality`, 시각은 `Delta`+`ZSTD` 코덱, `uid` bloom_filter 보조 인덱스로 근거 조인. 사건 회차처럼 갱신되는 값은 PostgreSQL에 둡니다.
 - 보관 기간은 테이블별 TTL로 나눕니다. 예: 메타데이터는 90일 뒤 cold 디스크로 옮기고 1년 뒤 삭제, 흐름 요약은 180일, 탐지·근거는 3년.
-- 적재는 점이 들어간 Zeek 필드 이름(`id.orig_h`)을 수집 단계에서 바꾸고 묶음(`JSONEachRow`)으로 넣습니다. 센서 쪽 MDS 연동 작업(센서 ID·스키마 버전)이 함께 필요합니다.
+- 적재는 묶음(`JSONEachRow`)으로 넣습니다. 연결 주소·포트 이름은 센서가 `orig_h`·`resp_p`처럼 통일해 보내므로 수집 단계에서 바꿀 필요가 없습니다. 센서 식별(`sensor_id`)은 수집 에이전트가 붙이고, 스키마 버전은 센서 상태 로그(`nsm_sensor.log`)에 있습니다.
 - 위 값은 사용 가능 용량입니다. 물리 디스크는 RAID 10이면 2배, RAID 6이면 디스크 2개를 더합니다.
 - 압축 배율(ClickHouse 1/5\~1/10, 검색엔진 0.6\~1.2배)은 일반적인 경험값이고 이 로그로 재지 않았습니다. CIC 메타데이터를 ClickHouse에 넣어 테이블별 크기를 재면 확정되고, 하루 유입량은 고객 운영 측정(다음 단계 1번)으로 확정합니다.
 
@@ -512,7 +512,7 @@ Manager는 `nsm_detection.log`로 알림을 올리고, `evidence_id`로 `evidenc
 위에서부터 kerberos 행, flow_summary, dns_summary, http_ua_summary, meta_export_stats 예시입니다.
 
 ```json
-{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","id.orig_h":"10.0.0.60","id.orig_p":62228,"id.resp_h":"10.0.0.10","id.resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
+{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
 {"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
 {"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":["A","AAAA"],"rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}

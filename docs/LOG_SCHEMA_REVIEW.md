@@ -4,7 +4,7 @@
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
-- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함), G1(스키마), X1(파일 지문·적재 시각)·S1(센서 상태 로그, N6 지연, D2의 스키마 버전) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
+- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함), G1(스키마), X1(파일 지문·적재 시각)·S1(센서 상태 로그, N6 지연, D2의 스키마 버전)·M1(선별 전송 필드 이름) 반영. 센서 쪽 작업 순서 1\~5단계 완료, D2 `sensor_id`(수집 에이전트)만 남음. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -242,7 +242,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) | 완료(아래 참고) |
 | 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | 완료(아래 참고) |
 | 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | 완료(아래 참고) |
-| 5 | M1·S1(+N6)·G1, X1 | G1·X1·S1 완료([LOG_SCHEMA.md](LOG_SCHEMA.md), [SRS 6.4·6.5](SRS.md)). M1 남음 |
+| 5 | M1·S1(+N6)·G1, X1 | 완료([LOG_SCHEMA.md](LOG_SCHEMA.md), [SRS 6.4·6.5](SRS.md), [메타데이터 SRS 5.1](SRS_METADATA_EXPORT.md)) |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 | |
 
 1·2단계에서 정한 것:
@@ -277,6 +277,12 @@ X1·S1에서 정한 것([SRS 6.4·6.5](SRS.md)):
 - `schema_version`은 사람이 올리는 번호가 아니라 `schema/logs` 내용의 해시(앞 12자리)입니다. `schema/build.py`가 `nsm_rules/sensor/schema_version.zeek`를 만들어 스키마가 바뀌면 반드시 바뀝니다(D2의 버전 부분).
 - `rules_version`은 따로 두지 않고 `pkg_version`(`0.1.0`부터, 릴리스 때 올림) 하나로 했습니다.
 - `meta/stats`·`meta/capture_loss` 선별 전송은 그대로 둡니다. Manager가 `nsm_sensor`로 옮긴 뒤 끌지 정합니다.
+
+M1에서 정한 것:
+
+- 선별 전송 행 로그(`kerberos`, `ntlm`, `smb_*`, `dce_rpc`, `rdp`, `ssh`, `ssl`, `http`, 설정으로 켠 `conn`)의 `id.orig_h`·`id.orig_p`·`id.resp_h`·`id.resp_p`를 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 보냅니다(`NSM::meta_field_name_map`, `Log::Filter`의 `field_name_map`). 요약 로그와 같은 이름입니다.
+- 설정의 `fields`는 Zeek 이름 그대로 적습니다(필드 선택은 원래 이름, 이름 바꾸기는 출력 때). 센서에 남기는 원본(T2)과 탐지 로그는 바꾸지 않습니다.
+- 근거(`evidence`)의 `src`·`dst`와는 뜻이 다릅니다. 근거는 공격 방향, 선별 전송은 연결 방향입니다.
 
 ### 6.5 결정 필요 (추가)
 

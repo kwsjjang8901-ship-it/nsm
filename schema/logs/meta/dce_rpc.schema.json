@@ -13,7 +13,7 @@
       "type": "string",
       "x-zeek-type": "string"
     },
-    "id.orig_h": {
+    "orig_h": {
       "type": "string",
       "anyOf": [
         {
@@ -25,12 +25,12 @@
       ],
       "x-zeek-type": "addr"
     },
-    "id.orig_p": {
+    "orig_p": {
       "type": "integer",
       "minimum": 0,
       "x-zeek-type": "port"
     },
-    "id.resp_h": {
+    "resp_h": {
       "type": "string",
       "anyOf": [
         {
@@ -42,7 +42,7 @@
       ],
       "x-zeek-type": "addr"
     },
-    "id.resp_p": {
+    "resp_p": {
       "type": "integer",
       "minimum": 0,
       "x-zeek-type": "port"
@@ -59,10 +59,10 @@
   "required": [
     "ts",
     "uid",
-    "id.orig_h",
-    "id.orig_p",
-    "id.resp_h",
-    "id.resp_p"
+    "orig_h",
+    "orig_p",
+    "resp_h",
+    "resp_p"
   ],
   "additionalProperties": false
 }

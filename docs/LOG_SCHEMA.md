@@ -2,7 +2,7 @@
 
 이 문서는 `schema/build.py`가 만듭니다. 직접 고치지 말고 `schema/overlay.json`(설명·열거값)이나 Zeek 코드(필드)를 고친 뒤 다시 만드세요. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema(draft 2020-12)입니다.
 
-- 스키마 버전: `d19cbc1a2571`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
+- 스키마 버전: `db6b91e3ec51`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
 - 형식: JSON 한 줄 = 한 행. 값이 없는 선택 필드는 쓰지 않습니다(키가 없음). 필수 필드는 항상 있습니다.
 - 타입: `time`은 epoch 초(소수), IP는 문자열, 목록은 JSON 배열, 정해 두지 않은 필드는 없습니다(`additionalProperties: false`).
 - 검증: CI가 btest 전체 출력의 해당 로그를 이 스키마로 검사하고(`schema/validate.py`), 코드의 필드가 스키마와 달라지면 실패합니다(`schema/build.py --check`).
@@ -275,10 +275,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `endpoint` | string |  |  |  |
 | `operation` | string |  |  |  |
 
@@ -290,10 +290,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `method` | string |  |  |  |
 | `host` | string |  |  |  |
 | `request_body_len` | integer | 필수 |  |  |
@@ -309,10 +309,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `request_type` | string |  |  |  |
 | `client` | string |  |  |  |
 | `service` | string |  |  |  |
@@ -328,10 +328,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `username` | string |  |  |  |
 | `hostname` | string |  |  |  |
 | `domainname` | string |  |  |  |
@@ -345,10 +345,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `cookie` | string |  |  |  |
 | `result` | string |  |  |  |
 | `security_protocol` | string |  |  |  |
@@ -372,10 +372,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `action` | string |  |  |  |
 | `path` | string |  |  |  |
 | `name` | string |  |  |  |
@@ -390,10 +390,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `path` | string |  |  |  |
 | `share_type` | string | 필수 |  |  |
 
@@ -405,10 +405,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `auth_success` | boolean |  |  |  |
 | `auth_attempts` | integer | 필수 |  |  |
 | `direction` | string |  |  |  |
@@ -423,10 +423,10 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | --- | --- | --- | --- | --- |
 | `ts` | time(epoch 초) | 필수 |  |  |
 | `uid` | string | 필수 |  |  |
-| `id.orig_h` | string(IP) | 필수 |  |  |
-| `id.orig_p` | integer | 필수 |  |  |
-| `id.resp_h` | string(IP) | 필수 |  |  |
-| `id.resp_p` | integer | 필수 |  |  |
+| `orig_h` | string(IP) | 필수 |  |  |
+| `orig_p` | integer | 필수 |  |  |
+| `resp_h` | string(IP) | 필수 |  |  |
+| `resp_p` | integer | 필수 |  |  |
 | `version` | string |  |  |  |
 | `cipher` | string |  |  |  |
 | `server_name` | string |  |  |  |
