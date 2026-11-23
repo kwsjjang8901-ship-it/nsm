@@ -63,7 +63,7 @@ ui/
   mockup/integrated_story_mockup.html  # 통합 공격 스토리·통합 상관 룰 목업(MDS·MTA·NSM, 예시 데이터)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
-  DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종)
+  DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종, 실제 공격 사례·위험도)
   REPORT_SPEC.md            # 통합 리포트(run_pcap.sh·report_pcap.py) 생성 구조와 스펙
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
