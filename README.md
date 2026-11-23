@@ -5,7 +5,7 @@ Zeek 기반 NSM(Network Security Monitoring) 탐지 룰 패키지입니다.
 `notice.log` / `nsm_detection.log` / `evidence.log`로 탐지와 근거를 남깁니다.
 
 - 대상 Zeek 버전: **9.x** (자산 식별 PoC와 동일 기준)
-- 현재 상태: PoC 단계. 룰 파일 34개(01\~35, 11은 08에 통합)·탐지 48종, 예외 엔진, 명시적 프록시 인식, 자산 식별 센서, 메타데이터 선별 전송, 통합 리포트(결과는 [docs/POC_RESULT.md](docs/POC_RESULT.md))
+- 현재 상태: PoC 단계. 룰 파일 34개(01\~35, 11은 08에 통합)·탐지 48종, 예외 엔진, 명시적 프록시 인식, 자산 식별 센서, 메타데이터 선별 전송, 센서 상태 로그, 통합 리포트(결과는 [docs/POC_RESULT.md](docs/POC_RESULT.md)). Manager로 가는 로그 형식은 [docs/LOG_SCHEMA.md](docs/LOG_SCHEMA.md)(JSON Schema, CI 검증)
 
 ## 구조
 
