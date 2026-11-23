@@ -8,6 +8,10 @@
 # @TEST-EXEC: assert-rows raw/meta/kerberos.log eq 3
 # @TEST-EXEC: assert-rows raw/raw_kerberos.log eq 3
 # @TEST-EXEC: assert-rows raw/raw_kerberos.log eq 3 forwardable=T
+# 필드 이름: 선별 전송은 orig_h·resp_p 처럼 바꾸고(meta_field_name_map), 센서에 남기는 원본은 Zeek 이름(id.orig_h) 그대로
+# @TEST-EXEC: assert-rows raw/meta/kerberos.log eq 3 orig_h=10.0.0.60 resp_p=88
+# @TEST-EXEC: assert-rows raw/raw_kerberos.log eq 3 id.orig_h=10.0.0.60 id.resp_p=88
+# @TEST-EXEC: ! grep -q '"id\.' raw/meta/kerberos.log && grep -q '"id\.orig_h"' raw/raw_kerberos.log
 # @TEST-EXEC: assert-rows raw/raw_dce_rpc.log eq 4
 # 원본은 Zeek 기본 이름으로 남는다(선별 로그 이름 flow_summary·dns_summary 를 쓰지 않는다)
 # @TEST-EXEC: test -f raw/raw_conn.log && test ! -f raw/raw_flow_summary.log && test ! -f raw/raw_dns_summary.log

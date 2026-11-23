@@ -56,6 +56,15 @@ function log_desc(name: string, id: Log::ID, include: set[string]): LogDesc
     return LogDesc($log=name, $fields=out);
     }
 
+# 선별 전송 행 로그: 보낼 때 바뀌는 이름(NSM::meta_field_name_map)으로
+function renamed(d: LogDesc): LogDesc
+    {
+    for ( i, f in d$fields )
+        if ( f$name in NSM::meta_field_name_map )
+            d$fields[i]$name = NSM::meta_field_name_map[f$name];
+    return d;
+    }
+
 event zeek_init() &priority=-100
     {
     local none: set[string] = set();
@@ -75,7 +84,7 @@ event zeek_init() &priority=-100
         {
         if ( spec$summary || id !in Log::active_streams )
             next;
-        logs += log_desc("meta/" + spec$name, id, spec?$fields ? spec$fields : none);
+        logs += renamed(log_desc("meta/" + spec$name, id, spec?$fields ? spec$fields : none));
         }
 
     local enums: vector of EnumDesc = vector();
