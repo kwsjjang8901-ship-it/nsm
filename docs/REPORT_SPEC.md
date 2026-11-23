@@ -1,6 +1,6 @@
 # 통합 리포트 생성 구조와 스펙
 
-작성: 2026-11-18 · 갱신: 2026-11-20 · 기준: main(PR #117까지) · 대상: 리포트를 고치거나 결과를 해석하는 개발·검증 담당자
+작성: 2026-11-18 · 갱신: 2026-11-23 · 기준: main(PR #129까지) · 대상: 리포트를 고치거나 결과를 해석하는 개발·검증 담당자
 관련: 사용법 요약 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) 8장(측정·확인 도구) · 결과 로그 형식 [POC_RESULT.md](POC_RESULT.md) 부록 · 탐지 설명 [DETECTION_GUIDE.md](DETECTION_GUIDE.md)
 
 PoC에서는 Manager 화면이 없어서, pcap 하나를 운영과 같은 설정으로 돌린 결과를 HTML 파일 하나(`<pcap 이름>_report.html`)로 묶어 봅니다. 이 문서는 그 리포트가 **어떤 순서로, 어떤 로그에서, 어떤 규칙으로** 만들어지는지 정리합니다. 리포트 규칙은 운영 Manager 화면의 시제품이기도 합니다.
@@ -20,7 +20,7 @@ PoC에서는 Manager 화면이 없어서, pcap 하나를 운영과 같은 설정
 flowchart TD
     P["pcap"] --> R["run_pcap.sh<br/>run_local.zeek 생성(운영 형상 + 출력 경로)"]
     R --> Z["[1/3] Zeek 9.x<br/>로컬 zeek(8 이상) 또는 Docker zeek/zeek:9.0.1<br/>nsm_rules 전체 로드"]
-    Z --> L["OUT/zeek/<br/>nsm_detection · evidence · nsm_exception · asset_signal<br/>notice · stats · capture_loss · reporter · stderr.txt"]
+    Z --> L["OUT/zeek/<br/>nsm_detection · evidence · nsm_exception · asset_signal · nsm_sensor<br/>notice · stats · capture_loss · reporter · stderr.txt"]
     Z --> LM["OUT/zeek/meta/<br/>선별 전송 13종"]
     L --> S["화면 요약(내장 python)<br/>탐지·자산 신호·선별 전송·전송량"]
     LM --> S
@@ -84,6 +84,7 @@ OUT/
   zeek/
     run_local.zeek  stderr.txt  exceptions.tsv(-x)
     nsm_detection.log  evidence.log  nsm_exception.log  asset_signal.log     Manager 로 가는 로그
+    nsm_sensor.log  nsm_ioc.log(IOC 파일)  asset_agent_policy.log(정책 파일)    (같음)
     notice.log  stats.log  capture_loss.log  reporter.log  loaded_scripts.log 센서 로컬 로그
     conn.log  dns.log …                                                       -k 원본 로그
     meta/  kerberos.log … flow_summary.log  dns_summary.log  meta_export_stats.log  선별 전송
@@ -100,7 +101,7 @@ OUT/
 | `[탐지]` | 탐지 요약 건수(상관·suppress 표시 따로), 근거 행 수, notice 종류별 건수·출발지 수, 예외 적재 종류·적중 상위 5개 |
 | `[자산 식별]` | 신호 행·IP 수·바이트, 신호 종류별 건수 |
 | `[선별 전송]` | 로그별 바이트·행 수와 합계 |
-| `[전송량]` | Manager로 가는 로그 = 선별 전송 + 자산 신호 + 탐지 로그(탐지 요약·근거·예외), 센서 로컬 로그, `-k` 원본 로그(따로), 하루 환산 |
+| `[전송량]` | Manager로 가는 로그 = 선별 전송 + 자산 신호 + 탐지 로그(탐지 요약·근거·예외) + 센서 상태·파일 적재(`nsm_sensor`·`nsm_ioc`·`asset_agent_policy`), 센서 로컬 로그, `-k` 원본 로그(따로), 하루 환산 |
 
 - **캡처 구간:** 모든 로그의 `ts` 중 1e9보다 큰 값의 최소\~최대입니다. 두 가지를 뺍니다. `reporter.log`는 pcap을 읽기 전 행에 실제 시계 시각이 찍히고, `-k` 원본 로그는 운영 형상이 아니라서입니다. 예외 적재 행처럼 ts가 0인 행도 빠집니다.
 - **하루 환산:** 캡처 구간이 10분(600초) 이상일 때만 `Manager 전송 × 86400 / 구간`으로 계산합니다. 요약 로그는 주기 끝이나 종료 때 한꺼번에 쓰이므로 짧은 캡처일수록 과대평가됩니다.
@@ -151,7 +152,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 7 | 메타데이터 관측(`meta_observe`) | 같은 공격 인프라에 붙은 host, 확인이 필요한 내부 접속(3.5절) |
 | 8 | 근거 연결률(`story_coverage`) | 탐지 종류별로 근거 계정·추정 근거·추정 계정·외부 이름·근거 uid가 붙은 건수(빈틈 검토용, 숫자만) |
 | 9 | 자산 표 | 리졸버 모드 또는 신호 모드(3.6절) |
-| 10 | 전송량·센서 상태 | 로그별 바이트·행, Manager 전송·센서 로컬·원본(-k) 구분, 최대 캡처 손실, NSM 외 notice, stderr 경고(최대 20줄) |
+| 10 | 전송량·센서 상태 | 로그별 바이트·행, Manager 전송·센서 로컬·원본(-k) 구분, 최대 캡처 손실, NSM 외 notice, stderr 경고(최대 20줄). 캡처 구간은 패킷 시각 로그로만 잡고, 실제 시각으로 쓰는 행(reporter, 예외·IOC·정책 파일 적재 행)은 뺌 |
 
 ### 3.3 추정 근거(`enrich`)
 

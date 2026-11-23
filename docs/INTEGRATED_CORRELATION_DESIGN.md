@@ -57,7 +57,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 
 | 필드 | 타입 | 내용 | MTA | MDS | NSM |
 | --- | --- | --- | --- | --- | --- |
-| `event_uid` | string | `<제품>:<센서·장비 id>:<원래 id>` | 메일 판정 id | 분석 id | `sensor_id` + `detection_id` |
+| `event_uid` | string | `<제품>:<센서·장비 id>:<원래 id>` | 메일 판정 id | 분석 id | `sensor_id` + `detection_id`(상관 탐지는 같은 id를 `revision`으로 갱신) |
 | `product` | enum | `MTA`·`MDS`·`NSM` | ✓ | ✓ | ✓ |
 | `time`, `time_end` | epoch | 발생 시각(유입·실행·탐지), 구간 끝 | 수신 시각 | 유입·실행 시각(판정 시각 아님) | `first_seen`·`last_seen` |
 | `observed_at` | epoch | Manager가 받은 시각(늦게 온 이벤트 판단) | ✓ | ✓ | ✓ |
@@ -65,11 +65,12 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | `stage` | enum | 킬체인 단계(정찰·초기 침투·…·피해) | 초기 침투 | 초기 침투·실행 | `killchain_stages` |
 | `technique` | 목록 | ATT&CK | T1566.001 등 | 판정 매핑 | `techniques` |
 | `severity_id` | int | OCSF 척도 1\~5 | 판정 등급 매핑 | 판정 등급 매핑 | `severity_id` |
-| `src_ip`, `dst_ip` | addr | 연결 양끝 | 발신 서버 | 다운로드 서버 | 출발·대상 |
-| `dst_name`, `url` | string | 외부 도메인·URL | 본문 URL | 다운로드 URL | 근거의 `dst_name` |
+| `src_ip`, `dst_ip` | addr | 연결 양끝 | 발신 서버 | 다운로드 서버 | `attacker`·`victims`(근거는 `src`·`dst`) |
+| `src_port`, `dst_port`, `community_id` | int, string | 연결 단위 조인 키 | - | (출발 포트가 있으면 계산) | 근거의 `src_port`·`dst_port`·`community_id` |
+| `dst_name`, `url` | string | 외부 도메인·URL | 본문 URL | 다운로드 URL | `dst_names`(근거는 `dst_name`) |
 | `file_sha256`, `file_name` | string | 파일 | 첨부 | 분석 파일 | (HTTP로 받은 파일이면 해시) |
 | `mailbox`, `sender` | string | 수신 메일 주소, 발신자 | ✓ | 유입이 메일이면 | - |
-| `user` | string | 정규화한 계정(`도메인\계정`, 소문자) | 수신자 → 계정(4장) | 에이전트 사용자 | 근거 계정 |
+| `user` | string | 정규화한 계정(`도메인\계정`, 소문자) | 수신자 → 계정(4장) | 에이전트 사용자 | `accounts`(근거는 `user_name`·`user_domain`·`user_domain_type`) |
 | `host` | string | **정규화한 PC 엔티티 id**(4장) | 수신자 → 계정 → PC | 에이전트 호스트 | IP → 자산(시각 기준) |
 | `entity_conf` | int | `host`·`user` 연결 신뢰도 0\~100 | 연결 경로에 따라 | 에이전트면 높음 | 자산 판정 신뢰도 |
 | `raw_ref` | string | 원본 이벤트 위치(화면 링크) | ✓ | ✓ | ✓ |
@@ -307,7 +308,7 @@ x-nsm-require-distinct: sensor_id
 
 | 단계 | 내용 | 전제 | 끝났다고 보는 기준 |
 | --- | --- | --- | --- |
-| 0 | 공통 이벤트 모델·엔티티 키 확정, MDS·MTA 이벤트 필드 확인 | 센서 로그 형식 P1(`sensor_id`·`rule`·`severity_id`·`dst_name`) | 세 제품 샘플 이벤트가 3장 모델로 변환됨 |
+| 0 | 공통 이벤트 모델·엔티티 키 확정, MDS·MTA 이벤트 필드 확인 | 센서 로그 형식: 센서 쪽은 반영됨(#124\~#129, [LOG_SCHEMA.md](LOG_SCHEMA.md)). 수집 에이전트의 `sensor_id`만 남음 | 세 제품 샘플 이벤트가 3장 모델로 변환됨 |
 | 1 | 엔티티 연결(메일함·사용자·PC·IP·파일·도메인) | 디렉터리 연동 또는 사용자 대장, 자산 판정 | 실험실 시나리오에서 메일 수신자 → PC 연결 정확도 확인 |
 | 2 | **통합 공격 스토리**(탐지 로직 없이 묶기만) | 1 | 시나리오 3종이 한 스토리로 보임 |
 | 3 | 상관 엔진 + 기본 제공 시나리오 5\~10개(C-01\~C-04 등) | 2 | 시나리오별 탐지, 정상 업무 데이터 2주 오탐 측정 |

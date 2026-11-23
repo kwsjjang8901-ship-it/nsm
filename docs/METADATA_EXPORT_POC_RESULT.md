@@ -1,6 +1,6 @@
 # NSM 메타데이터 선별 전송 PoC 결과 보고
 
-작성일: 2026-11-11 · 갱신: 2026-11-18 · 기준: main `79d3db2`(PR #97까지)
+작성일: 2026-11-11 · 갱신: 2026-11-23 · 기준: main `1c07616`(PR #129까지)
 상세 근거: 요구사항 명세 [SRS_METADATA_EXPORT.md](SRS_METADATA_EXPORT.md) · 설계·계획·측정 기록 [METADATA_EXPORT_PLAN.md](METADATA_EXPORT_PLAN.md) · 자산 식별·탐지까지 함께 정리한 통합 보고 [POC_RESULT.md](POC_RESULT.md) · 소급검색 설계안 [RETRO_SEARCH_DESIGN.md](RETRO_SEARCH_DESIGN.md)
 
 > 5·6·7장과 부록 A의 측정은 2026-11-11 시점(PR #33 형상, 일부는 #36 추정 포함) 기록이다. 그 뒤의 공개 데이터셋 5일 측정과 Manager 전송량 예측은 6.5·6.6절에 더했다.
@@ -65,6 +65,9 @@
 | #82\~#88 | 11-16 | 통합 리포트 공격 스토리에 메타데이터 관측(같은 공격 인프라, 확인이 필요한 내부 접속), 평소 통신·내부 리졸버·흔한 목적지 걸러내기 |
 | #96 | 11-17 | 목록 필드 `service`(flow\_summary)·`qtypes`(dns\_summary)를 JSON 배열로 |
 | #97 | 11-18 | 소급검색 설계안(지표 색인, 결손 표시, dns\_names·files·x509 보강 제안) |
+| #127 | 11-23 | 로그 스키마: 선별 전송 로그 16종의 JSON Schema(`schema/logs/meta/`)와 문서(`docs/LOG_SCHEMA.md`), CI가 테스트 출력 전체를 검증 |
+| #128 | 11-23 | 센서 상태 로그 `nsm_sensor.log`(1분, `/log/zeek/nsm_sensor`): 패킷·누락·처리 지연·버전. `meta/stats`·`meta/capture_loss` 사본은 그대로 |
+| #129 | 11-23 | 선별 전송 행 로그의 연결 주소·포트 이름을 요약 로그와 같은 `orig_h`·`orig_p`·`resp_h`·`resp_p`로(`meta_field_name_map`). 원본(T2)은 Zeek 이름 그대로 |
 
 ### 3.2 구조
 
@@ -95,6 +98,7 @@
 | http_ua_summary | 요약 | (출발지, User-Agent) | 24시간 |
 | capture_loss, stats, reporter, meta_export_stats | 센서 상태 | | |
 
+- 필드 전체는 [LOG_SCHEMA.md](LOG_SCHEMA.md)의 `meta/*`에 있다. 행 단위 로그의 연결 주소·포트는 `orig_h`·`orig_p`·`resp_h`·`resp_p`(#129 이전 출력은 Zeek 이름 `id.orig_h` 등)다.
 - 모두 JSON 한 줄 한 행이다. 목록 값(`flow_summary.service`, `dns_summary.qtypes`, `sample_names`, `answers`)은 JSON 배열이고, 건수가 붙은 값(`states`, `rcodes`)은 문자열이다.
 - `sample_uid`는 원본 conn·dns 로그가 남을 때(T2를 켰거나 `keep_log_streams`에 있을 때)만 쓴다.
 
@@ -302,7 +306,7 @@ Manager로 가는 로그는 대역폭이 아니라 연결·목적지 수에 비�
 | 2 | 전송량 기준 결정: 비율과 함께 센서당 하루 절대량 상한 | 운영 판단 기준 확정 |
 | 3 | 1 결과로 주기·상한·예외 도메인(`meta_domain_allowlist`)·내부 리졸버 조정 | 목표 충족 |
 | 4 | Manager 적재: 로그 종류별 ClickHouse 테이블과 적재 스크립트, CIC 5일 메타데이터로 압축 후 크기 실측 | 1년 스토리지 확정 |
-| 5 | 수집 에이전트·Manager와 출력 형식 합의(센서 ID·스키마 버전), OCSF 변환기 입력·매핑 | 실운영 준비 |
+| 5 | 수집 에이전트와 센서 식별자(`sensor_id`) 합의, OCSF 변환기 입력·매핑. 출력 형식(스키마·스키마 버전·필드 이름)은 센서 쪽 준비됨(#127\~#129) | 실운영 준비 |
 | 6 | 소급검색: Manager 지표 색인·결손 표시(센서 변경 없음), 이어서 센서 보강(`dns_names`·`x509`·`files`) | 새 지표의 과거 적중 조회 |
 
 ---

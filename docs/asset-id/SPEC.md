@@ -2,7 +2,7 @@
 
 > **nsm 저장소 사본(2026-11-12 머지).** 원본은 `kwsjjang8901-ship-it/claudtest2`의 `docs/`입니다. 센서 코드(원본 `scripts/`)는 이 저장소의 `nsm_rules/asset-id/`에 있고, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있습니다. PoC 도구(`tools/`: 실행 스크립트·리졸버·리포트)와 리졸버 테스트는 머지 대상이 아니어서 claudtest2에 남아 있습니다. 센서 동작을 바꾸면 이 문서와 [탐지 SRS](../SRS.md) 5.5절을 함께 고칩니다.
 
-문서 버전: 0.7 (2026-11-20) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
+문서 버전: 0.8 (2026-11-23) · 대상 코드: `scripts/` (센서), `tools/asset_resolver.py` (판정)
 관련 문서: 설계 배경과 측정 기록 [DESIGN.md](DESIGN.md), 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 이 문서는 **프로토콜별로 무엇을 보고, 어떤 신호를 만들고, 그 신호를 자산 판정에 어떻게 쓰는지**를 정의한다.
@@ -617,7 +617,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
-| 0.8 | 2026-11-23 | 에이전트 정책 파일 지문(`asset_agent_policy.log` `kind=file`, `file_sha1`), 적재 결과 행을 실제 시각으로 |
+| 0.8 | 2026-11-23 | 계정 신호에 `user_name`·`user_domain`·`user_domain_type`(2장, 탐지 근거와 같은 규칙). 에이전트 정책 파일 지문(`asset_agent_policy.log` `kind=file`, `file_sha1`), 적재 결과 행을 실제 시각으로. 로그 필드·열거값은 [LOG_SCHEMA.md](../LOG_SCHEMA.md) |
 | 0.7 | 2026-11-20 | 기기 형태 힌트 `form_factor`(3.11), Apple 연결 확인 OS 힌트, 장비 유형 판정 규칙(4.12) |
 | 0.6 | 2026-11-20 | 서비스 배너(3.20): HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전과 Recog 연결(4.11), 부하 측정 |
 | 0.5 | 2026-11-20 | 지문 대조 입력 신호: SMB1 native OS·LM 원문(클라이언트·서버), 인증서 주체·발급자, SNMP(3.18), TCP SYN 지문(3.19). 지문 DB 보강 규칙(4.11: OUI, Recog, TCP SYN 계열)과 라이선스 메모 |

@@ -1,6 +1,6 @@
 # NSM 자산 식별(Zeek) PoC 결과 보고
 
-작성일: 2026-11-06 · 갱신: 2026-11-20 · 기준: nsm main `c75d510`(PR #117까지) · 대상: NSM 1.0.0 원페이저 "자산식별 기능(Zeek) POC 개발"
+작성일: 2026-11-06 · 갱신: 2026-11-23 · 기준: nsm main `1c07616`(PR #129까지) · 대상: NSM 1.0.0 원페이저 "자산식별 기능(Zeek) POC 개발"
 상세 근거: 스펙 [SPEC.md](SPEC.md) · 설계·측정 기록 [DESIGN.md](DESIGN.md) · 탐지 SRS [5.5절](../SRS.md) · 탐지·메타데이터까지 함께 정리한 통합 보고 [POC_RESULT.md](../POC_RESULT.md) · 검증·개선 계획 [PLAN.md](https://github.com/kwsjjang8901-ship-it/claudtest2/blob/main/docs/PLAN.md)
 
 > 센서 코드는 2026-11-12에 PoC 저장소(`kwsjjang8901-ship-it/claudtest2`)에서 이 저장소로 옮겼다(#47). 센서 코드는 `nsm_rules/asset-id/`, 센서 테스트는 `tests/btest/asset-id/`(pcap은 `tests/pcaps/asset-id/`)에 있다. 판정 도구(리졸버·평가)와 리졸버 테스트는 claudtest2에 남아 있다. 4.1\~4.4절은 머지 전 운영 측정 기록이고, 머지 뒤의 변경과 공개 데이터셋 결과는 3.1·3.2·4.5절에 더했다. 센서 동작을 바꾸면 이 문서, [SPEC.md](SPEC.md), 탐지 SRS 5.5절을 함께 고친다.
@@ -55,6 +55,7 @@
 | 11/20 | 서비스 배너(SPEC 0.6): HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전 → 리포트 Recog 대조. 최악 조건 부하 +2.8%(POP3·MySQL 포함 +6.7%) |
 | 11/20 | 지문 대조(SPEC 0.5): 센서가 SMB 원문·인증서 주체·SNMP·TCP SYN 모양을 남기고, 통합 리포트가 OUI 제조사·Recog 지문(제품·장비 종류)·TCP SYN OS 계열을 붙임(Manager 후처리 시제품) |
 | 11/19 | 고객 정의 에이전트 정책(SPEC 0.4): 고객이 정한 제품의 에이전트 통신(서버 주소·포트, 도메인, User-Agent)을 정책 파일로 식별. 미설치 후보 판정 규칙은 Manager(4.10) |
+| 11/23 | Manager 연동 형식(#124, #128): 계정 신호에 `user_name`·`user_domain`·`user_domain_type`(근거 로그와 같은 규칙), 에이전트 정책 파일 지문(SPEC 0.8), `asset_signal`·`asset_agent_policy`의 JSON Schema(`docs/LOG_SCHEMA.md`) |
 | 11/19 | 라우팅 구간 신호(SPEC 0.3): Kerberos 서비스 티켓(AP-REQ)의 서비스 이름 → 서버 이름·도메인, HTTP 응답 Server 헤더 → 서버 소프트웨어·OS. DHCP 릴레이 구간 테스트 |
 
 ### 3.2 구현 기능
@@ -203,6 +204,7 @@ DC·DHCP가 보이는 연구용 사무실망(내부 192.168.10.0/24) 5일을 리
 | 캡처 품질 | 센서 상태 지표로 "데이터 연결 응답 비율"과 응답 없는 연결 시도 상위 IP 제공 | SPEC 품질 지표에 정리, Manager 화면 대기 |
 | 미관리 자산 가시화 | Agent 목록 대조(Next)와 함께, 트래픽 기반 "AhnLab 제품 통신 여부"를 보조 근거로 활용 | AhnLab 제품 통신과 MDS Agent 설치 신호 구현(#95). Agent 목록 대조는 Next |
 | 라우팅 구간 PC 식별 | DHCP 서버 로그·AD 연동(Next), MeDCore 단말 ID 활용 가능성 검토 | 대기 |
+| Manager 연동 형식 | 자산 신호와 탐지 근거의 계정을 같은 형식으로, 로그 형식 문서화 | 반영. 계정을 사용자·도메인으로 나눠 남기고(#124), 필드·열거값은 [LOG_SCHEMA.md](../LOG_SCHEMA.md)와 CI 검증(#127). NetBIOS ↔ DNS 도메인 대응은 Manager |
 | 개인정보 | 사용자 계정 이름의 보관 기간·접근 권한 정의. 인증 응답값·URL 값은 수집하지 않음 | 수집 제외는 반영, 보관 기간·권한은 Manager 정책 대기 |
 
 ---

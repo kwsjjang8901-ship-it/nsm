@@ -76,6 +76,8 @@ pcap을 읽을 때는 Suricata를 먼저 돌려 경보 파일을 만든 뒤 Zeek
 
 Community ID는 경보에 들어 있는 값(`community_id`)을 그대로 씁니다. Zeek `community_id_v1()`로 같은 값을 계산할 수 있어 검증에 씁니다. conn.log에 Community ID를 넣는 것(`policy/protocols/conn/community-id-logging` 로드)은 surica DESIGN 12장에서 제안한 대로입니다. 선별 전송 필드 목록에도 넣어야 합니다(9장).
 
+> 2026-11-23 현황: NSM 근거(`evidence.log`)에는 이미 연결의 `community_id`(seed 0)와 `src_port`·`dst_port`·`proto`가 들어갑니다(#126, [LOG_SCHEMA.md](LOG_SCHEMA.md)). Suricata 경보 근거도 같은 필드 이름(`community_id`)에 경보의 값을 넣으면 Manager가 NSM 탐지와 경보를 같은 키로 묶을 수 있습니다. conn.log에 Community ID를 넣는 결정(9장)은 Manager가 경보 ↔ 원본 연결을 찾을 때만 필요합니다.
+
 ### 3.4 notice 종류: 단계별 8개
 
 경보마다 공격 단계가 다르므로 notice 하나로 두지 않고 **단계별로 나눕니다**. 그러면 예외 범위(`scope`), 킬체인 묶음(`corr_*_notes`), 사건 묶기 키(notice 종류 + 공격자 + 피해 host)를 지금 코드 그대로 씁니다.

@@ -1,6 +1,7 @@
 # 센서 로그 형식 검토 (Manager 개발 관점)
 
 - 검토일: 2026-11-20 · 기준: main `0fed325`(PR #120까지)
+- 최종 갱신: 2026-11-23 · main `1c07616`(PR #129까지). 아래 표의 "지금" 칸은 검토 당시 상태이고, 현재 상태는 "상태" 칸입니다. 현재 형식의 기준은 [LOG_SCHEMA.md](LOG_SCHEMA.md)(JSON Schema `schema/logs/`)입니다.
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
@@ -15,20 +16,22 @@
 
 다만 **Manager를 만들기 전에 고치는 것이 싼 항목**이 있습니다. 필드를 더하는 것은 하위 호환이라 지금 넣어도 기존 소비자(리포트, OCSF 변환기)가 깨지지 않습니다. 반대로 Manager가 테이블을 만든 뒤에는 이름·의미를 바꾸기 어렵습니다.
 
-| 우선 | # | 항목 | 지금 | 제안 |
-| --- | --- | --- | --- | --- |
-| P1 | D1 | 등급을 숫자로도 | `severity` 문자열(`Information`·`Suspicious`) | `severity_id` 정수 추가(OCSF 척도). 문자열은 유지 |
-| P1 | D2 | 센서 식별·스키마 버전 | 행에 센서 식별자 없음(`node`는 클러스터 노드 이름) | 수집 에이전트가 `sensor_id`를 붙이고, 센서는 상태 로그에 버전을 남김 |
-| P1 | D3 | 상관 탐지 갱신 | 체인이 길어질 때마다 같은 `detection_id`로 새 행. 갱신 번호 없음, 갈래가 다른 체인도 같은 id | `revision` 추가, 갈래별 id 또는 마지막 행이 전체를 담게 |
-| P1 | D4 | 룰 식별 키 | 탐지 로그에 notice 이름이 없음. 상관 진단명은 첫·마지막 단계에 따라 바뀜 | `rule` 필드(예: `TLS_Beaconing`, 상관은 `Correlated_KillChain`) 추가 |
-| P1 | E1 | 근거의 핵심 값 | `detail` 자유 문자열(`host=… via_proxy=… port=…`). 리포트가 정규식으로 뽑음 | 자주 쓰는 값을 필드로: `dst_name`, `dst_port`, `proxy`, `bytes`, `window_s` |
-| P2 | D5 | 피해 host 개수 | `victims`는 상한(`chain_max_victims`)까지만, 잘렸는지 모름 | `victim_count` 추가 |
-| P2 | X1 | 예외 적재 시각 | `kind=loaded`·`rejected` 행의 `ts`가 0(시작 전 `network_time`) | 실제 시각(`current_time()`)과 파일 지문(`file_sha1`) |
-| P2 | M1 | 선별 전송 필드 이름 | 행 단위 로그는 `id.orig_h`(점), 요약 로그는 `orig_h` | 센서에서 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 통일(`field_name_map`) |
-| P2 | S1 | 센서 상태 로그 | 없음(장비 현황 화면이 쓸 값이 Zeek 기본 로그에 흩어져 있고 센서에만 남음) | `nsm_sensor.log` 1분 주기(버전·패킷·누락·로그 지연) |
-| P2 | E2 | 상관 근거의 하위 id | `parent_id` 쉼표 문자열 | 배열 |
-| P3 | E3 | 시간 값의 단위 | `detail` 안 `window=10.0 mins`, `interval=30.0s` | E1의 `window_s`처럼 초 단위 숫자 |
-| P3 | G1 | 열거값·스키마 문서 | 값 목록이 코드·SRS에 흩어짐 | 열거값 표 한 곳 + JSON Schema(CI에서 실제 행 검증) |
+| 우선 | # | 항목 | 지금(검토 당시) | 제안 | 상태 |
+| --- | --- | --- | --- | --- | --- |
+| P1 | D1 | 등급을 숫자로도 | `severity` 문자열(`Information`·`Suspicious`) | `severity_id` 정수 추가(OCSF 척도). 문자열은 유지 | 반영(#124) |
+| P1 | D2 | 센서 식별·스키마 버전 | 행에 센서 식별자 없음(`node`는 클러스터 노드 이름) | 수집 에이전트가 `sensor_id`를 붙이고, 센서는 상태 로그에 버전을 남김 | 스키마 버전 반영(#128), `sensor_id`는 수집 에이전트와 합의 남음 |
+| P1 | D3 | 상관 탐지 갱신 | 체인이 길어질 때마다 같은 `detection_id`로 새 행. 갱신 번호 없음, 갈래가 다른 체인도 같은 id | `revision` 추가, 갈래별 id 또는 마지막 행이 전체를 담게 | 반영(#125) |
+| P1 | D4 | 룰 식별 키 | 탐지 로그에 notice 이름이 없음. 상관 진단명은 첫·마지막 단계에 따라 바뀜 | `rule` 필드(예: `TLS_Beaconing`, 상관은 `Correlated_KillChain`) 추가 | 반영(#124) |
+| P1 | E1 | 근거의 핵심 값 | `detail` 자유 문자열(`host=… via_proxy=… port=…`). 리포트가 정규식으로 뽑음 | 자주 쓰는 값을 필드로: `dst_name`, `dst_port`, `proxy`, `bytes`, `window_s` | 반영(#126) |
+| P2 | D5 | 피해 host 개수 | `victims`는 상한(`chain_max_victims`)까지만, 잘렸는지 모름 | `victim_count` 추가 | 반영(#124) |
+| P2 | X1 | 예외 적재 시각 | `kind=loaded`·`rejected` 행의 `ts`가 0(시작 전 `network_time`) | 실제 시각(`current_time()`)과 파일 지문(`file_sha1`) | 반영(#128) |
+| P2 | M1 | 선별 전송 필드 이름 | 행 단위 로그는 `id.orig_h`(점), 요약 로그는 `orig_h` | 센서에서 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 통일(`field_name_map`) | 반영(#129) |
+| P2 | S1 | 센서 상태 로그 | 없음(장비 현황 화면이 쓸 값이 Zeek 기본 로그에 흩어져 있고 센서에만 남음) | `nsm_sensor.log` 1분 주기(버전·패킷·누락·로그 지연) | 반영(#128) |
+| P2 | E2 | 상관 근거의 하위 id | `parent_id` 쉼표 문자열 | 배열 | 반영(#126) |
+| P3 | E3 | 시간 값의 단위 | `detail` 안 `window=10.0 mins`, `interval=30.0s` | E1의 `window_s`처럼 초 단위 숫자 | 반영(#126) |
+| P3 | G1 | 열거값·스키마 문서 | 값 목록이 코드·SRS에 흩어짐 | 열거값 표 한 곳 + JSON Schema(CI에서 실제 행 검증) | 반영(#127) |
+
+**현재(2026-11-23):** D2의 `sensor_id`(수집 에이전트가 붙임)를 뺀 모든 항목이 센서에 반영됐습니다. 각 항목에서 정한 내용은 6.4절 아래에 단계별로 적었습니다.
 
 ---
 
@@ -222,17 +225,17 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 
 ### 6.3 새로 필요한 것
 
-| # | 항목 | 지금 | 제안 | 우선 |
-| --- | --- | --- | --- | --- |
-| N1 | **탐지 단위 계정** | 계정은 근거 행의 `account`에만 있음 | `nsm_detection`에 `accounts`(배열, 최대 5) 추가. 근거·인증 맥락에서 모음. 사용자로 묶는 상관(메일 수신자 → 사용자)에 씀 | P1 |
-| N2 | **계정 표기 통일** | 같은 사람이 세 가지로 나옴: Kerberos 자산 신호 `realm\이름`, NTLM `도메인\이름`(NetBIOS), 근거 `이름@realm`(UPN) | 원문은 두고 `user_name`(소문자 이름)·`user_domain`(원래 표기)·`user_domain_type`(`netbios`·`dns`)으로 나눠 씀. NetBIOS ↔ DNS 도메인 대응은 Manager가 디렉터리로(센서는 관측한 도메인 쌍을 자산 신호 `domain`으로 이미 남김) | P1 |
-| N3 | **탐지 단위 목적지 이름** | 근거 `detail`의 `host=`·`sni=`(E1에서 근거 필드로 제안) | E1에 더해 `nsm_detection`에도 `dst_names`(배열). 피싱 URL 메일 → 같은 도메인 접속(C-02)처럼 도메인으로 묶는 상관에 씀 | P1 |
-| N4 | **중계 장비 표시** | 프록시 경유 탐지의 `victims`에 프록시 IP가 들어가고, 프록시라는 표시는 근거 `detail`의 `via_proxy=`에만 있음 | `nsm_detection`에 `relays`(배열: 프록시 `주소:포트`). Manager는 `victims`에서 이 주소를 엔티티로 쓰지 않음(모든 PC가 한 스토리로 묶이는 것을 막음). 센서가 배운 프록시는 자산 신호 `device=proxy`로도 남김 | P1 |
-| N5 | **연결 단위 조인 키** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미). **MDS는 Community ID가 없음**(2026-11-20 확인) | MDS와 NSM을 연결 단위로 이을 때는 `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)`로 맞춤. 이를 위해 근거에 `src_port`·`dst_port`를 필드로 둠(E1의 `dst_port`와 같은 값). 근거에 `community_id`도 넣음(Q6 변경): Suricata 경보, 그리고 앞으로 Community ID를 갖게 될 다른 제품과의 연결 조인 키 | P2 |
-| N6 | **센서 지연** | 없음 | S1 상태 로그에 `capture_lag_s`(벽시계 - 패킷 시각). Manager가 "아직 안 온 이벤트"를 기다릴 시간을 정함 | P2 |
-| N7 | **상관 행의 구성 탐지 id** | 상관 행의 `evidence_ids`가 구성 단독 탐지의 id와 같다는 것이 코드상 규칙일 뿐 문서·필드에 없음 | `member_detection_ids` 필드 추가(또는 SRS에 규칙 명시). 통합 사건이 "이 NSM 상관은 이 단독 탐지들을 포함"을 알게 함 | P2 |
-| N8 | **ATT&CK 전술 id** | 단계는 `killchain_stages` 이름(`Command and Control`) | `tactics`(예: `TA0011`) 추가. 제품마다 단계 이름이 달라도 전술 id로 맞춤 | P3 |
-| N9 | **파일 해시(평문 전송)** | 선별 전송에 HTTP·SMB로 받은 파일의 해시가 없음 | 평문 HTTP·SMB로 받은 실행·문서 파일만 `files_summary`(SHA-256, 받은 PC, 출처)로. HTTPS가 대부분이라 효과가 제한적이므로 MDS 연동 범위를 보고 결정 | P3 |
+| # | 항목 | 지금(검토 당시) | 제안 | 우선 | 상태 |
+| --- | --- | --- | --- | --- | --- |
+| N1 | **탐지 단위 계정** | 계정은 근거 행의 `account`에만 있음 | `nsm_detection`에 `accounts`(배열, 최대 5) 추가. 근거·인증 맥락에서 모음. 사용자로 묶는 상관(메일 수신자 → 사용자)에 씀 | P1 | 반영(#124) |
+| N2 | **계정 표기 통일** | 같은 사람이 세 가지로 나옴: Kerberos 자산 신호 `realm\이름`, NTLM `도메인\이름`(NetBIOS), 근거 `이름@realm`(UPN) | 원문은 두고 `user_name`(소문자 이름)·`user_domain`(원래 표기)·`user_domain_type`(`netbios`·`dns`)으로 나눠 씀. NetBIOS ↔ DNS 도메인 대응은 Manager가 디렉터리로(센서는 관측한 도메인 쌍을 자산 신호 `domain`으로 이미 남김) | P1 | 반영(#124) |
+| N3 | **탐지 단위 목적지 이름** | 근거 `detail`의 `host=`·`sni=`(E1에서 근거 필드로 제안) | E1에 더해 `nsm_detection`에도 `dst_names`(배열). 피싱 URL 메일 → 같은 도메인 접속(C-02)처럼 도메인으로 묶는 상관에 씀 | P1 | 반영(#124) |
+| N4 | **중계 장비 표시** | 프록시 경유 탐지의 `victims`에 프록시 IP가 들어가고, 프록시라는 표시는 근거 `detail`의 `via_proxy=`에만 있음 | `nsm_detection`에 `relays`(배열: 프록시 `주소:포트`). Manager는 `victims`에서 이 주소를 엔티티로 쓰지 않음(모든 PC가 한 스토리로 묶이는 것을 막음). 센서가 배운 프록시는 자산 신호 `device=proxy`로도 남김 | P1 | 반영(#124) |
+| N5 | **연결 단위 조인 키** | 근거에는 Zeek `uid`뿐(센서 안에서만 의미). **MDS는 Community ID가 없음**(2026-11-20 확인) | MDS와 NSM을 연결 단위로 이을 때는 `(출발 IP, 목적지 IP, 목적지 포트, 시각 ±N초)`로 맞춤. 이를 위해 근거에 `src_port`·`dst_port`를 필드로 둠(E1의 `dst_port`와 같은 값). 근거에 `community_id`도 넣음(Q6 변경): Suricata 경보, 그리고 앞으로 Community ID를 갖게 될 다른 제품과의 연결 조인 키 | P2 | 반영(#126) |
+| N6 | **센서 지연** | 없음 | S1 상태 로그에 `capture_lag_s`(벽시계 - 패킷 시각). Manager가 "아직 안 온 이벤트"를 기다릴 시간을 정함 | P2 | 반영(#128) |
+| N7 | **상관 행의 구성 탐지 id** | 상관 행의 `evidence_ids`가 구성 단독 탐지의 id와 같다는 것이 코드상 규칙일 뿐 문서·필드에 없음 | `member_detection_ids` 필드 추가(또는 SRS에 규칙 명시). 통합 사건이 "이 NSM 상관은 이 단독 탐지들을 포함"을 알게 함 | P2 | 반영(#125) |
+| N8 | **ATT&CK 전술 id** | 단계는 `killchain_stages` 이름(`Command and Control`) | `tactics`(예: `TA0011`) 추가. 제품마다 단계 이름이 달라도 전술 id로 맞춤 | P3 | 미정 |
+| N9 | **파일 해시(평문 전송)** | 선별 전송에 HTTP·SMB로 받은 파일의 해시가 없음 | 평문 HTTP·SMB로 받은 실행·문서 파일만 `files_summary`(SHA-256, 받은 PC, 출처)로. HTTPS가 대부분이라 효과가 제한적이므로 MDS 연동 범위를 보고 결정 | P3 | 미정 |
 
 ### 6.4 바뀐 작업 순서
 
