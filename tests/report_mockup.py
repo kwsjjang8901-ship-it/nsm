@@ -269,7 +269,8 @@ def build(data, zeek_dir, tz=9.0):
     meta_b = sum(r["bytes"] for r in data.get("meta") or [])
     mgr = data.get("mgr") or {}
     parts = [["통신 기록", meta_b], ["장비 식별 정보", mgr.get("asset_signal", 0)],
-             ["탐지", mgr.get("nsm_detection", 0) + mgr.get("evidence", 0)], ["예외 기록", mgr.get("nsm_exception", 0)]]
+             ["탐지", mgr.get("nsm_detection", 0) + mgr.get("evidence", 0)], ["예외 기록", mgr.get("nsm_exception", 0)],
+             ["센서 상태", mgr.get("nsm_sensor", 0) + mgr.get("nsm_ioc", 0) + mgr.get("asset_agent_policy", 0)]]
     tot = sum(p[1] for p in parts) or 1
     sent = [[p[0], sz(p[1]), round(100 * p[1] / tot, 1)] for p in parts]
     sen = data.get("sensor") or {}

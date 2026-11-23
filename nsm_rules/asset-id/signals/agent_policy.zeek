@@ -24,6 +24,8 @@
 ##! 미설치 후보 판정은 Manager 가 대상 범위·관측 구간과 함께 한다(SPEC 3.17).
 
 @load base/frameworks/input
+@load base/frameworks/files
+@load base/files/hash
 @load base/protocols/conn
 @load base/protocols/http
 @load base/protocols/ssl
@@ -36,11 +38,17 @@ export {
 
 	type PolicyLogInfo: record {
 		ts:        time   &log;
-		## summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류)
+		## summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류), file(파일 지문)
 		kind:      string &log;
 		policy_id: string &log &optional;
+		## kind=file 은 파일 경로
 		msg:       string &log;
+		## kind=file: 읽은 정책 파일의 SHA1(다시 읽을 때마다 한 행). Manager 가 배포한 파일과 비교한다
+		file_sha1: string &log &optional;
 	};
+
+	## 마지막으로 읽은 정책 파일의 SHA1(센서 상태 로그용)
+	global agent_policy_sha1 = "";
 }
 
 type PolicyIdx: record {
@@ -82,7 +90,8 @@ global policy_done: set[addr, string] &create_expire=agent_policy_window;
 
 function policy_log(kind: string, id: string, msg: string)
 	{
-	local r = PolicyLogInfo($ts=network_time(), $kind=kind, $msg=msg);
+	# 적재 결과 행은 실제 시각(트래픽을 읽기 전에도 0 이 아님)
+	local r = PolicyLogInfo($ts=current_time(), $kind=kind, $msg=msg);
 	if ( id != "" )
 		r$policy_id = id;
 	Log::write(POLICY_LOG, r);
@@ -203,12 +212,46 @@ event policy_input_error(desc: Input::TableDescription, message: string, level: 
 	policy_release_wait();
 	}
 
+# 정책 파일 SHA1: 다 읽은 뒤 같은 파일을 파일 분석 프레임워크로 한 번 더 읽어 계산한다(sha1sum 과 같은 값).
+#   nsm_rules 의 NSM::hash_data_file 과 같은 방식이다(자산 식별은 단독으로도 쓰이므로 따로 둔다).
+global policy_hash_names: set[string] &create_expire=1hr;
+global policy_hash_seq = 0;
+
+function policy_hash_file()
+	{
+	++policy_hash_seq;
+	local nm = fmt("assetid-agent-policy-%d", policy_hash_seq);
+	add policy_hash_names[nm];
+	Input::add_analysis([$source=agent_policy_file, $name=nm]);
+	}
+
+event file_new(f: fa_file)
+	{
+	if ( f?$source && f$source in policy_hash_names )
+		Files::add_analyzer(f, Files::ANALYZER_SHA1);
+	}
+
+event file_hash(f: fa_file, kind: string, hash: string)
+	{
+	if ( kind != "sha1" || ! f?$source || f$source !in policy_hash_names )
+		return;
+	agent_policy_sha1 = hash;
+	Log::write(POLICY_LOG, PolicyLogInfo($ts=current_time(), $kind="file", $msg=agent_policy_file, $file_sha1=hash));
+	}
+
+hook Files::log_policy(rec: Files::Info, id: Log::ID, filter: Log::Filter)
+	{
+	if ( rec?$source && rec$source in policy_hash_names )
+		break;
+	}
+
 event Input::end_of_data(name: string, source: string)
 	{
 	if ( name != POLICY_STREAM )
 		return;
 	policy_sync();
 	policy_release_wait();
+	policy_hash_file();
 	}
 
 event zeek_init() &priority=5

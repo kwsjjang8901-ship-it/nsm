@@ -34,6 +34,7 @@
 @load ./main
 @load ./evidence_log
 @load ./exceptions
+@load ./data_file       # IOC 파일 SHA1(nsm_ioc kind=file)
 @load ./08_dns_tunneling
 
 module NSM;
@@ -53,10 +54,11 @@ export {
     ## IOC 파일 적재 결과(nsm_ioc.log)
     type IocLogInfo: record {
         ts:        time   &log;
-        kind:      string &log;            ##< summary | invalid | error
+        kind:      string &log;            ##< summary | invalid | error | file(파일 지문)
         indicator: string &log &optional;
         ioc_type:  string &log &optional;
-        msg:       string &log &optional;
+        msg:       string &log &optional;  ##< kind=file 은 파일 경로
+        file_sha1: string &log &optional;  ##< kind=file: 읽은 IOC 파일의 SHA1(다시 읽을 때마다 한 행)
     };
 }
 
@@ -131,7 +133,8 @@ global ioc_waiting_initial = F;
 
 function ioc_log(kind: string, indicator: string, t: string, msg: string)
     {
-    Log::write(IOC_LOG, IocLogInfo($ts=network_time(), $kind=kind, $indicator=indicator, $ioc_type=t, $msg=msg));
+    # 적재 결과 행은 실제 시각(트래픽을 읽기 전에도 0 이 아님)
+    Log::write(IOC_LOG, IocLogInfo($ts=current_time(), $kind=kind, $indicator=indicator, $ioc_type=t, $msg=msg));
     }
 
 ## 파일 한 줄을 Intel 항목으로. 잘못된 줄이면 indicator 가 빈 항목.
@@ -224,6 +227,13 @@ event Input::end_of_data(name: string, source: string)
         return;
     ioc_sync();
     ioc_release_wait();
+    NSM::hash_data_file("ioc", ioc_file);
+    }
+
+event NSM::data_file_hashed(tag: string, path: string, sha1: string)
+    {
+    if ( tag == "ioc" )
+        Log::write(IOC_LOG, IocLogInfo($ts=current_time(), $kind="file", $msg=path, $file_sha1=sha1));
     }
 
 event zeek_init() &priority=5

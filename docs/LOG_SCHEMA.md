@@ -2,6 +2,7 @@
 
 이 문서는 `schema/build.py`가 만듭니다. 직접 고치지 말고 `schema/overlay.json`(설명·열거값)이나 Zeek 코드(필드)를 고친 뒤 다시 만드세요. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema(draft 2020-12)입니다.
 
+- 스키마 버전: `d19cbc1a2571`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
 - 형식: JSON 한 줄 = 한 행. 값이 없는 선택 필드는 쓰지 않습니다(키가 없음). 필수 필드는 항상 있습니다.
 - 타입: `time`은 epoch 초(소수), IP는 문자열, 목록은 JSON 배열, 정해 두지 않은 필드는 없습니다(`additionalProperties: false`).
 - 검증: CI가 btest 전체 출력의 해당 로그를 이 스키마로 검사하고(`schema/validate.py`), 코드의 필드가 스키마와 달라지면 실패합니다(`schema/build.py --check`).
@@ -13,10 +14,11 @@
 | --- | --- | --- | --- | --- |
 | `nsm_detection` | 탐지 요약 | `/log/zeek/nsm_detection.log` | 26 | [`nsm_detection.schema.json`](../schema/logs/nsm_detection.schema.json) |
 | `evidence` | 근거 | `/log/zeek/evidence.log` | 25 | [`evidence.schema.json`](../schema/logs/evidence.schema.json) |
-| `nsm_exception` | 예외 적재·적중 | `/log/zeek/nsm_exception.log` | 9 | [`nsm_exception.schema.json`](../schema/logs/nsm_exception.schema.json) |
-| `nsm_ioc` | IOC 파일 적재 | `/log/zeek/nsm_ioc.log` | 5 | [`nsm_ioc.schema.json`](../schema/logs/nsm_ioc.schema.json) |
+| `nsm_exception` | 예외 적재·적중 | `/log/zeek/nsm_exception.log` | 10 | [`nsm_exception.schema.json`](../schema/logs/nsm_exception.schema.json) |
+| `nsm_ioc` | IOC 파일 적재 | `/log/zeek/nsm_ioc.log` | 6 | [`nsm_ioc.schema.json`](../schema/logs/nsm_ioc.schema.json) |
+| `nsm_sensor` | 센서 상태 | `/log/zeek/nsm_sensor.log` | 16 | [`nsm_sensor.schema.json`](../schema/logs/nsm_sensor.schema.json) |
 | `asset_signal` | 자산 신호 | `/log/zeek/asset_signal.log` | 11 | [`asset_signal.schema.json`](../schema/logs/asset_signal.schema.json) |
-| `asset_agent_policy` | 에이전트 정책 적재 | `/log/zeek/asset_agent_policy.log` | 4 | [`asset_agent_policy.schema.json`](../schema/logs/asset_agent_policy.schema.json) |
+| `asset_agent_policy` | 에이전트 정책 적재 | `/log/zeek/asset_agent_policy.log` | 5 | [`asset_agent_policy.schema.json`](../schema/logs/asset_agent_policy.schema.json) |
 | `meta/meta_export_stats` | 선별 전송 통계 | `/log/zeek/meta/meta_export_stats.log` | 9 | [`meta/meta_export_stats.schema.json`](../schema/logs/meta/meta_export_stats.schema.json) |
 | `meta/flow_summary` | 연결 요약 | `/log/zeek/meta/flow_summary.log` | 12 | [`meta/flow_summary.schema.json`](../schema/logs/meta/flow_summary.schema.json) |
 | `meta/dns_summary` | DNS 요약 | `/log/zeek/meta/dns_summary.log` | 13 | [`meta/dns_summary.schema.json`](../schema/logs/meta/dns_summary.schema.json) |
@@ -101,19 +103,20 @@ notice 1건 = 탐지 1건. 단독 탐지(Single)와 킬체인 상관 탐지(Corr
 
 ## 예외 적재·적중 (`nsm_exception`)
 
-예외 파일을 읽은 결과(loaded·rejected·expired·error)와 주기별 적중 수(hits).
+예외 파일을 읽은 결과(loaded·rejected·expired·error), 읽은 파일의 지문(file), 주기별 적중 수(hits).
 
 | 필드 | 타입 | 필수 | 값 | 설명 |
 | --- | --- | --- | --- | --- |
-| `ts` | time(epoch 초) | 필수 |  | 기록 시각(적재 행은 시작 직후 0 일 수 있음, 검토 X1) |
+| `ts` | time(epoch 초) | 필수 |  | 기록 시각. 적재 결과 행(loaded·rejected·expired·error·file)은 실제 시각(벽시계), 적중 집계(hits)는 패킷 시각 |
 | `node` | string | 필수 |  | 기록한 노드(standalone 은 zeek) |
-| `kind` | string | 필수 | `loaded`, `rejected`, `expired`, `hits`, `error` | loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류) |
+| `kind` | string | 필수 | `loaded`, `rejected`, `expired`, `hits`, `error`, `file` | loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류), file(읽은 예외 파일의 지문) |
 | `exception_id` | string | 필수 |  | 예외 id |
 | `disposition` | string |  | `drop`, `suppress` | 예외 처리: drop(탐지 안 함) 또는 suppress(탐지는 남기고 알림 안 함) |
 | `scope` | array<string> |  |  | 적용 탐지(notice 이름 또는 group:<묶음>, 이름순) |
 | `hits` | integer |  |  | 주기 안 적중 수(kind=hits) |
 | `last_hit` | time(epoch 초) |  |  | 마지막 적중 시각(kind=hits) |
-| `msg` | string |  |  | 거부 이유·출처 등 |
+| `msg` | string |  |  | 거부 이유·출처(file, legacy) 등. kind=file 은 예외 파일 경로 |
+| `file_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | kind=file: 읽은 예외 파일의 SHA1(파일 내용 그대로, sha1sum 과 같음). 파일을 다시 읽을 때마다 한 행. Manager 가 배포한 파일과 비교한다 |
 
 ## IOC 파일 적재 (`nsm_ioc`)
 
@@ -121,11 +124,35 @@ IOC 파일을 읽은 결과.
 
 | 필드 | 타입 | 필수 | 값 | 설명 |
 | --- | --- | --- | --- | --- |
-| `ts` | time(epoch 초) | 필수 |  | 기록 시각 |
-| `kind` | string | 필수 | `summary`, `invalid`, `error` | summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류) |
+| `ts` | time(epoch 초) | 필수 |  | 기록 시각(실제 시각, 벽시계) |
+| `kind` | string | 필수 | `summary`, `invalid`, `error`, `file` | summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류), file(읽은 IOC 파일의 지문) |
 | `indicator` | string |  |  | IOC 값(invalid 행) |
 | `ioc_type` | string |  |  | IOC 종류(ip, domain, url 등. 모르면 -) |
-| `msg` | string |  |  | 요약·이유 |
+| `msg` | string |  |  | 요약·이유. kind=file 은 IOC 파일 경로 |
+| `file_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | kind=file: 읽은 IOC 파일의 SHA1. 파일을 다시 읽을 때마다 한 행 |
+
+## 센서 상태 (`nsm_sensor`)
+
+노드별 1분마다 한 행(종료 때 마지막 구간 한 행 더). 장비 현황(패킷·누락·지연·버전·적용 중인 데이터 파일)에 쓴다. CPU·메모리·디스크·전송 지연은 수집 에이전트가 채운다.
+
+| 필드 | 타입 | 필수 | 값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `ts` | time(epoch 초) | 필수 |  | 기록 시각(패킷 시각) |
+| `node` | string | 필수 |  | 노드(standalone 은 zeek, 클러스터는 manager·worker-1 등). 패킷은 워커가 받는다 |
+| `schema_version` | string | 필수 | 형식 `^[0-9a-f]{12}$` | 로그 스키마 버전(schema/logs 내용의 SHA-256 앞 12자리). Manager 는 이 값으로 해석할 스키마를 고른다 |
+| `pkg_version` | string | 필수 |  | nsm_rules 패키지 버전(엔진 업데이트 화면) |
+| `zeek_version` | string | 필수 |  | Zeek 버전 |
+| `interval_s` | number | 필수 | 최소 0 | 이 행이 덮는 시간(초). 보통 60, 종료 행은 더 짧을 수 있음 |
+| `pkts` | integer | 필수 |  | 이 구간에 받은 패킷 |
+| `bytes` | integer | 필수 |  | 이 구간에 받은 바이트 |
+| `pkts_dropped` | integer | 필수 |  | 이 구간에 캡처 장치(NIC·커널)가 놓친 패킷 |
+| `drop_pct` | number | 필수 | 최소 0, 최대 100 | 놓친 패킷 비율(%): pkts_dropped / (pkts + pkts_dropped) |
+| `gap_pct` | number |  | 최소 0, 최대 100 | TCP 누락 비율(%): 이 구간에 ACK 된 데이터 중 센서가 못 본 구간의 비율(미러 품질, capture_loss 와 같은 계산). TCP ACK 가 없던 구간은 없음 |
+| `capture_lag_s` | number | 필수 |  | 처리 지연(초): 벽시계 - 패킷 시각. 커지면 센서가 밀리는 것. Manager 가 늦게 오는 이벤트를 기다릴 시간을 정할 때 쓴다. pcap 재생에서는 의미 없음 |
+| `uptime_s` | number | 필수 | 최소 0 | 시작 후 시간(초, 벽시계) |
+| `exc_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 이 노드가 마지막으로 읽은 예외 파일 SHA1(파일을 읽는 노드만, 클러스터는 매니저) |
+| `ioc_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 마지막으로 읽은 IOC 파일 SHA1 |
+| `policy_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 마지막으로 읽은 에이전트 정책 파일 SHA1 |
 
 ## 자산 신호 (`asset_signal`)
 
@@ -151,10 +178,11 @@ IOC 파일을 읽은 결과.
 
 | 필드 | 타입 | 필수 | 값 | 설명 |
 | --- | --- | --- | --- | --- |
-| `ts` | time(epoch 초) | 필수 |  | 기록 시각 |
-| `kind` | string | 필수 | `summary`, `invalid`, `error` | summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류) |
+| `ts` | time(epoch 초) | 필수 |  | 기록 시각(실제 시각, 벽시계) |
+| `kind` | string | 필수 | `summary`, `invalid`, `error`, `file` | summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류), file(읽은 정책 파일의 지문) |
 | `policy_id` | string |  |  | 정책 id(invalid 행) |
-| `msg` | string | 필수 |  | 요약·이유 |
+| `msg` | string | 필수 |  | 요약·이유. kind=file 은 정책 파일 경로 |
+| `file_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | kind=file: 읽은 정책 파일의 SHA1. 파일을 다시 읽을 때마다 한 행 |
 
 ## 선별 전송 통계 (`meta/meta_export_stats`)
 

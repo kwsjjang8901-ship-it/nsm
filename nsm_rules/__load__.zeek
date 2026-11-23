@@ -57,6 +57,7 @@
 
 # 메타데이터 선별 전송(T1): 설정(nsm_config_*)에서 meta_* 를 redef 할 수 있도록 설정보다 먼저 로드.
 @load ./metadata
+@load ./sensor/status          # 센서 상태 로그(nsm_sensor.log, 1분마다)
 
 @load ./detections/nsm_config_fixed
 @load ./detections/nsm_config_custom

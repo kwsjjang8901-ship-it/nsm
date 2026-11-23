@@ -231,22 +231,23 @@
     "nsm_exception": {
       "title": "예외 적재·적중",
       "path": "/log/zeek/nsm_exception.log",
-      "desc": "예외 파일을 읽은 결과(loaded·rejected·expired·error)와 주기별 적중 수(hits).",
+      "desc": "예외 파일을 읽은 결과(loaded·rejected·expired·error), 읽은 파일의 지문(file), 주기별 적중 수(hits).",
       "fields": {
         "ts": {
-          "desc": "기록 시각(적재 행은 시작 직후 0 일 수 있음, 검토 X1)"
+          "desc": "기록 시각. 적재 결과 행(loaded·rejected·expired·error·file)은 실제 시각(벽시계), 적중 집계(hits)는 패킷 시각"
         },
         "node": {
           "desc": "기록한 노드(standalone 은 zeek)"
         },
         "kind": {
-          "desc": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류)",
+          "desc": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류), file(읽은 예외 파일의 지문)",
           "enum": [
             "loaded",
             "rejected",
             "expired",
             "hits",
-            "error"
+            "error",
+            "file"
           ]
         },
         "exception_id": {
@@ -270,7 +271,11 @@
           "desc": "마지막 적중 시각(kind=hits)"
         },
         "msg": {
-          "desc": "거부 이유·출처 등"
+          "desc": "거부 이유·출처(file, legacy) 등. kind=file 은 예외 파일 경로"
+        },
+        "file_sha1": {
+          "desc": "kind=file: 읽은 예외 파일의 SHA1(파일 내용 그대로, sha1sum 과 같음). 파일을 다시 읽을 때마다 한 행. Manager 가 배포한 파일과 비교한다",
+          "pattern": "^[0-9a-f]{40}$"
         }
       }
     },
@@ -280,14 +285,15 @@
       "desc": "IOC 파일을 읽은 결과.",
       "fields": {
         "ts": {
-          "desc": "기록 시각"
+          "desc": "기록 시각(실제 시각, 벽시계)"
         },
         "kind": {
-          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류)",
+          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류), file(읽은 IOC 파일의 지문)",
           "enum": [
             "summary",
             "invalid",
-            "error"
+            "error",
+            "file"
           ]
         },
         "indicator": {
@@ -297,7 +303,79 @@
           "desc": "IOC 종류(ip, domain, url 등. 모르면 -)"
         },
         "msg": {
-          "desc": "요약·이유"
+          "desc": "요약·이유. kind=file 은 IOC 파일 경로"
+        },
+        "file_sha1": {
+          "desc": "kind=file: 읽은 IOC 파일의 SHA1. 파일을 다시 읽을 때마다 한 행",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "nsm_sensor": {
+      "title": "센서 상태",
+      "path": "/log/zeek/nsm_sensor.log",
+      "desc": "노드별 1분마다 한 행(종료 때 마지막 구간 한 행 더). 장비 현황(패킷·누락·지연·버전·적용 중인 데이터 파일)에 쓴다. CPU·메모리·디스크·전송 지연은 수집 에이전트가 채운다.",
+      "fields": {
+        "ts": {
+          "desc": "기록 시각(패킷 시각)"
+        },
+        "node": {
+          "desc": "노드(standalone 은 zeek, 클러스터는 manager·worker-1 등). 패킷은 워커가 받는다"
+        },
+        "schema_version": {
+          "desc": "로그 스키마 버전(schema/logs 내용의 SHA-256 앞 12자리). Manager 는 이 값으로 해석할 스키마를 고른다",
+          "pattern": "^[0-9a-f]{12}$"
+        },
+        "pkg_version": {
+          "desc": "nsm_rules 패키지 버전(엔진 업데이트 화면)"
+        },
+        "zeek_version": {
+          "desc": "Zeek 버전"
+        },
+        "interval_s": {
+          "desc": "이 행이 덮는 시간(초). 보통 60, 종료 행은 더 짧을 수 있음",
+          "minimum": 0
+        },
+        "pkts": {
+          "desc": "이 구간에 받은 패킷",
+          "minimum": 0
+        },
+        "bytes": {
+          "desc": "이 구간에 받은 바이트",
+          "minimum": 0
+        },
+        "pkts_dropped": {
+          "desc": "이 구간에 캡처 장치(NIC·커널)가 놓친 패킷",
+          "minimum": 0
+        },
+        "drop_pct": {
+          "desc": "놓친 패킷 비율(%): pkts_dropped / (pkts + pkts_dropped)",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "gap_pct": {
+          "desc": "TCP 누락 비율(%): 이 구간에 ACK 된 데이터 중 센서가 못 본 구간의 비율(미러 품질, capture_loss 와 같은 계산). TCP ACK 가 없던 구간은 없음",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "capture_lag_s": {
+          "desc": "처리 지연(초): 벽시계 - 패킷 시각. 커지면 센서가 밀리는 것. Manager 가 늦게 오는 이벤트를 기다릴 시간을 정할 때 쓴다. pcap 재생에서는 의미 없음"
+        },
+        "uptime_s": {
+          "desc": "시작 후 시간(초, 벽시계)",
+          "minimum": 0
+        },
+        "exc_sha1": {
+          "desc": "이 노드가 마지막으로 읽은 예외 파일 SHA1(파일을 읽는 노드만, 클러스터는 매니저)",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "ioc_sha1": {
+          "desc": "마지막으로 읽은 IOC 파일 SHA1",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "policy_sha1": {
+          "desc": "마지막으로 읽은 에이전트 정책 파일 SHA1",
+          "pattern": "^[0-9a-f]{40}$"
         }
       }
     },
@@ -355,21 +433,26 @@
       "desc": "고객 정의 에이전트 정책 파일을 읽은 결과(SPEC 3.17).",
       "fields": {
         "ts": {
-          "desc": "기록 시각"
+          "desc": "기록 시각(실제 시각, 벽시계)"
         },
         "kind": {
-          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류)",
+          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류), file(읽은 정책 파일의 지문)",
           "enum": [
             "summary",
             "invalid",
-            "error"
+            "error",
+            "file"
           ]
         },
         "policy_id": {
           "desc": "정책 id(invalid 행)"
         },
         "msg": {
-          "desc": "요약·이유"
+          "desc": "요약·이유. kind=file 은 정책 파일 경로"
+        },
+        "file_sha1": {
+          "desc": "kind=file: 읽은 정책 파일의 SHA1. 파일을 다시 읽을 때마다 한 행",
+          "pattern": "^[0-9a-f]{40}$"
         }
       }
     },

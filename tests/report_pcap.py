@@ -25,7 +25,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import asset_enrich  # noqa: E402  (같은 폴더의 자산 정보 보강 모듈)
 
-MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal")
+MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal", "nsm_sensor", "nsm_ioc", "asset_agent_policy")
+# 적재 결과(예외·IOC·정책 파일을 읽은 행)는 실제 시각이라 캡처 구간 계산에서 뺀다(reporter 와 같은 이유)
+WALLCLOCK_LOGS = ("reporter", "nsm_ioc", "asset_agent_policy")
 # 운영에서도 센서에 남는 로그. 나머지(conn·dns 등)는 run_pcap.sh -k 로 남긴 원본이다(운영 전송량·구간 계산에서 뺀다).
 SENSOR_LOCAL = ("notice", "capture_loss", "loaded_scripts", "stats", "reporter")
 
@@ -899,10 +901,12 @@ def collect(z, assets_path, args):
     local = {k: size(p) for k, p in logs.items() if k in SENSOR_LOCAL}
     raw = {k: size(p) for k, p in logs.items() if k not in MGR and k not in SENSOR_LOCAL}
     # reporter 는 오프라인 실행에서 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 캡처 구간에서 뺀다.
+    #   예외·IOC·정책 파일 적재 행도 실제 시각이다(예외 로그는 적중 집계 hits 만 패킷 시각).
     # -k 원본 로그는 크고 운영 형상이 아니라 읽지 않는다.
     ts_all = [r["ts"] for k, p in list(logs.items()) + list(meta.items())
-              if k != "reporter" and k not in raw for r in rows(p)
-              if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
+              if k not in WALLCLOCK_LOGS and k not in raw for r in rows(p)
+              if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9
+              and (k != "nsm_exception" or r.get("kind") == "hits")]
     span = (max(ts_all) - min(ts_all)) if len(ts_all) >= 2 else 0
 
     # 센서 상태
@@ -1260,6 +1264,7 @@ document.getElementById('xft').innerHTML=`<table><tr><th>구분</th><th class="n
  <tr><td>선별 전송(/log/zeek/meta)</td><td class="num">${fmtB(mt)}</td><td></td></tr>
  <tr><td>자산 신호(asset_signal)</td><td class="num">${fmtB(D.mgr.asset_signal)}</td><td></td></tr>
  <tr><td>탐지 로그(탐지·근거·예외)</td><td class="num">${fmtB(D.mgr.nsm_detection+D.mgr.evidence+D.mgr.nsm_exception)}</td><td></td></tr>
+ <tr><td>센서 상태·파일 적재(nsm_sensor·nsm_ioc·asset_agent_policy)</td><td class="num">${fmtB((D.mgr.nsm_sensor||0)+(D.mgr.nsm_ioc||0)+(D.mgr.asset_agent_policy||0))}</td><td></td></tr>
  <tr><td class="mut">센서 로컬 로그(notice·stats 등, 전송 안 함)</td><td class="num mut">${fmtB(Object.values(D.local).reduce((a,b)=>a+b,0))}</td><td></td></tr>${Object.keys(D.raw||{}).length?`
  <tr><td class="mut">원본 로그(run_pcap.sh -k, 운영에서는 남기지 않음)</td><td class="num mut">${fmtB(Object.values(D.raw).reduce((a,b)=>a+b,0))}</td><td class="mut">${Object.keys(D.raw).length}개: ${esc(Object.keys(D.raw).sort().join(', '))}</td></tr>`:''}</table>
  <h2 style="margin-top:14px">선별 전송 로그별</h2><table><tr><th>로그</th><th class="num">바이트</th><th class="num">행</th><th></th></tr>`+

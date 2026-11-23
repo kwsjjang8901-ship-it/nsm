@@ -34,6 +34,7 @@ nsm_rules/
   metadata/
     main.zeek               # 메타데이터 선별 전송 (/log/zeek/meta, docs/METADATA_EXPORT_PLAN.md)
   asset-id/                 # 자산 식별 센서 (asset_signal.log, claudtest2 PoC 에서 머지, docs/asset-id/)
+  sensor/                   # 센서 상태 로그(nsm_sensor.log, 1분마다)·패키지 버전·스키마 버전(schema/build.py 가 생성)
 tests/
   gen_pcaps.py              # 합성 pcap 생성기 (scapy)
   pcaps/                    # 룰별 테스트 pcap (생성기 출력, 커밋됨)
