@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "선별 전송: reporter (meta/reporter)",
+  "description": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다.",
+  "x-path": "/log/zeek/meta/reporter.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "x-zeek-type": "time"
+    },
+    "level": {
+      "type": "string",
+      "x-zeek-type": "enum Reporter::Level"
+    },
+    "message": {
+      "type": "string",
+      "x-zeek-type": "string"
+    },
+    "location": {
+      "type": "string",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "level",
+    "message"
+  ],
+  "additionalProperties": false
+}

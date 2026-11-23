@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "선별 전송: stats (meta/stats)",
+  "description": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다.",
+  "x-path": "/log/zeek/meta/stats.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "x-zeek-type": "time"
+    },
+    "peer": {
+      "type": "string",
+      "x-zeek-type": "string"
+    },
+    "mem": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "pkts_proc": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "bytes_recv": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "pkts_dropped": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "pkts_link": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "pkt_lag": {
+      "type": "number",
+      "x-zeek-type": "interval"
+    },
+    "pkts_filtered": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "events_proc": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "events_queued": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_tcp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_udp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_icmp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "tcp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "udp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "icmp_conns": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "timers": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_timers": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "files": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_files": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "dns_requests": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "active_dns_requests": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "reassem_tcp_size": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "reassem_file_size": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "reassem_frag_size": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "reassem_unknown_size": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    }
+  },
+  "required": [
+    "ts",
+    "peer",
+    "mem",
+    "pkts_proc",
+    "bytes_recv",
+    "events_proc",
+    "events_queued",
+    "active_tcp_conns",
+    "active_udp_conns",
+    "active_icmp_conns",
+    "tcp_conns",
+    "udp_conns",
+    "icmp_conns",
+    "timers",
+    "active_timers",
+    "files",
+    "active_files",
+    "dns_requests",
+    "active_dns_requests",
+    "reassem_tcp_size",
+    "reassem_file_size",
+    "reassem_frag_size",
+    "reassem_unknown_size"
+  ],
+  "additionalProperties": false
+}

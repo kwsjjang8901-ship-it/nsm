@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "예외 적재·적중 (nsm_exception)",
+  "description": "예외 파일을 읽은 결과(loaded·rejected·expired·error)와 주기별 적중 수(hits).",
+  "x-path": "/log/zeek/nsm_exception.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "기록 시각(적재 행은 시작 직후 0 일 수 있음, 검토 X1)",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "기록한 노드(standalone 은 zeek)",
+      "x-zeek-type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "loaded",
+        "rejected",
+        "expired",
+        "hits",
+        "error"
+      ],
+      "description": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류)",
+      "x-zeek-type": "string"
+    },
+    "exception_id": {
+      "type": "string",
+      "description": "예외 id",
+      "x-zeek-type": "string"
+    },
+    "disposition": {
+      "type": "string",
+      "enum": [
+        "drop",
+        "suppress"
+      ],
+      "description": "예외 처리: drop(탐지 안 함) 또는 suppress(탐지는 남기고 알림 안 함)",
+      "x-zeek-type": "string"
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "적용 탐지(notice 이름 또는 group:<묶음>, 이름순)",
+      "x-zeek-type": "vector of string"
+    },
+    "hits": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "주기 안 적중 수(kind=hits)",
+      "x-zeek-type": "count"
+    },
+    "last_hit": {
+      "type": "number",
+      "description": "마지막 적중 시각(kind=hits)",
+      "x-zeek-type": "time"
+    },
+    "msg": {
+      "type": "string",
+      "description": "거부 이유·출처 등",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "node",
+    "kind",
+    "exception_id"
+  ],
+  "additionalProperties": false
+}

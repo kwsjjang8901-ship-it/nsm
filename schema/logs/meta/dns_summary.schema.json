@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DNS 요약 (meta/dns_summary)",
+  "description": "dns.log 대신 보내는 주기별 (출발, 도메인) 요약(SRS_METADATA_EXPORT).",
+  "x-path": "/log/zeek/meta/dns_summary.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "주기 안 첫 질의 시각",
+      "x-zeek-type": "time"
+    },
+    "ts_end": {
+      "type": "number",
+      "description": "주기 안 마지막 질의 시각",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "기록한 노드",
+      "x-zeek-type": "string"
+    },
+    "orig_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "질의한 주소",
+      "x-zeek-type": "addr"
+    },
+    "domain": {
+      "type": "string",
+      "description": "등록 도메인(co.kr 등 2단계 접미사 처리). 출발지당 상한을 넘은 도메인은 (other)",
+      "x-zeek-type": "string"
+    },
+    "qtypes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "관측된 질의 유형(이름순)",
+      "x-zeek-type": "vector of string"
+    },
+    "rcodes": {
+      "type": "string",
+      "description": "결과별 질의 수(예: NOERROR:12,NXDOMAIN:1)",
+      "x-zeek-type": "string"
+    },
+    "queries": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "질의 수",
+      "x-zeek-type": "count"
+    },
+    "unique_names": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "고유 질의 이름 수",
+      "x-zeek-type": "count"
+    },
+    "unique_names_capped": {
+      "type": "boolean",
+      "description": "참일 때만 기록: 고유 이름 상한에 닿아 그 뒤는 세지 않음",
+      "x-zeek-type": "bool"
+    },
+    "sample_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "처음 관측한 질의 이름(최대 meta_dns_max_samples)",
+      "x-zeek-type": "vector of string"
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "처음 관측한 응답(최대 meta_dns_max_answers)",
+      "x-zeek-type": "vector of string"
+    },
+    "sample_uid": {
+      "type": "string",
+      "description": "대표 uid(원본 dns 로그를 남길 때만)",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "ts_end",
+    "node",
+    "orig_h",
+    "domain",
+    "queries",
+    "unique_names",
+    "sample_names"
+  ],
+  "additionalProperties": false
+}

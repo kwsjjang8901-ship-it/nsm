@@ -30,3 +30,9 @@ if command -v btest >/dev/null 2>&1 && command -v zeek >/dev/null 2>&1; then
 else
 	docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/w" -w /w/tests/btest "$ZEEK_IMAGE" btest -d -t "$@"
 fi
+
+# 로그 스키마: 테스트가 남긴 Manager 로그(nsm_detection·evidence·asset_signal·meta/* 등)가 schema/logs 에 맞는지.
+#   스키마 자체가 코드와 같은지는 btest rules/log-schema 가 검사한다(schema/build.py --check).
+if command -v python3 >/dev/null 2>&1; then
+	python3 "$ROOT/schema/validate.py" "$ROOT/tests/btest/output"
+fi

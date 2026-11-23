@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 139개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 140개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1099,6 +1099,8 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 
 탐지 결과는 로그 세 개로 나가며, `evidence_id`로 서로 조인합니다: `notice.log`(탐지 원문) → `nsm_detection.log`(관제용 요약) → `evidence.log`(근거 행들).
 
+Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [LOG_SCHEMA.md](LOG_SCHEMA.md)(기계가 읽는 정의는 `schema/logs/`의 JSON Schema)에 있습니다. 이 장은 뜻을 설명하고, 형식의 기준은 스키마입니다. 필드를 바꾸면 `python3 schema/build.py`로 스키마·문서를 다시 만들어 함께 커밋합니다(코드와 다르면 btest `rules/log-schema`가 실패하고, CI가 btest 전체 출력을 스키마로 검사합니다).
+
 ### 6.1 notice.log — Zeek 기본 필드에 추가하는 필드
 
 | 필드 | 뜻 | 예 |
@@ -1679,7 +1681,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 139개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트 테스트 92개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 140개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마 테스트 93개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |

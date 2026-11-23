@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HTTP User-Agent 요약 (meta/http_ua_summary)",
+  "description": "주기별 (출발, User-Agent) 요약(SRS_METADATA_EXPORT).",
+  "x-path": "/log/zeek/meta/http_ua_summary.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "주기 안 첫 요청 시각",
+      "x-zeek-type": "time"
+    },
+    "ts_end": {
+      "type": "number",
+      "description": "주기 안 마지막 요청 시각",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "기록한 노드",
+      "x-zeek-type": "string"
+    },
+    "orig_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "요청한 주소",
+      "x-zeek-type": "addr"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "User-Agent",
+      "x-zeek-type": "string"
+    },
+    "requests": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "선별 대상 http 요청 수(중복 억제 전)",
+      "x-zeek-type": "count"
+    },
+    "hosts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "고유 Host 수(100개까지 셈)",
+      "x-zeek-type": "count"
+    },
+    "sample_host": {
+      "type": "string",
+      "description": "대표 Host",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "ts_end",
+    "node",
+    "orig_h",
+    "user_agent",
+    "requests",
+    "hosts"
+  ],
+  "additionalProperties": false
+}

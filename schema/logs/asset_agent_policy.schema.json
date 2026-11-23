@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "에이전트 정책 적재 (asset_agent_policy)",
+  "description": "고객 정의 에이전트 정책 파일을 읽은 결과(SPEC 3.17).",
+  "x-path": "/log/zeek/asset_agent_policy.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "기록 시각",
+      "x-zeek-type": "time"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "invalid",
+        "error"
+      ],
+      "description": "summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류)",
+      "x-zeek-type": "string"
+    },
+    "policy_id": {
+      "type": "string",
+      "description": "정책 id(invalid 행)",
+      "x-zeek-type": "string"
+    },
+    "msg": {
+      "type": "string",
+      "description": "요약·이유",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "kind",
+    "msg"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "선별 전송: capture_loss (meta/capture_loss)",
+  "description": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다.",
+  "x-path": "/log/zeek/meta/capture_loss.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "x-zeek-type": "time"
+    },
+    "ts_delta": {
+      "type": "number",
+      "x-zeek-type": "interval"
+    },
+    "peer": {
+      "type": "string",
+      "x-zeek-type": "string"
+    },
+    "gaps": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "acks": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "count"
+    },
+    "percent_lost": {
+      "type": "number",
+      "x-zeek-type": "double"
+    }
+  },
+  "required": [
+    "ts",
+    "ts_delta",
+    "peer",
+    "gaps",
+    "acks",
+    "percent_lost"
+  ],
+  "additionalProperties": false
+}

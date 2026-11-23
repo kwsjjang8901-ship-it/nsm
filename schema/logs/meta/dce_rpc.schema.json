@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "선별 전송: dce_rpc (meta/dce_rpc)",
+  "description": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다.",
+  "x-path": "/log/zeek/meta/dce_rpc.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "x-zeek-type": "time"
+    },
+    "uid": {
+      "type": "string",
+      "x-zeek-type": "string"
+    },
+    "id.orig_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "x-zeek-type": "addr"
+    },
+    "id.orig_p": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "port"
+    },
+    "id.resp_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "x-zeek-type": "addr"
+    },
+    "id.resp_p": {
+      "type": "integer",
+      "minimum": 0,
+      "x-zeek-type": "port"
+    },
+    "endpoint": {
+      "type": "string",
+      "x-zeek-type": "string"
+    },
+    "operation": {
+      "type": "string",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "uid",
+    "id.orig_h",
+    "id.orig_p",
+    "id.resp_h",
+    "id.resp_p"
+  ],
+  "additionalProperties": false
+}

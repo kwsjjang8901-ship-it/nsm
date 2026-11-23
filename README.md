@@ -51,6 +51,12 @@ tests/
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
   report_mockup.py          # 같은 데이터로 목업형 리포트(<pcap 이름>_report_mockup.html, ui/mockup/ 을 템플릿으로)
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
+schema/
+  logs/                     # Manager 로 가는 로그의 JSON Schema(생성됨, docs/LOG_SCHEMA.md 와 함께)
+  fields.zeek               # Zeek 레코드 정의에서 필드·열거값을 뽑는 스크립트
+  overlay.json              # 필드 설명·열거값·형식(사람이 고침)
+  build.py                  # 스키마·문서 생성(--check: 코드와 다르면 실패)
+  validate.py               # 로그를 스키마로 검사(CI 가 btest 전체 출력에 실행)
 ui/
   mockup/mdsm_nsm_mockup.html  # MDS Manager NSM 화면 목업(예시 데이터). 목업형 리포트의 템플릿(ui/README.md)
   mockup/integrated_story_mockup.html  # 통합 공격 스토리·통합 상관 룰 목업(MDS·MTA·NSM, 예시 데이터)
@@ -66,6 +72,7 @@ docs/
   asset-id/                 # 자산 식별 SPEC·DESIGN·POC_RESULT (센서는 claudtest2 에서 머지)
   NSM_RULES_REVIEW.md       # 전체 검토 결과·확대 계획
   EXCEPTION_ENGINE_REVIEW.md # 탐지 예외 엔진(예외를 데이터로) 개발 검토
+  LOG_SCHEMA.md             # Manager 로 가는 로그의 필드·타입·열거값(schema/build.py 가 생성, Manager 테이블 기준)
   LOG_SCHEMA_REVIEW.md      # 센서 로그 형식 검토(Manager 개발 관점: 등급 숫자, 센서 식별, 상관 갱신, 근거 필드)
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
   SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
@@ -151,6 +158,7 @@ tests/run_tests.sh rules/13-dga.zeek             # 일부만
 
 [docs/SRS.md](docs/SRS.md) — 탐지 룰별 요구사항, 로그 형식, 상관 규칙, 설정 파라미터와 고객별 설정 예시, 테스트, 한계.
 [docs/SRS_METADATA_EXPORT.md](docs/SRS_METADATA_EXPORT.md) — 메타데이터 선별 전송(탐지와 별도 기능)의 요구사항, 출력 명세, 설정, 운영 절차.
+[docs/LOG_SCHEMA.md](docs/LOG_SCHEMA.md) — Manager 로 가는 로그(탐지·근거·예외·자산 신호·선별 전송)의 필드·타입·필수 여부·열거값. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema이고, CI가 테스트 출력 전체를 이 스키마로 검사합니다.
 룰·설정·로그 형식을 바꾸는 PR에서는 이 문서도 함께 고칩니다.
 
 ## 검토 결과와 작업 계획

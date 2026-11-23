@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "자산 신호 (asset_signal)",
+  "description": "자산 식별에 쓰는 관측 사실. 판정(엔티티 리졸루션)은 Manager 가 한다. 신호 정의는 docs/asset-id/SPEC.md.",
+  "x-path": "/log/zeek/asset_signal.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "관측 시각",
+      "x-zeek-type": "time"
+    },
+    "uid": {
+      "type": "string",
+      "description": "근거 연결 uid(있을 때)",
+      "x-zeek-type": "string"
+    },
+    "ip": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "신호가 가리키는 자산 IP",
+      "x-zeek-type": "addr"
+    },
+    "mac": {
+      "type": "string",
+      "description": "관측 시점의 MAC(알 때)",
+      "x-zeek-type": "string"
+    },
+    "signal": {
+      "type": "string",
+      "enum": [
+        "device",
+        "dhcp_client_id",
+        "dhcp_fingerprint",
+        "dhcp_vendor_class",
+        "dns_name",
+        "domain",
+        "form_factor",
+        "fqdn",
+        "hostname",
+        "mac",
+        "machine_account",
+        "os_hint",
+        "security_agent",
+        "service",
+        "smb_client_guid",
+        "software",
+        "ssh_host_key",
+        "tcp_fp",
+        "user_account"
+      ],
+      "description": "신호 종류(SPEC 2.1)",
+      "x-zeek-type": "string"
+    },
+    "value": {
+      "type": "string",
+      "description": "신호 값(정규화됨)",
+      "x-zeek-type": "string"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "신호 출처(프로토콜·분석기 이름, SPEC 3장)",
+      "x-zeek-type": "string"
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "출처 기준 신뢰도 0~100",
+      "x-zeek-type": "count"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "계정 신호만: 사용자 부분(소문자)",
+      "x-zeek-type": "string"
+    },
+    "user_domain": {
+      "type": "string",
+      "description": "계정 신호만: 도메인 부분",
+      "x-zeek-type": "string"
+    },
+    "user_domain_type": {
+      "type": "string",
+      "enum": [
+        "dns",
+        "netbios"
+      ],
+      "description": "계정 신호만: dns 또는 netbios",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "ip",
+    "signal",
+    "value",
+    "source",
+    "confidence"
+  ],
+  "additionalProperties": false
+}
