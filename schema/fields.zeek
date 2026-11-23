@@ -64,6 +64,7 @@ event zeek_init() &priority=-100
     logs += log_desc("evidence", NSM::EVIDENCE_LOG, none);
     logs += log_desc("nsm_exception", NSM::EXCEPTION_LOG, none);
     logs += log_desc("nsm_ioc", NSM::IOC_LOG, none);
+    logs += log_desc("nsm_sensor", NSM::SENSOR_LOG, none);
     logs += log_desc("asset_signal", AssetID::LOG, none);
     logs += log_desc("asset_agent_policy", AssetID::POLICY_LOG, none);
     logs += log_desc("meta/meta_export_stats", NSM::META_STATS_LOG, none);

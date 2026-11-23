@@ -10,6 +10,7 @@
 NSM 로그에 설명이 없는 필드가 생기면 생성 자체가 실패한다.
 """
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -20,6 +21,26 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(ROOT, "schema", "logs")
 DOC = os.path.join(ROOT, "docs", "LOG_SCHEMA.md")
 OVERLAY = os.path.join(ROOT, "schema", "overlay.json")
+VERSION_ZEEK = os.path.join(ROOT, "nsm_rules", "sensor", "schema_version.zeek")
+
+VERSION_TEMPLATE = """##! 로그 스키마 버전. schema/build.py 가 schema/logs 의 내용으로 만든다(직접 고치지 않는다).
+
+module NSM;
+
+export {
+    ## schema/logs/**.schema.json 내용의 SHA-256 앞 12자리. 로그 형식이 바뀌면 값이 바뀐다.
+    ##   Manager 는 센서 상태 로그의 이 값으로 해석할 스키마를 고른다(같은 값의 schema/logs 를 쓴다).
+    const schema_version = "%s";
+}
+"""
+
+
+def schema_version(files):
+    """스키마 파일 내용(경로 순)의 SHA-256 앞 12자리"""
+    h = hashlib.sha256()
+    for path in sorted(p for p in files if p.endswith(".schema.json")):
+        h.update(os.path.relpath(path, SCHEMA_DIR).encode() + b"\0" + files[path].encode() + b"\0")
+    return h.hexdigest()[:12]
 
 ADDR = {"anyOf": [{"format": "ipv4"}, {"format": "ipv6"}]}
 
@@ -154,13 +175,14 @@ def values_text(s):
     return ", ".join(parts)
 
 
-def render_doc(schemas, enums, fields):
+def render_doc(schemas, enums, fields, ver):
     out = []
     w = out.append
     w("# 센서 로그 스키마 (Manager 연동 기준)")
     w("")
     w("이 문서는 `schema/build.py`가 만듭니다. 직접 고치지 말고 `schema/overlay.json`(설명·열거값)이나 Zeek 코드(필드)를 고친 뒤 다시 만드세요. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema(draft 2020-12)입니다.")
     w("")
+    w("- 스키마 버전: `%s`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다." % ver)
     w("- 형식: JSON 한 줄 = 한 행. 값이 없는 선택 필드는 쓰지 않습니다(키가 없음). 필수 필드는 항상 있습니다.")
     w("- 타입: `time`은 epoch 초(소수), IP는 문자열, 목록은 JSON 배열, 정해 두지 않은 필드는 없습니다(`additionalProperties: false`).")
     w("- 검증: CI가 btest 전체 출력의 해당 로그를 이 스키마로 검사하고(`schema/validate.py`), 코드의 필드가 스키마와 달라지면 실패합니다(`schema/build.py --check`).")
@@ -225,7 +247,9 @@ def main():
         sys.exit("스키마 생성 실패:\n  " + "\n  ".join(problems))
     files = {os.path.join(SCHEMA_DIR, n + ".schema.json"): json.dumps(s, ensure_ascii=False, indent=2) + "\n"
              for n, (s, *_r) in schemas.items()}
-    files[DOC] = render_doc(schemas, enums, fields) + "\n"
+    ver = schema_version(files)
+    files[DOC] = render_doc(schemas, enums, fields, ver) + "\n"
+    files[VERSION_ZEEK] = VERSION_TEMPLATE % ver
     stale = []
     for path, text in files.items():
         cur = open(path, encoding="utf-8").read() if os.path.exists(path) else None

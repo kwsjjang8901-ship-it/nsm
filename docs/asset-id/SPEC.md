@@ -343,7 +343,7 @@
   |---|---|---|---|
   | 연결 정책 (`domain`·`user_agent` 없음) | `connection_established`(TCP 연결 성립) | 응답측이 `server`·`ports`에 맞음. `agent_policy_window`(1시간) 안에 같은 서버의 서로 다른 포트 `min_ports`개 이상 | 서버 주소 있음 90 / 80, 포트만 70 / - |
   | 앱 정책 (`domain` 또는 `user_agent` 있음) | `ssl_extension_server_name`, `http_message_done`(요청) | SNI·Host가 `domain`에, User-Agent가 `user_agent`에 맞음. `server`·`ports`를 적었다면 응답측도 맞아야 함 | 서버 주소 있음 90 / 80, 없음 80 / - |
-- **정책 검사:** 아래는 정책을 빼고 `asset_agent_policy.log`에 `kind=invalid`와 이유를 남김. 읽을 때마다 `kind=summary`(`active=N invalid=N`), 파일 읽기 오류는 `kind=error`
+- **정책 검사:** 아래는 정책을 빼고 `asset_agent_policy.log`에 `kind=invalid`와 이유를 남김. 읽을 때마다 `kind=summary`(`active=N invalid=N`)와 `kind=file`(읽은 파일의 SHA1 `file_sha1`, Manager가 배포한 파일과 비교), 파일 읽기 오류는 `kind=error`. 적재 결과 행의 시각은 실제 시각(트래픽을 읽기 전에도 0이 아님)
   - id 형식이 틀림, 주소·포트·도메인 형식이 틀림
   - `server`·`ports`·`domain`·`user_agent`가 모두 없음
   - 서버 주소 없이 포트만 적었는데 `min_ports` < 2(8291/tcp처럼 다른 제품과 겹치는 포트 때문), 또는 `min_ports`가 적은 포트 수보다 큼
@@ -617,6 +617,7 @@ Kerberos·NTLM 인증, RDP 접속의 사용자 계정을 마지막 관측 순으
 |---|---|---|
 | 0.2 | 2026-11-06 | 최초 작성 (센서 22개 출처, 판정 규칙, 품질 지표, 버전 차이) |
 | 0.3 | 2026-11-19 | 라우팅 구간 신호: Kerberos 서비스 티켓(AP-REQ)의 서버 이름·도메인(`krb`), HTTP 응답 Server 헤더의 서버 소프트웨어·OS(`http_server`, `enable_http_server`). DHCP 릴레이 구간 동작 명시와 테스트 |
+| 0.8 | 2026-11-23 | 에이전트 정책 파일 지문(`asset_agent_policy.log` `kind=file`, `file_sha1`), 적재 결과 행을 실제 시각으로 |
 | 0.7 | 2026-11-20 | 기기 형태 힌트 `form_factor`(3.11), Apple 연결 확인 OS 힌트, 장비 유형 판정 규칙(4.12) |
 | 0.6 | 2026-11-20 | 서비스 배너(3.20): HTTP 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전과 Recog 연결(4.11), 부하 측정 |
 | 0.5 | 2026-11-20 | 지문 대조 입력 신호: SMB1 native OS·LM 원문(클라이언트·서버), 인증서 주체·발급자, SNMP(3.18), TCP SYN 지문(3.19). 지문 DB 보강 규칙(4.11: OUI, Recog, TCP SYN 계열)과 라이선스 메모 |

@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 140개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 142개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -791,7 +791,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
   - CDN·공유 호스팅 IP는 정상 사이트와 겹치므로 IOC 피드에서 걸러 넣는 것을 전제로 합니다(10장).
 - 근거: IOC 값, 종류(`ip`·`domain`·`url`), 실제로 본 값(하위 도메인이면 원래 이름), 맞은 곳(`conn`·`conn_inbound`·`dns_query`·`tls_sni`·`http_host`·`http_url`), 상태, 출처, 분류(`c2`·`malware`·`phishing`·`scanner`), 설명, `host=`(도메인·URL 호스트, 리포트의 외부 대상 키). 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.IocMatch`.
 - 위험도(Manager 매핑 제안): 내부 → 외부 연결 성립·HTTP 요청 High, DNS 조회만 또는 연결 시도 Medium, 들어온 연결 Low. 센서는 상태를 근거(`status=`)와 `sub`에 남깁니다.
-- IOC 파일 형식(TSV, 예외 파일과 같은 헤더 형식): `#fields indicator ioc_type source category expires desc`. `ioc_type`은 `ip`(주소 또는 CIDR)·`domain`·`url`, `expires`는 epoch 초 또는 `-`. 형식이 틀린 줄은 빼고 `nsm_ioc.log`에 `kind=invalid`로 남기며, 읽을 때마다 `kind=summary`로 개수(active·added·removed·invalid)를 남깁니다.
+- IOC 파일 형식(TSV, 예외 파일과 같은 헤더 형식): `#fields indicator ioc_type source category expires desc`. `ioc_type`은 `ip`(주소 또는 CIDR)·`domain`·`url`, `expires`는 epoch 초 또는 `-`. 형식이 틀린 줄은 빼고 `nsm_ioc.log`에 `kind=invalid`로 남기며, 읽을 때마다 `kind=summary`로 개수(active·added·removed·invalid)를, `kind=file`로 읽은 파일의 SHA1(`file_sha1`, 6.4절)을 남깁니다. 적재 결과 행의 시각은 실제 시각입니다.
 
 ##### 식별 안 된 프로토콜 (`Unknown_Protocol`, T1095) · 25_unknown_protocol
 
@@ -1025,7 +1025,10 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | stats | `/hdd_tmp/log/zeek/stats` |
 | reporter | `/hdd_tmp/log/zeek/reporter` |
 | nsm_exception | `/log/zeek/nsm_exception` |
+| nsm_ioc | `/log/zeek/nsm_ioc` |
+| nsm_sensor | `/log/zeek/nsm_sensor` |
 | asset_signal | `/log/zeek/asset_signal` |
+| asset_agent_policy | `/log/zeek/asset_agent_policy` |
 
 conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. 켜는 방법은 7.6절에 있습니다. 메타데이터 선별 전송 대상 스트림은 꺼지지 않고, 원본 대신 선별본만 5.3절 경로에 남습니다.
 
@@ -1076,7 +1079,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | AhnLab MDS Agent | 단말이 MDS 장비의 에이전트 포트(`mds_agent_ports`, 기본 8290·8291·8293·50007·50502/tcp)에 연결이 성립하면 `security_agent` `ahnlab:mds-agent`, 장비에 `device` `ahnlab-mds`. 장비 주소(`mds_servers`)를 적으면 연결 1건으로, 비어 있으면 같은 서버의 서로 다른 포트 2개 이상으로 판단(8291은 다른 제품도 씀). 신호가 없는 단말은 미설치 후보일 뿐이며 정확한 판정은 MDS Manager 에이전트 목록 대조(SPEC 3.16) |
 | 장비 유형 | 센서가 User-Agent로 기기 형태 힌트(`form_factor`: phone·tablet·mobile)와 Apple 연결 확인(`os_hint` `apple`)을 남기고, Manager(PoC는 통합 리포트)가 장비 유형을 판정: 네트워크 장비·프린터·보안 장비·NAS·IP 전화기·모바일(스마트폰·태블릿)·PC(노트북·데스크톱은 기본 컴퓨터 이름·기기 모델이 있을 때만)·서버·서버(추정)·알 수 없음, 근거·신뢰도와 함께(SPEC 4.12). 노트북·데스크톱 정확 구분은 고객 대역 정보나 에이전트 자산 정보 연동이 필요 |
 | 지문 대조 입력·보강 | 센서가 지문 대조용 원문을 남김: SMB1 native OS·LM(클라이언트·서버), 내부 서버 인증서 주체·발급자, SNMP 응답(sysDescr·sysObjectID·sysName), TCP SYN·SYN-ACK 모양(`tcp_fp`, IP·방향당 1시간에 한 번), 서비스 배너(HTTP 401 인증 realm, SIP User-Agent·Server, FTP·SMTP·POP3 접속 인사, MySQL 버전). 대조는 센서가 아니라 Manager 후처리: IEEE OUI(MAC 제조사, 로컬·랜덤 MAC 표시), Recog(제조사·제품·장비 종류·OS), TCP SYN 계열(OS 근거가 없을 때). PoC는 통합 리포트가 대신함(`run_pcap.sh -u`·`-g`, DB는 저장소 밖). 끄기 `AssetID::enable_snmp`·`enable_tcp_fp`·`enable_http_wwwauth`·`enable_sip`·`enable_service_banners`, POP3·MySQL 부하는 `banners_extra` 로드 제외 (SPEC 3.18\~3.20·4.11) |
-| 고객 정의 에이전트 정책 | 고객이 원하는 제품(EDR·백신 관리 서버·패치·NAC·DLP 등)의 에이전트 통신을 정책 파일(`AssetID::agent_policy_file`, TSV, 비어 있으면 꺼짐, 재시작 없이 다시 읽음)로 정의. 관리 서버 주소·포트(연결 성립), 접속 도메인(SNI·Host·프록시 CONNECT 대상), User-Agent 조건이 맞으면 단말에 `security_agent` `policy:<id>`(서버 주소 90, 도메인·UA 80, 포트만 70). 틀린 정책은 빼고 `asset_agent_policy.log`(기본 유지, `/log/zeek/asset_agent_policy`)에 이유를 남김. 미설치 후보 판정(대상 범위, 기간, 같은 대역 다른 자산의 신호 비율)은 Manager(SPEC 3.17·4.10) |
+| 고객 정의 에이전트 정책 | 고객이 원하는 제품(EDR·백신 관리 서버·패치·NAC·DLP 등)의 에이전트 통신을 정책 파일(`AssetID::agent_policy_file`, TSV, 비어 있으면 꺼짐, 재시작 없이 다시 읽음)로 정의. 관리 서버 주소·포트(연결 성립), 접속 도메인(SNI·Host·프록시 CONNECT 대상), User-Agent 조건이 맞으면 단말에 `security_agent` `policy:<id>`(서버 주소 90, 도메인·UA 80, 포트만 70). 틀린 정책은 빼고 `asset_agent_policy.log`(기본 유지, `/log/zeek/asset_agent_policy`)에 이유를 남기고, 읽을 때마다 파일 SHA1을 `kind=file`로 남김(6.4절). 미설치 후보 판정(대상 범위, 기간, 같은 대역 다른 자산의 신호 비율)은 Manager(SPEC 3.17·4.10) |
 | 라우팅 구간 신호 | DC·DHCP가 안 보이는 사용자 → 서버 구간에서도 서버 정보를 더 얻는다. ① Kerberos 서비스 티켓(SMB·LDAP 인증의 AP-REQ)의 서비스 이름 → 서버 `dns_name`(50)과 realm → `domain`(70). `krbtgt`와 도메인 이름 자체로 받은 티켓(DFS 루트)은 제외. LDAP SASL 안 티켓은 Zeek 9.x만. ② HTTP 응답 Server 헤더 → 서버 `software` `http_server:…`(50)와 `os_hint`(45, IIS 버전 → Windows Server 버전, Apache 괄호 안 배포판 → Linux). 프록시 경유 응답은 제외, `enable_http_server`로 끔. ③ DHCP 릴레이(릴레이 ↔ DHCP 서버) 구간만 보여도 단말 DHCP 신호를 남기는 것을 테스트로 확인(SPEC 3.2·3.4·3.11) |
 | 계정 나누기 | 계정 신호(`user_account`·`machine_account`)에 `user_name`·`user_domain`·`user_domain_type`(`dns`·`netbios`)을 함께 남긴다. `evidence.log`와 같은 규칙(6.3절)이라 Manager가 자산의 계정과 탐지 근거의 계정을 그대로 잇는다(SPEC 2장) |
 | 역방향 이름 | PTR 응답은 정규 역방향 이름만 쓴다. RFC 2317 위임 이름 등 주소로 바꿀 수 없는 이름은 무시한다(SPEC 4장 DNS 응답) |
@@ -1169,14 +1172,37 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 
 | 필드 | 뜻 |
 | --- | --- |
-| `ts` / `node` | 기록 시각 / 기록한 노드 |
-| `kind` | `loaded`(적용), `rejected`(검증 거부), `expired`(만료), `hits`(주기별 적중 수), `error`(예외 파일 읽기 오류) |
+| `ts` / `node` | 기록 시각 / 기록한 노드. 적재 결과 행(`loaded`·`rejected`·`expired`·`error`·`file`)은 **실제 시각**(벽시계, 트래픽을 읽기 전에도 0이 아님), 적중 집계(`hits`)는 패킷 시각 |
+| `kind` | `loaded`(적용), `rejected`(검증 거부), `expired`(만료), `hits`(주기별 적중 수), `error`(예외 파일 읽기 오류), `file`(읽은 예외 파일의 지문) |
 | `exception_id` | 예외 id(기존 설정에서 온 예외는 `legacy:<설정 이름>`) |
 | `disposition` / `scope` | 처리 방식 / 범위 배열(이름순) |
 | `hits` / `last_hit` | 주기(`exception_stats_interval`, 기본 1시간) 안 적중 수 / 마지막 적중 시각. 적중이 없으면 행을 쓰지 않는다 |
-| `msg` | 거부·오류 이유, 출처(`file`, `legacy`) |
+| `msg` | 거부·오류 이유, 출처(`file`, `legacy`). `kind=file`은 예외 파일 경로 |
+| `file_sha1` | `kind=file`만: 읽은 예외 파일의 SHA1(파일 내용 그대로라 `sha1sum` 결과와 같음). 파일을 다시 읽을 때마다 한 행 |
 
 적중 수의 단위는 `drop`이면 "예외에 걸린 관측(연결·이벤트) 수", `suppress`면 "표시한 notice 수"입니다. 막은 탐지 건수가 아니므로 대시보드에 단위를 함께 표시합니다.
+
+**파일 지문(`kind=file`):** Manager가 배포한 예외 파일과 센서가 실제로 읽은 파일이 같은지 확인하는 값입니다. 센서는 파일을 다 읽은 뒤 같은 파일을 파일 분석 프레임워크로 한 번 더 읽어 SHA1을 계산합니다(`files.log`에는 남기지 않음). 같은 방식으로 IOC 파일은 `nsm_ioc.log`, 에이전트 정책 파일은 `asset_agent_policy.log`에 `kind=file`로 남고, 세 값 모두 센서 상태 로그(6.5절)에도 실립니다. Manager는 배포한 파일의 SHA1과 비교해, 같으면 반영됨, 다르거나 없으면 아직 안 읽었거나 배포가 실패한 것으로 봅니다. 클러스터에서는 파일을 읽는 매니저만 남깁니다. 설정 스크립트로 넣은 예외(`legacy`)는 파일이 아니라 지문 대상이 아니고, 패키지 버전(`pkg_version`)으로 구분합니다.
+
+### 6.5 nsm_sensor.log — 센서 상태
+
+노드마다 1분(`sensor_status_interval`)에 한 행, 종료할 때 마지막 구간 한 행을 더 씁니다. Manager의 장비 현황(마지막 응답, 패킷·트래픽, 패킷 누락, 처리 지연, 엔진·스키마 버전, 적용 중인 예외·IOC·정책 파일)에 씁니다. CPU·메모리·디스크와 수집 에이전트의 전송 지연은 센서 밖에서 재는 값이라 수집 에이전트가 채웁니다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `ts` / `node` | 기록 시각(패킷 시각) / 노드(standalone은 `zeek`, 클러스터는 `manager`·`worker-1` 등) |
+| `schema_version` | 로그 스키마 버전: `schema/logs` 내용의 SHA-256 앞 12자리(`schema/build.py`가 만듦). 로그 형식이 바뀌면 반드시 바뀌므로, Manager는 이 값으로 센서별 해석 규칙을 고른다 |
+| `pkg_version` / `zeek_version` | nsm_rules 패키지 버전(`NSM::pkg_version`, 릴리스할 때 올림) / Zeek 버전 |
+| `interval_s` | 이 행이 덮는 시간(초). 보통 60이고, 패킷이 끊긴 동안은 다음 패킷까지 길어지며 종료 행은 짧을 수 있다. 비율·초당 값은 이 값으로 나눈다 |
+| `pkts` / `bytes` | 이 구간에 받은 패킷·바이트 |
+| `pkts_dropped` / `drop_pct` | 이 구간에 캡처 장치(NIC·커널)가 놓친 패킷 / 비율(%) |
+| `gap_pct` | TCP 누락 비율(%): ACK 된 데이터 중 센서가 못 본 구간(미러 품질, `capture_loss.log`와 같은 계산). TCP ACK가 없던 구간은 없음 |
+| `capture_lag_s` | 처리 지연(초): 벽시계 − 패킷 시각. 커지면 센서가 밀리는 것. Manager가 늦게 오는 이벤트를 기다릴 시간을 정할 때 씀. pcap 재생에서는 의미 없음 |
+| `uptime_s` | 시작 후 시간(초, 벽시계) |
+| `exc_sha1` / `ioc_sha1` / `policy_sha1` | 이 노드가 마지막으로 읽은 예외·IOC·에이전트 정책 파일의 SHA1(6.4절). 파일을 읽는 노드(클러스터는 매니저)만 |
+
+- 클러스터에서는 노드마다 행을 쓰고 로거(없으면 매니저)에 모입니다. 패킷은 워커가 받으므로 매니저·프록시 행의 `pkts`는 0입니다.
+- 패킷 입력이 없는 노드(매니저·로거·프록시)는 시작하자마자, 패킷을 받는 노드는 첫 패킷부터 주기를 셉니다.
 
 ## 7. 설정 요구사항
 
@@ -1564,6 +1590,8 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
+| `sensor_status_interval` | 1min | 센서 상태 로그(`nsm_sensor.log`, 6.5절) 기록 주기 |  |
+| `pkg_version` | `0.1.0` | 패키지 버전(`nsm_rules/sensor/version.zeek`). 센서 상태 로그에 남고 Manager 엔진 업데이트 화면이 보여 준다 | 릴리스할 때 올린다 |
 | `community_id_seed` | 0 | 근거 `community_id` 계산 seed. 연동하는 다른 제품(Suricata 등)과 같아야 한다 |  |
 | `evidence_summary_max` | 5 | `nsm_detection.log`의 `accounts`·`dst_names`·`relays`에 싣는 최대 개수 |  |
 | `detection_continue_gap` | 15min | 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지를 같은 사건(`incident_id`)으로 묶는 최대 간격 | 집계형 룰의 창(5·10분)보다 길게 둠 |
@@ -1582,7 +1610,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
-| `NSM::keep_log_streams` | nsm_detection, evidence, notice, capture_loss, loadedscripts, stats, reporter | 남길 로그. 나머지는 기동 시 꺼짐 | conn·dns 등을 남기려면 `+=`로 추가 |
+| `NSM::keep_log_streams` | 5.2절 표(nsm_detection, evidence, nsm_exception, nsm_ioc, nsm_sensor, asset_signal, asset_agent_policy, notice, capture_loss, loadedscripts, stats, reporter) | 남길 로그. 나머지는 기동 시 꺼짐 | conn·dns 등을 남기려면 `+=`로 추가 |
 | `NSM::keep_all_log_streams` | F | T면 어떤 로그도 끄지 않음. conn·dns·http·ssl·files·weird 등 Zeek 원본이 모두 기본 경로에 남고, 선별 전송 대상 스트림의 원본도 남음(흐름·DNS 요약에 `sample_uid`) | pcap 점검용(`tests/run_pcap.sh -k`). 운영에서는 디스크 사용이 크게 늘어 쓰지 않음 |
 | `NSM::log_paths` | 5.2절 표 | 로그별 출력 경로(확장자 제외) | 추가한 로그는 경로도 함께 지정 |
 | `NSM::create_log_dirs` | T | 기동 시 로그 디렉터리를 상위부터 생성 | 배포 스크립트가 만들면 F |
@@ -1681,7 +1709,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 140개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마 테스트 93개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 142개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 95개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |

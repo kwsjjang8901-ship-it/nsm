@@ -29,6 +29,7 @@
 @load base/frameworks/cluster
 @load ./main
 @load ./proxy_common
+@load ./data_file       # 예외 파일 SHA1(nsm_exception kind=file)
 
 module NSM;
 
@@ -75,13 +76,14 @@ export {
     type ExceptionLogInfo: record {
         ts:           time   &log;
         node:         string &log;
-        kind:         string &log;            ##< loaded, rejected, expired, hits, error(파일 읽기 오류)
+        kind:         string &log;            ##< loaded, rejected, expired, hits, error(파일 읽기 오류), file(파일 지문)
         exception_id: string &log;
         disposition:  string &log &optional;
         scope:        vector of string &log &optional;   ##< notice 이름·group:<묶음>(이름순)
         hits:         count  &log &optional;  ##< 주기 안 적중 수(kind=hits)
         last_hit:     time   &log &optional;
-        msg:          string &log &optional;  ##< 거부 이유, 출처(file, legacy) 등
+        msg:          string &log &optional;  ##< 거부 이유, 출처(file, legacy) 등. kind=file 은 파일 경로
+        file_sha1:    string &log &optional;  ##< kind=file: 읽은 예외 파일의 SHA1(다시 읽을 때마다 한 행)
     };
 
     ## 예외 묶음 이름 -> notice 종류. 상관 모듈(correlation_killchain)이 corr_*_notes 로 채운다.
@@ -165,9 +167,11 @@ function scope_vec(r: ExceptionRec): vector of string
     return v;
     }
 
+# 적재 결과 행(loaded·rejected·expired·error·file)의 시각은 실제 시각이다. 트래픽을 읽기 전에도 0 이 아니고,
+#   Manager 가 "언제 이 예외가 적용됐나"를 안다. 적중 집계(hits)만 패킷 시각을 쓴다.
 function exc_log(kind: string, id: string, r: ExceptionRec, msg: string)
     {
-    local l = ExceptionLogInfo($ts=network_time(), $node=peer_description, $kind=kind,
+    local l = ExceptionLogInfo($ts=current_time(), $node=peer_description, $kind=kind,
                                $exception_id=id, $disposition=disp_of(r), $scope=scope_vec(r));
     if ( msg != "" )
         l$msg = msg;
@@ -510,7 +514,7 @@ function release_initial_wait()
 # 파일이 없으면 경고(WARNING)로 오고, 리더는 파일이 생길 때까지 기다린다. 처음 대기는 어느 수준이든 푼다.
 event exception_input_error(desc: Input::TableDescription, message: string, level: Reporter::Level)
     {
-    Log::write(EXCEPTION_LOG, ExceptionLogInfo($ts=network_time(), $node=peer_description, $kind="error",
+    Log::write(EXCEPTION_LOG, ExceptionLogInfo($ts=current_time(), $node=peer_description, $kind="error",
                                                $exception_id="-", $msg=message));
     release_initial_wait();
     }
@@ -521,11 +525,20 @@ event Input::end_of_data(name: string, source: string)
         return;
     exc_active = copy(exc_file_recs);
     rebuild_index(T);
+    NSM::hash_data_file("exception", exception_file);
 @if ( Cluster::is_enabled() )
     Cluster::publish(Cluster::worker_topic, NSM::exception_update, exc_active);
     Cluster::publish(Cluster::proxy_topic, NSM::exception_update, exc_active);
 @endif
     release_initial_wait();
+    }
+
+event NSM::data_file_hashed(tag: string, path: string, sha1: string)
+    {
+    if ( tag != "exception" )
+        return;
+    Log::write(EXCEPTION_LOG, ExceptionLogInfo($ts=current_time(), $node=peer_description, $kind="file",
+                                               $exception_id="-", $msg=path, $file_sha1=sha1));
     }
 
 event NSM::exception_update(recs: table[string] of ExceptionRec)

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "예외 적재·적중 (nsm_exception)",
-  "description": "예외 파일을 읽은 결과(loaded·rejected·expired·error)와 주기별 적중 수(hits).",
+  "description": "예외 파일을 읽은 결과(loaded·rejected·expired·error), 읽은 파일의 지문(file), 주기별 적중 수(hits).",
   "x-path": "/log/zeek/nsm_exception.log",
   "type": "object",
   "properties": {
     "ts": {
       "type": "number",
-      "description": "기록 시각(적재 행은 시작 직후 0 일 수 있음, 검토 X1)",
+      "description": "기록 시각. 적재 결과 행(loaded·rejected·expired·error·file)은 실제 시각(벽시계), 적중 집계(hits)는 패킷 시각",
       "x-zeek-type": "time"
     },
     "node": {
@@ -22,9 +22,10 @@
         "rejected",
         "expired",
         "hits",
-        "error"
+        "error",
+        "file"
       ],
-      "description": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류)",
+      "description": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류), file(읽은 예외 파일의 지문)",
       "x-zeek-type": "string"
     },
     "exception_id": {
@@ -62,7 +63,13 @@
     },
     "msg": {
       "type": "string",
-      "description": "거부 이유·출처 등",
+      "description": "거부 이유·출처(file, legacy) 등. kind=file 은 예외 파일 경로",
+      "x-zeek-type": "string"
+    },
+    "file_sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "kind=file: 읽은 예외 파일의 SHA1(파일 내용 그대로, sha1sum 과 같음). 파일을 다시 읽을 때마다 한 행. Manager 가 배포한 파일과 비교한다",
       "x-zeek-type": "string"
     }
   },

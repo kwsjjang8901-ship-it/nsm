@@ -4,7 +4,7 @@
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
-- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함), G1(스키마) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
+- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함), G1(스키마), X1(파일 지문·적재 시각)·S1(센서 상태 로그, N6 지연, D2의 스키마 버전) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -242,7 +242,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) | 완료(아래 참고) |
 | 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | 완료(아래 참고) |
 | 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | 완료(아래 참고) |
-| 5 | M1·S1(+N6)·G1, X1 | G1 완료([LOG_SCHEMA.md](LOG_SCHEMA.md)) |
+| 5 | M1·S1(+N6)·G1, X1 | G1·X1·S1 완료([LOG_SCHEMA.md](LOG_SCHEMA.md), [SRS 6.4·6.5](SRS.md)). M1 남음 |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 | |
 
 1·2단계에서 정한 것:
@@ -268,6 +268,15 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 - 처음 제안과 다른 점: `dst_port`는 프록시 경유여도 실제 연결(프록시) 포트입니다. `community_id`와 같은 연결을 가리키게 하려는 것이고, 실제 목적지는 `dst_name`·`proxy`로 압니다(비표준 포트 룰의 대상 포트는 `detail`의 `port=`).
 - 값 검증: btest가 근거의 `community_id`를 conn.log의 5-tuple에서 스펙대로 따로 계산한 값과 대조합니다(Zeek 계산과 Python 계산이 같음).
 - 리포트(`report_pcap.py`·`report_mockup.py`)는 필드가 있으면 필드를, 없으면(옛 로그) 예전처럼 `detail`을 읽습니다.
+
+X1·S1에서 정한 것([SRS 6.4·6.5](SRS.md)):
+
+- 파일 지문은 예외 파일뿐 아니라 IOC 파일·에이전트 정책 파일에도 남깁니다(각 로그의 `kind=file`, `file_sha1`). 센서가 파일 내용 그대로의 SHA1을 계산하므로 `sha1sum`과 같습니다. Manager가 파일에 버전 id를 적는 방식은 쓰지 않았습니다(SHA1만으로 비교 가능).
+- 적재 결과 행(예외 `loaded`·`rejected`·`expired`·`error`·`file`, IOC·정책 로그 전부)은 실제 시각, 예외 적중(`hits`)만 패킷 시각입니다.
+- 센서 상태 로그 `nsm_sensor.log`: 노드별 1분마다. 처음 제안의 `loss_pct`는 둘로 나눴습니다. 캡처 장치가 놓친 비율(`drop_pct`)과 TCP 누락 비율(`gap_pct`, 미러 품질)입니다. 지연은 `capture_lag_s`(N6)입니다.
+- `schema_version`은 사람이 올리는 번호가 아니라 `schema/logs` 내용의 해시(앞 12자리)입니다. `schema/build.py`가 `nsm_rules/sensor/schema_version.zeek`를 만들어 스키마가 바뀌면 반드시 바뀝니다(D2의 버전 부분).
+- `rules_version`은 따로 두지 않고 `pkg_version`(`0.1.0`부터, 릴리스 때 올림) 하나로 했습니다.
+- `meta/stats`·`meta/capture_loss` 선별 전송은 그대로 둡니다. Manager가 `nsm_sensor`로 옮긴 뒤 끌지 정합니다.
 
 ### 6.5 결정 필요 (추가)
 

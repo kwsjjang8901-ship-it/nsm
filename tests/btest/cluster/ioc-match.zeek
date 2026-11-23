@@ -26,6 +26,9 @@
 # @TEST-EXEC: log-cut src detail < manager/evidence.log | awk -F'\t' '$1=="10.0.42.13" && $2 ~ /seen=x1\.cdn\.evil-ioc\.example where=dns_query status=lookup/ {n++} END {exit !(n==1)}'
 # @TEST-EXEC: log-cut src detail < manager/evidence.log | awk -F'\t' '$1=="10.0.42.10" && $2 ~ /status=established/ {n++} END {exit !(n==1)}'
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 diagnosis=NSM.C2.IocMatch attacker=10.0.42.13
+# 센서 상태 로그(주기 2초로 줄임): 노드마다 행이 로거(매니저)에 모인다. 패킷은 워커-1 만 받고,
+#   예외·IOC 파일 지문은 파일을 읽는 매니저 행에만 있고 마지막으로 읽은 파일과 같다
+# @TEST-EXEC: python3 -c "import json,hashlib;r=[json.loads(l) for l in open('manager/nsm_sensor.log')];n={x['node'] for x in r};sha=lambda f:hashlib.sha1(open(f,'rb').read()).hexdigest();m=[x for x in r if x['node']=='manager'];w=[x for x in r if x['node']!='manager'];assert {'manager','worker-1','worker-2'}<=n,n;assert sum(x['pkts'] for x in r if x['node']=='worker-1')>0 and sum(x['pkts'] for x in r if x['node']!='worker-1')==0;assert m[-1]['exc_sha1']==sha('exc.tsv') and m[-1]['ioc_sha1']==sha('ioc.tsv'),m[-1];assert not [x for x in w if 'exc_sha1' in x or 'ioc_sha1' in x]"
 
 @load policy/frameworks/cluster/experimental
 
@@ -35,6 +38,8 @@ redef NSM::exception_file = "../exc.tsv";
 redef NSM::dns_tunnel_resolvers += { 10.0.0.53 };
 # 워커는 pcap 을 다 읽어도 매니저가 끝낼 때까지 기다린다(일치 결과가 매니저로 가야 함).
 redef exit_only_after_terminate = T;
+# 센서 상태 로그를 테스트 시간 안에 여러 번 쓰게 주기를 줄인다
+redef NSM::sensor_status_interval = 2sec;
 
 global go: event();
 global rewrite_ioc_ev: event();

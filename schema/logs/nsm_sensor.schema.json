@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "센서 상태 (nsm_sensor)",
+  "description": "노드별 1분마다 한 행(종료 때 마지막 구간 한 행 더). 장비 현황(패킷·누락·지연·버전·적용 중인 데이터 파일)에 쓴다. CPU·메모리·디스크·전송 지연은 수집 에이전트가 채운다.",
+  "x-path": "/log/zeek/nsm_sensor.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "기록 시각(패킷 시각)",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "노드(standalone 은 zeek, 클러스터는 manager·worker-1 등). 패킷은 워커가 받는다",
+      "x-zeek-type": "string"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$",
+      "description": "로그 스키마 버전(schema/logs 내용의 SHA-256 앞 12자리). Manager 는 이 값으로 해석할 스키마를 고른다",
+      "x-zeek-type": "string"
+    },
+    "pkg_version": {
+      "type": "string",
+      "description": "nsm_rules 패키지 버전(엔진 업데이트 화면)",
+      "x-zeek-type": "string"
+    },
+    "zeek_version": {
+      "type": "string",
+      "description": "Zeek 버전",
+      "x-zeek-type": "string"
+    },
+    "interval_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "이 행이 덮는 시간(초). 보통 60, 종료 행은 더 짧을 수 있음",
+      "x-zeek-type": "double"
+    },
+    "pkts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "이 구간에 받은 패킷",
+      "x-zeek-type": "count"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "이 구간에 받은 바이트",
+      "x-zeek-type": "count"
+    },
+    "pkts_dropped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "이 구간에 캡처 장치(NIC·커널)가 놓친 패킷",
+      "x-zeek-type": "count"
+    },
+    "drop_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "놓친 패킷 비율(%): pkts_dropped / (pkts + pkts_dropped)",
+      "x-zeek-type": "double"
+    },
+    "gap_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "TCP 누락 비율(%): 이 구간에 ACK 된 데이터 중 센서가 못 본 구간의 비율(미러 품질, capture_loss 와 같은 계산). TCP ACK 가 없던 구간은 없음",
+      "x-zeek-type": "double"
+    },
+    "capture_lag_s": {
+      "type": "number",
+      "description": "처리 지연(초): 벽시계 - 패킷 시각. 커지면 센서가 밀리는 것. Manager 가 늦게 오는 이벤트를 기다릴 시간을 정할 때 쓴다. pcap 재생에서는 의미 없음",
+      "x-zeek-type": "double"
+    },
+    "uptime_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "시작 후 시간(초, 벽시계)",
+      "x-zeek-type": "double"
+    },
+    "exc_sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "이 노드가 마지막으로 읽은 예외 파일 SHA1(파일을 읽는 노드만, 클러스터는 매니저)",
+      "x-zeek-type": "string"
+    },
+    "ioc_sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "마지막으로 읽은 IOC 파일 SHA1",
+      "x-zeek-type": "string"
+    },
+    "policy_sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "마지막으로 읽은 에이전트 정책 파일 SHA1",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "node",
+    "schema_version",
+    "pkg_version",
+    "zeek_version",
+    "interval_s",
+    "pkts",
+    "bytes",
+    "pkts_dropped",
+    "drop_pct",
+    "capture_lag_s",
+    "uptime_s"
+  ],
+  "additionalProperties": false
+}
