@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "연결 요약 (meta/flow_summary)",
+  "description": "conn.log 대신 보내는 주기별 (출발, 목적지, 포트, 프로토콜) 요약(SRS_METADATA_EXPORT).",
+  "x-path": "/log/zeek/meta/flow_summary.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "주기 안 첫 연결 시작 시각",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "기록한 노드",
+      "x-zeek-type": "string"
+    },
+    "orig_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "출발 주소",
+      "x-zeek-type": "addr"
+    },
+    "resp_h": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "목적지 주소",
+      "x-zeek-type": "addr"
+    },
+    "resp_p": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "목적지 포트",
+      "x-zeek-type": "port"
+    },
+    "proto": {
+      "type": "string",
+      "enum": [
+        "icmp",
+        "tcp",
+        "udp",
+        "unknown_transport"
+      ],
+      "description": "전송 프로토콜",
+      "x-zeek-type": "enum transport_proto"
+    },
+    "service": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "관측된 서비스(이름순)",
+      "x-zeek-type": "vector of string"
+    },
+    "conns": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "연결 수",
+      "x-zeek-type": "count"
+    },
+    "orig_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "출발 쪽이 보낸 바이트 합",
+      "x-zeek-type": "count"
+    },
+    "resp_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "목적지 쪽이 보낸 바이트 합",
+      "x-zeek-type": "count"
+    },
+    "states": {
+      "type": "string",
+      "description": "연결 상태별 건수(예: SF:12,S0:3)",
+      "x-zeek-type": "string"
+    },
+    "sample_uid": {
+      "type": "string",
+      "description": "대표 연결 uid(원본 conn 로그를 남길 때만)",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "node",
+    "orig_h",
+    "resp_h",
+    "resp_p",
+    "proto",
+    "conns",
+    "orig_bytes",
+    "resp_bytes"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IOC 파일 적재 (nsm_ioc)",
+  "description": "IOC 파일을 읽은 결과.",
+  "x-path": "/log/zeek/nsm_ioc.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "기록 시각",
+      "x-zeek-type": "time"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "invalid",
+        "error"
+      ],
+      "description": "summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류)",
+      "x-zeek-type": "string"
+    },
+    "indicator": {
+      "type": "string",
+      "description": "IOC 값(invalid 행)",
+      "x-zeek-type": "string"
+    },
+    "ioc_type": {
+      "type": "string",
+      "description": "IOC 종류(ip, domain, url 등. 모르면 -)",
+      "x-zeek-type": "string"
+    },
+    "msg": {
+      "type": "string",
+      "description": "요약·이유",
+      "x-zeek-type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "kind"
+  ],
+  "additionalProperties": false
+}

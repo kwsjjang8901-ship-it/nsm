@@ -4,7 +4,7 @@
 - 대상: 센서가 Manager로 보내는 로그 `nsm_detection.log`, `evidence.log`, `nsm_exception.log`, `asset_signal.log`, `meta/*.log`(선별 전송), `meta_export_stats.log`. 센서에만 남는 `notice.log`·`stats.log`·`capture_loss.log`는 참고로만 봤습니다.
 - 방법: 스키마 정의(`detection_log.zeek`, `evidence_log.zeek`, `correlation_killchain.zeek`, `exceptions.zeek`, `asset-id/main.zeek`, `metadata/main.zeek`)와 합성 pcap 실행 결과(`killchain_story`, `proxy_c2`)의 실제 행, 그리고 리포트(`tests/report_pcap.py`, `tests/report_mockup.py`)가 로그를 읽는 방식을 대조했습니다.
 - 갱신: 2026-11-20 통합 상관(MDS·MTA·NSM) 관점 추가(6장). 우선순위가 바뀐 항목과 새 항목은 6장 표가 기준입니다.
-- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
+- 진행: 2026-11-20 작업 순서 1·2단계(D1·D4·D5·N1·N2·N3·N4), 3단계(D3·N7), 4단계(E1·E2·E3·N5, `community_id` 포함), G1(스키마) 반영. 6.4 표의 상태 칸과 [SRS 6.2·6.3](SRS.md)이 기준입니다.
 - 관련: [탐지 SRS 6장](SRS.md), [선별 전송 SRS](SRS_METADATA_EXPORT.md), [자산 식별 SPEC 2장](asset-id/SPEC.md), [통합 리포트 스펙](REPORT_SPEC.md)
 
 ---
@@ -242,7 +242,7 @@ CPU·메모리·디스크와 전송 지연은 센서 밖에서 재는 값이라 
 | 2 | N2: 계정 표기 나누기(근거·자산 신호) | 완료(아래 참고) |
 | 3 | D3: 상관 갱신 규칙(`revision`, 갈래 합치기) + N7 | 완료(아래 참고) |
 | 4 | E1·E2: 근거 공통 필드(`dst_port` 포함, N5 `src_port`) | 완료(아래 참고) |
-| 5 | M1·S1(+N6)·G1, X1 | |
+| 5 | M1·S1(+N6)·G1, X1 | G1 완료([LOG_SCHEMA.md](LOG_SCHEMA.md)) |
 | - | D2 `sensor_id`: 수집 에이전트(센서 변경 없음). 통합 상관 개발 전에 에이전트와 합의 | |
 
 1·2단계에서 정한 것:

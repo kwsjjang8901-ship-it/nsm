@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "탐지 요약 (nsm_detection)",
+  "description": "notice 1건 = 탐지 1건. 단독 탐지(Single)와 킬체인 상관 탐지(Correlated)가 같은 형식이다. 상관 탐지는 같은 detection_id 로 갱신되며 revision 이 가장 큰 행이 현재 상태(SRS 5.1.2). 근거는 evidence_ids 로 evidence.log 와 조인한다.",
+  "x-path": "/log/zeek/nsm_detection.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "탐지 시각",
+      "x-zeek-type": "time"
+    },
+    "detection_id": {
+      "type": "string",
+      "pattern": "^\\S+$",
+      "description": "탐지 id. 단독은 evidence_id 와 같고, 상관은 kc-<체인 시작 epoch>-<프로세스 값 6자리 16진수>-<번호>. 센서가 여러 대면 Manager 키는 (센서, detection_id)",
+      "x-zeek-type": "string"
+    },
+    "diagnosis": {
+      "type": "string",
+      "anyOf": [
+        {
+          "enum": [
+            "NSM.C2.AiApiFromServer",
+            "NSM.C2.DgaDomain",
+            "NSM.C2.DnsTunneling",
+            "NSM.C2.EncryptedChannel",
+            "NSM.C2.HttpBeaconing",
+            "NSM.C2.IocMatch",
+            "NSM.C2.LongConnection",
+            "NSM.C2.NonstandardPort",
+            "NSM.C2.TlsBeaconing",
+            "NSM.C2.UnknownProtocol",
+            "NSM.Correlation",
+            "NSM.CredentialAccess.AsrepRoasting",
+            "NSM.CredentialAccess.CoercedAuth",
+            "NSM.CredentialAccess.DcSync",
+            "NSM.CredentialAccess.FtpBruteforce",
+            "NSM.CredentialAccess.HttpBruteforce",
+            "NSM.CredentialAccess.Kerberoasting",
+            "NSM.CredentialAccess.KerberosBruteforce",
+            "NSM.CredentialAccess.KerberosSpray",
+            "NSM.CredentialAccess.MachineAccountMisuse",
+            "NSM.CredentialAccess.NamePoisoning",
+            "NSM.CredentialAccess.NtlmCredentialLeak",
+            "NSM.CredentialAccess.NtlmSpray",
+            "NSM.CredentialAccess.RemoteRegistryDump",
+            "NSM.CredentialAccess.SshBruteforce",
+            "NSM.CredentialAccess.Zerologon",
+            "NSM.Exfiltration.AiServiceUpload",
+            "NSM.Exfiltration.DnsTunnel",
+            "NSM.Exfiltration.LargeTransfer",
+            "NSM.Exfiltration.OutboundSmb",
+            "NSM.Exfiltration.VolumeAggregate",
+            "NSM.Exfiltration.WebUpload",
+            "NSM.Impact.SmbRansomware",
+            "NSM.LateralMovement.DcomExec",
+            "NSM.LateralMovement.RdpAccess",
+            "NSM.LateralMovement.RemoteService",
+            "NSM.LateralMovement.RemoteTask",
+            "NSM.LateralMovement.RemoteWmi",
+            "NSM.LateralMovement.SmbAccess",
+            "NSM.LateralMovement.SshAccess",
+            "NSM.LateralMovement.WinrmAccess",
+            "NSM.Recon.AdEnumeration",
+            "NSM.Recon.HostScan",
+            "NSM.Recon.PortScan",
+            "NSM.WebAttack.AiServiceExploit",
+            "NSM.WebAttack.Heartbleed",
+            "NSM.WebAttack.SqlInjection",
+            "NSM.WebAttack.Webshell",
+            "NSM.WebAttack.Xss"
+          ]
+        },
+        {
+          "pattern": "^NSM\\.Correlation\\.[A-Za-z0-9]+\\.[A-Za-z0-9]+$"
+        }
+      ],
+      "description": "진단명(표시용 분류). 단독은 룰별 고정값, 상관은 NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>",
+      "x-zeek-type": "string"
+    },
+    "rule": {
+      "type": "string",
+      "enum": [
+        "AD_Enumeration",
+        "AI_API_From_Server",
+        "AI_Service_Exploit",
+        "AI_Service_Upload",
+        "ASREP_Roasting",
+        "Coerced_Authentication",
+        "Correlated_KillChain",
+        "Cross_Site_Scripting",
+        "DCOM_Lateral",
+        "DCSync",
+        "DGA_Domain",
+        "DNS_Tunneling",
+        "Encrypted_C2",
+        "Exfil_DNS",
+        "Exfil_Large_Transfer",
+        "Exfil_Volume_Aggregate",
+        "Exfil_Web_Upload",
+        "FTP_Bruteforce",
+        "HTTP_Beaconing",
+        "HTTP_Bruteforce",
+        "Host_Scan",
+        "IOC_Match",
+        "Kerberoasting",
+        "Kerberos_Bruteforce",
+        "Kerberos_Spray",
+        "Long_Connection",
+        "Machine_Account_Misuse",
+        "NTLM_Credential_Leak",
+        "NTLM_Spray",
+        "Name_Poisoning",
+        "Nonstandard_Port",
+        "Outbound_SMB",
+        "Port_Scan",
+        "RDP_Lateral",
+        "Remote_Registry_Dump",
+        "Remote_Service_Creation",
+        "Remote_Task_Creation",
+        "Remote_WMI_Execution",
+        "SMB_Admin_Share",
+        "SMB_Ransomware",
+        "SQL_Injection",
+        "SSH_Bruteforce",
+        "SSH_Lateral",
+        "TLS_Beaconing",
+        "TLS_Heartbleed",
+        "Unknown_Protocol",
+        "Webshell_Access",
+        "WinRM_Lateral",
+        "Zerologon_Attempt"
+      ],
+      "description": "탐지를 낸 룰(notice 이름에서 NSM:: 를 뺀 값). 상관은 Correlated_KillChain. Manager 룰 정책·예외와 잇는 키",
+      "x-zeek-type": "string"
+    },
+    "techniques": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+      },
+      "description": "ATT&CK 기법 id. 상관은 구성 탐지마다 하나(처음 탐지된 시각 순, 같은 기법 반복 가능)",
+      "x-zeek-type": "vector of string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Single",
+        "Correlated"
+      ],
+      "description": "Single(단독) 또는 Correlated(킬체인 상관)",
+      "x-zeek-type": "string"
+    },
+    "killchain_stages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Command and Control",
+          "Credential Access",
+          "Exfiltration",
+          "Impact",
+          "Initial Access",
+          "Lateral Movement",
+          "Recon"
+        ]
+      },
+      "description": "킬체인 단계명. 상관은 처음 본 순서, 중복 없음",
+      "x-zeek-type": "vector of string"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "Information",
+        "Suspicious"
+      ],
+      "description": "등급 문자열: 단독 Information, 상관 Suspicious",
+      "x-zeek-type": "string"
+    },
+    "severity_id": {
+      "type": "integer",
+      "minimum": 0,
+      "enum": [
+        1,
+        3
+      ],
+      "description": "등급 숫자(OCSF severity_id 척도): 단독 1, 상관 3",
+      "x-zeek-type": "count"
+    },
+    "first_seen": {
+      "type": "number",
+      "description": "관측 시작. 같은 사건의 갱신(occurrence > 1)은 사건의 첫 탐지 시각, 상관은 체인 시작",
+      "x-zeek-type": "time"
+    },
+    "last_seen": {
+      "type": "number",
+      "description": "관측 끝(상관은 가장 최근 단계)",
+      "x-zeek-type": "time"
+    },
+    "attacker": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "ipv4"
+        },
+        {
+          "format": "ipv6"
+        }
+      ],
+      "description": "공격 host(notice src, 상관은 체인 출발지)",
+      "x-zeek-type": "addr"
+    },
+    "attacker_subnet": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F:.]+/[0-9]+$",
+      "description": "공격 host 의 대역(Site::local_nets 에 있으면 그 대역, 없으면 /24·/64)",
+      "x-zeek-type": "subnet"
+    },
+    "victims": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "anyOf": [
+          {
+            "format": "ipv4"
+          },
+          {
+            "format": "ipv6"
+          }
+        ]
+      },
+      "description": "피해 host 주소(최대 chain_max_victims=8). 확산 룰은 주소 순, 상관은 가장 최근 단계 host 가 맨 앞이고 체인 출발지는 넣지 않음",
+      "x-zeek-type": "vector of string"
+    },
+    "victim_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "피해 host 전체 수(victims 가 잘려도 실제 수)",
+      "x-zeek-type": "count"
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "근거에서 모은 계정(정렬, 최대 evidence_summary_max=5)",
+      "x-zeek-type": "vector of string"
+    },
+    "dst_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "근거에서 모은 목적지 이름(host·sni·name·DNS 상위 도메인, 소문자, IP 제외, 정렬, 최대 5)",
+      "x-zeek-type": "vector of string"
+    },
+    "relays": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "거쳐 간 프록시 주소:포트(정렬, 최대 5)",
+      "x-zeek-type": "vector of string"
+    },
+    "evidence_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "evidence.log 에 기록된 근거 행 수",
+      "x-zeek-type": "count"
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "근거 키(evidence.log 의 evidence_id). 상관은 체인 근거 id + 구성 탐지 id",
+      "x-zeek-type": "vector of string"
+    },
+    "disposition": {
+      "type": "string",
+      "enum": [
+        "suppressed"
+      ],
+      "description": "suppress 예외에 맞은 탐지만 suppressed(Manager 는 알림을 올리지 않음)",
+      "x-zeek-type": "string"
+    },
+    "exception_id": {
+      "type": "string",
+      "description": "맞은 예외 id",
+      "x-zeek-type": "string"
+    },
+    "incident_id": {
+      "type": "string",
+      "description": "같은 사건 묶음 id. 단독은 사건의 첫 탐지 detection_id, 상관은 detection_id 와 같음",
+      "x-zeek-type": "string"
+    },
+    "occurrence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "사건 안에서 몇 번째인지(1부터). 1 에서만 새 알림. 상관은 revision 과 같음",
+      "x-zeek-type": "count"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "상관 탐지만: 같은 체인의 갱신 번호(1부터). detection_id 별 가장 큰 행이 현재 상태",
+      "x-zeek-type": "count"
+    },
+    "member_detection_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "상관 탐지만: 체인을 이루는 단독 탐지의 detection_id(처음 본 순서)",
+      "x-zeek-type": "vector of string"
+    }
+  },
+  "required": [
+    "ts",
+    "detection_id",
+    "diagnosis",
+    "category",
+    "severity",
+    "evidence_count"
+  ],
+  "additionalProperties": false
+}

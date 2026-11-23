@@ -136,7 +136,7 @@ flowchart LR
 
 ## 5. 출력(로그) 명세
 
-모든 출력은 JSON 한 줄에 한 행입니다. 시각(`ts`)은 epoch 초(소수점 포함)입니다. 값이 없는 필드는 쓰지 않습니다(JSON에 키가 없음). 경로는 `meta_path_prefix`(기본 `/log/zeek/meta/`) 뒤에 이름을 붙입니다.
+필드·타입 전체는 [LOG_SCHEMA.md](LOG_SCHEMA.md)의 `meta/*`(JSON Schema는 `schema/logs/meta/`)에 있고, CI가 테스트 출력을 이 스키마로 검사합니다. 모든 출력은 JSON 한 줄에 한 행입니다. 시각(`ts`)은 epoch 초(소수점 포함)입니다. 값이 없는 필드는 쓰지 않습니다(JSON에 키가 없음). 경로는 `meta_path_prefix`(기본 `/log/zeek/meta/`) 뒤에 이름을 붙입니다.
 
 | 파일 | 종류 | 기록 시점 |
 | --- | --- | --- |

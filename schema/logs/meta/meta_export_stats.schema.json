@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "선별 전송 통계 (meta/meta_export_stats)",
+  "description": "선별 전송 스트림별 주기(meta_stats_interval) 통계.",
+  "x-path": "/log/zeek/meta/meta_export_stats.log",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "description": "기록 시각",
+      "x-zeek-type": "time"
+    },
+    "node": {
+      "type": "string",
+      "description": "기록한 노드",
+      "x-zeek-type": "string"
+    },
+    "stream": {
+      "type": "string",
+      "description": "선별 전송 이름(meta_export_streams 의 name)",
+      "x-zeek-type": "string"
+    },
+    "sent": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "보낸 행",
+      "x-zeek-type": "count"
+    },
+    "dropped_scope": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "범위 밖이라 뺀 행",
+      "x-zeek-type": "count"
+    },
+    "dropped_filter": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "스트림별 조건으로 뺀 행",
+      "x-zeek-type": "count"
+    },
+    "dropped_dedup": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "중복 억제로 뺀 행",
+      "x-zeek-type": "count"
+    },
+    "dropped_rate": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "분당 상한 초과로 뺀 행",
+      "x-zeek-type": "count"
+    },
+    "summarized": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "요약 로그로 묶은 행",
+      "x-zeek-type": "count"
+    }
+  },
+  "required": [
+    "ts",
+    "node",
+    "stream",
+    "sent",
+    "dropped_scope",
+    "dropped_filter",
+    "dropped_dedup",
+    "dropped_rate",
+    "summarized"
+  ],
+  "additionalProperties": false
+}

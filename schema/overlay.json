@@ -1,0 +1,551 @@
+{
+  "_comment": "필드 설명·열거값·형식. 필드 목록과 타입은 Zeek 에서 생성한다(schema/fields.zeek). enum_ref 는 Zeek 에서 뽑은 열거값(fields.json 의 enums) 이름. NSM 로그는 모든 필드에 설명이 있어야 build.py 가 통과한다.",
+  "logs": {
+    "nsm_detection": {
+      "title": "탐지 요약",
+      "path": "/log/zeek/nsm_detection.log",
+      "desc": "notice 1건 = 탐지 1건. 단독 탐지(Single)와 킬체인 상관 탐지(Correlated)가 같은 형식이다. 상관 탐지는 같은 detection_id 로 갱신되며 revision 이 가장 큰 행이 현재 상태(SRS 5.1.2). 근거는 evidence_ids 로 evidence.log 와 조인한다.",
+      "fields": {
+        "ts": {
+          "desc": "탐지 시각"
+        },
+        "detection_id": {
+          "desc": "탐지 id. 단독은 evidence_id 와 같고, 상관은 kc-<체인 시작 epoch>-<프로세스 값 6자리 16진수>-<번호>. 센서가 여러 대면 Manager 키는 (센서, detection_id)",
+          "pattern": "^\\S+$"
+        },
+        "diagnosis": {
+          "desc": "진단명(표시용 분류). 단독은 룰별 고정값, 상관은 NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>",
+          "anyOf": [
+            {
+              "enum_ref": "diagnosis"
+            },
+            {
+              "pattern": "^NSM\\.Correlation\\.[A-Za-z0-9]+\\.[A-Za-z0-9]+$"
+            }
+          ]
+        },
+        "rule": {
+          "desc": "탐지를 낸 룰(notice 이름에서 NSM:: 를 뺀 값). 상관은 Correlated_KillChain. Manager 룰 정책·예외와 잇는 키",
+          "enum_ref": "rule"
+        },
+        "techniques": {
+          "desc": "ATT&CK 기법 id. 상관은 구성 탐지마다 하나(처음 탐지된 시각 순, 같은 기법 반복 가능)",
+          "items": {
+            "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+          }
+        },
+        "category": {
+          "desc": "Single(단독) 또는 Correlated(킬체인 상관)",
+          "enum": [
+            "Single",
+            "Correlated"
+          ]
+        },
+        "killchain_stages": {
+          "desc": "킬체인 단계명. 상관은 처음 본 순서, 중복 없음",
+          "items": {
+            "enum_ref": "killchain_stage"
+          }
+        },
+        "severity": {
+          "desc": "등급 문자열: 단독 Information, 상관 Suspicious",
+          "enum": [
+            "Information",
+            "Suspicious"
+          ]
+        },
+        "severity_id": {
+          "desc": "등급 숫자(OCSF severity_id 척도): 단독 1, 상관 3",
+          "enum": [
+            1,
+            3
+          ]
+        },
+        "first_seen": {
+          "desc": "관측 시작. 같은 사건의 갱신(occurrence > 1)은 사건의 첫 탐지 시각, 상관은 체인 시작"
+        },
+        "last_seen": {
+          "desc": "관측 끝(상관은 가장 최근 단계)"
+        },
+        "attacker": {
+          "desc": "공격 host(notice src, 상관은 체인 출발지)"
+        },
+        "attacker_subnet": {
+          "desc": "공격 host 의 대역(Site::local_nets 에 있으면 그 대역, 없으면 /24·/64)"
+        },
+        "victims": {
+          "desc": "피해 host 주소(최대 chain_max_victims=8). 확산 룰은 주소 순, 상관은 가장 최근 단계 host 가 맨 앞이고 체인 출발지는 넣지 않음",
+          "items": {
+            "format": "ip"
+          }
+        },
+        "victim_count": {
+          "desc": "피해 host 전체 수(victims 가 잘려도 실제 수)",
+          "minimum": 1
+        },
+        "accounts": {
+          "desc": "근거에서 모은 계정(정렬, 최대 evidence_summary_max=5)"
+        },
+        "dst_names": {
+          "desc": "근거에서 모은 목적지 이름(host·sni·name·DNS 상위 도메인, 소문자, IP 제외, 정렬, 최대 5)"
+        },
+        "relays": {
+          "desc": "거쳐 간 프록시 주소:포트(정렬, 최대 5)"
+        },
+        "evidence_count": {
+          "desc": "evidence.log 에 기록된 근거 행 수",
+          "minimum": 0
+        },
+        "evidence_ids": {
+          "desc": "근거 키(evidence.log 의 evidence_id). 상관은 체인 근거 id + 구성 탐지 id"
+        },
+        "disposition": {
+          "desc": "suppress 예외에 맞은 탐지만 suppressed(Manager 는 알림을 올리지 않음)",
+          "enum": [
+            "suppressed"
+          ]
+        },
+        "exception_id": {
+          "desc": "맞은 예외 id"
+        },
+        "incident_id": {
+          "desc": "같은 사건 묶음 id. 단독은 사건의 첫 탐지 detection_id, 상관은 detection_id 와 같음"
+        },
+        "occurrence": {
+          "desc": "사건 안에서 몇 번째인지(1부터). 1 에서만 새 알림. 상관은 revision 과 같음",
+          "minimum": 1
+        },
+        "revision": {
+          "desc": "상관 탐지만: 같은 체인의 갱신 번호(1부터). detection_id 별 가장 큰 행이 현재 상태",
+          "minimum": 1
+        },
+        "member_detection_ids": {
+          "desc": "상관 탐지만: 체인을 이루는 단독 탐지의 detection_id(처음 본 순서)"
+        }
+      }
+    },
+    "evidence": {
+      "title": "근거",
+      "path": "/log/zeek/evidence.log",
+      "desc": "탐지 1건에 근거 여러 행. evidence_id 로 nsm_detection.evidence_ids 와 조인하고, uid·fuid 로 conn.log·files.log·선별 전송 로그와 조인한다.",
+      "fields": {
+        "ts": {
+          "desc": "근거 시각"
+        },
+        "evidence_id": {
+          "desc": "어느 탐지의 근거인지(notice·nsm_detection 과 공유하는 키)"
+        },
+        "note": {
+          "desc": "탐지 종류(Zeek notice 이름, NSM::<룰>)",
+          "pattern": "^NSM::[A-Za-z0-9_]+$"
+        },
+        "rule": {
+          "desc": "note 에서 NSM:: 를 뺀 값(nsm_detection.rule 과 같음)",
+          "enum_ref": "rule"
+        },
+        "killchain_stage": {
+          "desc": "킬체인 단계명",
+          "enum_ref": "killchain_stage"
+        },
+        "technique": {
+          "desc": "ATT&CK 기법 id. 여러 개면 쉼표, 상관 근거는 단계 순서를 -> 로 이음",
+          "pattern": "^T[0-9]{4}(\\.[0-9]{3})?((, ?|->)T[0-9]{4}(\\.[0-9]{3})?)*$"
+        },
+        "account": {
+          "desc": "관련 계정 원문(알 때만). 여러 개면 쉼표. 확산 근거는 인증 맥락에서 찾은 값"
+        },
+        "user_name": {
+          "desc": "account(첫 계정)의 사용자 부분, 소문자"
+        },
+        "user_domain": {
+          "desc": "account(첫 계정)의 도메인 부분. domain\\user 의 domain, user@realm 의 realm"
+        },
+        "user_domain_type": {
+          "desc": "user_domain 에 점이 있으면 dns, 없으면 netbios",
+          "enum": [
+            "dns",
+            "netbios"
+          ]
+        },
+        "src": {
+          "desc": "출발 host"
+        },
+        "dst": {
+          "desc": "대상 host"
+        },
+        "operation": {
+          "desc": "행위(예: kerberos_as_failure, smb_tree_connect, killchain)"
+        },
+        "uid": {
+          "desc": "근거 연결의 Zeek uid(conn.log 등과 조인). 집계형은 표본 대상마다 대표 연결 하나",
+          "pattern": "^C[0-9A-Za-z]+$"
+        },
+        "src_port": {
+          "desc": "근거 연결의 src 쪽 포트(근거 src·dst 방향에 맞춤)",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "dst_port": {
+          "desc": "근거 연결의 dst 쪽 포트(프록시 경유면 프록시 포트)",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "proto": {
+          "desc": "근거 연결의 전송 프로토콜",
+          "enum": [
+            "tcp",
+            "udp",
+            "icmp"
+          ]
+        },
+        "community_id": {
+          "desc": "근거 연결의 Community ID v1(seed community_id_seed, 기본 0)",
+          "pattern": "^1:[A-Za-z0-9+/]{27}=$"
+        },
+        "dst_name": {
+          "desc": "목적지 이름(sni > host > name > DNS 상위 도메인 > 질의). 소문자, IP 제외"
+        },
+        "proxy": {
+          "desc": "거쳐 간 명시적 프록시 주소:포트",
+          "pattern": "^\\S+:[0-9]+$"
+        },
+        "bytes": {
+          "desc": "출발지가 보낸 바이트",
+          "minimum": 0
+        },
+        "window_s": {
+          "desc": "집계형 근거의 집계 창(초)",
+          "minimum": 0
+        },
+        "fuid": {
+          "desc": "근거 파일의 Zeek fuid(files.log 조인)"
+        },
+        "parent_id": {
+          "desc": "상관 근거가 묶는 하위 evidence_id"
+        },
+        "detail": {
+          "desc": "사람이 읽는 부가 정보(key=value). 형식은 룰마다 다르며 파싱하지 않는다"
+        }
+      }
+    },
+    "nsm_exception": {
+      "title": "예외 적재·적중",
+      "path": "/log/zeek/nsm_exception.log",
+      "desc": "예외 파일을 읽은 결과(loaded·rejected·expired·error)와 주기별 적중 수(hits).",
+      "fields": {
+        "ts": {
+          "desc": "기록 시각(적재 행은 시작 직후 0 일 수 있음, 검토 X1)"
+        },
+        "node": {
+          "desc": "기록한 노드(standalone 은 zeek)"
+        },
+        "kind": {
+          "desc": "loaded(적재), rejected(형식 오류로 뺌), expired(기한 지남), hits(적중 수), error(파일 읽기 오류)",
+          "enum": [
+            "loaded",
+            "rejected",
+            "expired",
+            "hits",
+            "error"
+          ]
+        },
+        "exception_id": {
+          "desc": "예외 id"
+        },
+        "disposition": {
+          "desc": "예외 처리: drop(탐지 안 함) 또는 suppress(탐지는 남기고 알림 안 함)",
+          "enum": [
+            "drop",
+            "suppress"
+          ]
+        },
+        "scope": {
+          "desc": "적용 탐지(notice 이름 또는 group:<묶음>, 이름순)"
+        },
+        "hits": {
+          "desc": "주기 안 적중 수(kind=hits)",
+          "minimum": 0
+        },
+        "last_hit": {
+          "desc": "마지막 적중 시각(kind=hits)"
+        },
+        "msg": {
+          "desc": "거부 이유·출처 등"
+        }
+      }
+    },
+    "nsm_ioc": {
+      "title": "IOC 파일 적재",
+      "path": "/log/zeek/nsm_ioc.log",
+      "desc": "IOC 파일을 읽은 결과.",
+      "fields": {
+        "ts": {
+          "desc": "기록 시각"
+        },
+        "kind": {
+          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 항목), error(파일 읽기 오류)",
+          "enum": [
+            "summary",
+            "invalid",
+            "error"
+          ]
+        },
+        "indicator": {
+          "desc": "IOC 값(invalid 행)"
+        },
+        "ioc_type": {
+          "desc": "IOC 종류(ip, domain, url 등. 모르면 -)"
+        },
+        "msg": {
+          "desc": "요약·이유"
+        }
+      }
+    },
+    "asset_signal": {
+      "title": "자산 신호",
+      "path": "/log/zeek/asset_signal.log",
+      "desc": "자산 식별에 쓰는 관측 사실. 판정(엔티티 리졸루션)은 Manager 가 한다. 신호 정의는 docs/asset-id/SPEC.md.",
+      "fields": {
+        "ts": {
+          "desc": "관측 시각"
+        },
+        "uid": {
+          "desc": "근거 연결 uid(있을 때)"
+        },
+        "ip": {
+          "desc": "신호가 가리키는 자산 IP"
+        },
+        "mac": {
+          "desc": "관측 시점의 MAC(알 때)"
+        },
+        "signal": {
+          "desc": "신호 종류(SPEC 2.1)",
+          "enum_ref": "asset_signal"
+        },
+        "value": {
+          "desc": "신호 값(정규화됨)"
+        },
+        "source": {
+          "desc": "신호 출처(프로토콜·분석기 이름, SPEC 3장)",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "confidence": {
+          "desc": "출처 기준 신뢰도 0~100",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "user_name": {
+          "desc": "계정 신호만: 사용자 부분(소문자)"
+        },
+        "user_domain": {
+          "desc": "계정 신호만: 도메인 부분"
+        },
+        "user_domain_type": {
+          "desc": "계정 신호만: dns 또는 netbios",
+          "enum": [
+            "dns",
+            "netbios"
+          ]
+        }
+      }
+    },
+    "asset_agent_policy": {
+      "title": "에이전트 정책 적재",
+      "path": "/log/zeek/asset_agent_policy.log",
+      "desc": "고객 정의 에이전트 정책 파일을 읽은 결과(SPEC 3.17).",
+      "fields": {
+        "ts": {
+          "desc": "기록 시각"
+        },
+        "kind": {
+          "desc": "summary(읽은 결과), invalid(형식이 틀려 뺀 정책), error(파일 읽기 오류)",
+          "enum": [
+            "summary",
+            "invalid",
+            "error"
+          ]
+        },
+        "policy_id": {
+          "desc": "정책 id(invalid 행)"
+        },
+        "msg": {
+          "desc": "요약·이유"
+        }
+      }
+    },
+    "meta/meta_export_stats": {
+      "title": "선별 전송 통계",
+      "path": "/log/zeek/meta/meta_export_stats.log",
+      "desc": "선별 전송 스트림별 주기(meta_stats_interval) 통계.",
+      "fields": {
+        "ts": {
+          "desc": "기록 시각"
+        },
+        "node": {
+          "desc": "기록한 노드"
+        },
+        "stream": {
+          "desc": "선별 전송 이름(meta_export_streams 의 name)"
+        },
+        "sent": {
+          "desc": "보낸 행",
+          "minimum": 0
+        },
+        "dropped_scope": {
+          "desc": "범위 밖이라 뺀 행",
+          "minimum": 0
+        },
+        "dropped_filter": {
+          "desc": "스트림별 조건으로 뺀 행",
+          "minimum": 0
+        },
+        "dropped_dedup": {
+          "desc": "중복 억제로 뺀 행",
+          "minimum": 0
+        },
+        "dropped_rate": {
+          "desc": "분당 상한 초과로 뺀 행",
+          "minimum": 0
+        },
+        "summarized": {
+          "desc": "요약 로그로 묶은 행",
+          "minimum": 0
+        }
+      }
+    },
+    "meta/flow_summary": {
+      "title": "연결 요약",
+      "path": "/log/zeek/meta/flow_summary.log",
+      "desc": "conn.log 대신 보내는 주기별 (출발, 목적지, 포트, 프로토콜) 요약(SRS_METADATA_EXPORT).",
+      "fields": {
+        "ts": {
+          "desc": "주기 안 첫 연결 시작 시각"
+        },
+        "node": {
+          "desc": "기록한 노드"
+        },
+        "orig_h": {
+          "desc": "출발 주소"
+        },
+        "resp_h": {
+          "desc": "목적지 주소"
+        },
+        "resp_p": {
+          "desc": "목적지 포트",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "proto": {
+          "desc": "전송 프로토콜",
+          "enum_ref": "transport_proto"
+        },
+        "service": {
+          "desc": "관측된 서비스(이름순)"
+        },
+        "conns": {
+          "desc": "연결 수",
+          "minimum": 0
+        },
+        "orig_bytes": {
+          "desc": "출발 쪽이 보낸 바이트 합",
+          "minimum": 0
+        },
+        "resp_bytes": {
+          "desc": "목적지 쪽이 보낸 바이트 합",
+          "minimum": 0
+        },
+        "states": {
+          "desc": "연결 상태별 건수(예: SF:12,S0:3)"
+        },
+        "sample_uid": {
+          "desc": "대표 연결 uid(원본 conn 로그를 남길 때만)"
+        }
+      }
+    },
+    "meta/dns_summary": {
+      "title": "DNS 요약",
+      "path": "/log/zeek/meta/dns_summary.log",
+      "desc": "dns.log 대신 보내는 주기별 (출발, 도메인) 요약(SRS_METADATA_EXPORT).",
+      "fields": {
+        "ts": {
+          "desc": "주기 안 첫 질의 시각"
+        },
+        "ts_end": {
+          "desc": "주기 안 마지막 질의 시각"
+        },
+        "node": {
+          "desc": "기록한 노드"
+        },
+        "orig_h": {
+          "desc": "질의한 주소"
+        },
+        "domain": {
+          "desc": "등록 도메인(co.kr 등 2단계 접미사 처리). 출발지당 상한을 넘은 도메인은 (other)"
+        },
+        "qtypes": {
+          "desc": "관측된 질의 유형(이름순)"
+        },
+        "rcodes": {
+          "desc": "결과별 질의 수(예: NOERROR:12,NXDOMAIN:1)"
+        },
+        "queries": {
+          "desc": "질의 수",
+          "minimum": 0
+        },
+        "unique_names": {
+          "desc": "고유 질의 이름 수",
+          "minimum": 0
+        },
+        "unique_names_capped": {
+          "desc": "참일 때만 기록: 고유 이름 상한에 닿아 그 뒤는 세지 않음"
+        },
+        "sample_names": {
+          "desc": "처음 관측한 질의 이름(최대 meta_dns_max_samples)"
+        },
+        "answers": {
+          "desc": "처음 관측한 응답(최대 meta_dns_max_answers)"
+        },
+        "sample_uid": {
+          "desc": "대표 uid(원본 dns 로그를 남길 때만)"
+        }
+      }
+    },
+    "meta/http_ua_summary": {
+      "title": "HTTP User-Agent 요약",
+      "path": "/log/zeek/meta/http_ua_summary.log",
+      "desc": "주기별 (출발, User-Agent) 요약(SRS_METADATA_EXPORT).",
+      "fields": {
+        "ts": {
+          "desc": "주기 안 첫 요청 시각"
+        },
+        "ts_end": {
+          "desc": "주기 안 마지막 요청 시각"
+        },
+        "node": {
+          "desc": "기록한 노드"
+        },
+        "orig_h": {
+          "desc": "요청한 주소"
+        },
+        "user_agent": {
+          "desc": "User-Agent"
+        },
+        "requests": {
+          "desc": "선별 대상 http 요청 수(중복 억제 전)",
+          "minimum": 0
+        },
+        "hosts": {
+          "desc": "고유 Host 수(100개까지 셈)",
+          "minimum": 0
+        },
+        "sample_host": {
+          "desc": "대표 Host"
+        }
+      }
+    }
+  },
+  "meta_default": {
+    "title_prefix": "선별 전송: ",
+    "desc": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다."
+  }
+}
