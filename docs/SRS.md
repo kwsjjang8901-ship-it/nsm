@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 142개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 143개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1592,7 +1592,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `evidence_count_expire` | 2hr | 탐지별 근거 건수 카운터 만료 |  |
 | `sensor_status_interval` | 1min | 센서 상태 로그(`nsm_sensor.log`, 6.5절) 기록 주기 |  |
 | `pkg_version` | `0.1.0` | 패키지 버전(`nsm_rules/sensor/version.zeek`). 센서 상태 로그에 남고 Manager 엔진 업데이트 화면이 보여 준다 | 릴리스할 때 올린다 |
-| `community_id_seed` | 0 | 근거 `community_id` 계산 seed. 연동하는 다른 제품(Suricata 등)과 같아야 한다 |  |
+| `community_id_seed` | 0 | `community_id` 계산 seed(근거, 연결 단위 선별 전송 로그, conn). 연동하는 다른 제품(Suricata 등)과 같아야 한다 |  |
 | `evidence_summary_max` | 5 | `nsm_detection.log`의 `accounts`·`dst_names`·`relays`에 싣는 최대 개수 |  |
 | `detection_continue_gap` | 15min | 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지를 같은 사건(`incident_id`)으로 묶는 최대 간격 | 집계형 룰의 창(5·10분)보다 길게 둠 |
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
@@ -1709,7 +1709,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 142개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 95개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 143개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 96개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1735,7 +1735,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 ## 10. 알려진 한계와 향후 과제
 
-자산 식별은 머지했습니다(5.5절). 다음 단계는 OCSF 변환기 연동과, 자산 식별의 서버 역할을 탐지 조건·예외에 반영하는 작업(예외 엔진 E4)입니다. Suricata 시그니처 경보는 Zeek를 거치지 않고 Manager로 바로 보내, Manager가 예외·사건 묶기·통합 상관에 넣기로 했습니다(2026-11-24, [SURICATA_INTEGRATION_DESIGN.md](SURICATA_INTEGRATION_DESIGN.md)). 센서 쪽 작업은 conn과 연결 단위 선별 전송 로그에 `community_id`를 넣는 것입니다.
+자산 식별은 머지했습니다(5.5절). 다음 단계는 OCSF 변환기 연동과, 자산 식별의 서버 역할을 탐지 조건·예외에 반영하는 작업(예외 엔진 E4)입니다. Suricata 시그니처 경보는 Zeek를 거치지 않고 Manager로 바로 보내, Manager가 예외·사건 묶기·통합 상관에 넣기로 했습니다(2026-11-24, [SURICATA_INTEGRATION_DESIGN.md](SURICATA_INTEGRATION_DESIGN.md)). 센서 쪽 작업(conn과 연결 단위 선별 전송 로그의 `community_id`)은 반영했습니다(SRS_METADATA_EXPORT FR-M17).
 
 | 한계 | 영향 | 대응·계획 |
 | --- | --- | --- |

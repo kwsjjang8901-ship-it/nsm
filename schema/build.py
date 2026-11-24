@@ -113,7 +113,8 @@ def build(fields, overlay):
         name = l["log"]
         ov = overlay["logs"].get(name)
         is_nsm = ov is not None
-        ofields = (ov or {}).get("fields", {})
+        # 선별 전송 Zeek 로그는 Zeek 문서를 따르고, NSM 이 더한 필드(community_id 등)만 meta_default.fields 로 설명한다
+        ofields = (ov or {}).get("fields", {}) if is_nsm else overlay["meta_default"].get("fields", {})
         props, required, doc_rows = {}, [], []
         for f in l["fields"]:
             s, tname = json_type(f["zeek_type"])
@@ -131,7 +132,7 @@ def build(fields, overlay):
                 required.append(f["name"])
             doc_rows.append((f["name"], tname, req, s, o.get("desc", "")))
         for k in ofields:
-            if k not in props:
+            if is_nsm and k not in props:
                 problems.append("%s.%s: overlay.json 에 있는데 로그에 없는 필드" % (name, k))
         title = ov["title"] if ov else overlay["meta_default"]["title_prefix"] + name.split("/", 1)[1]
         desc = ov["desc"] if ov else overlay["meta_default"]["desc"]
@@ -147,6 +148,9 @@ def build(fields, overlay):
             "additionalProperties": False,
         }
         schemas[name] = (schema, doc_rows, title, desc, path)
+    for k in overlay["meta_default"].get("fields", {}):
+        if not any(k in sc[0]["properties"] for n, sc in schemas.items() if n not in overlay["logs"]):
+            problems.append("meta_default.%s: overlay.json 에 있는데 어느 선별 전송 로그에도 없는 필드" % k)
     for k in overlay["logs"]:
         if k not in schemas:
             problems.append("%s: overlay.json 에 있는데 Zeek 출력에 없는 로그" % k)

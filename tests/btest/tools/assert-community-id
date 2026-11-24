@@ -8,27 +8,12 @@
   - src_port·dst_port 는 근거의 src·dst 방향(src 가 연결의 응답 쪽이면 뒤바뀐 값)이어야 한다.
   대조한 행이 최소 행 수(기본 1)보다 적으면 실패.
 """
-import base64
-import hashlib
-import ipaddress
 import os
-import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import nsmlog  # noqa: E402
-
-PROTO = {"tcp": 6, "udp": 17, "icmp": 1}
-# ICMP 는 type/code 를 포트 자리에 쓰고, 요청·응답 짝(8/0 등)이면 양방향으로 본다(스펙). 여기서는 TCP·UDP 만 대조한다.
-
-
-def community_id(sa, da, sp, dp, proto, seed=0):
-    a, b = ipaddress.ip_address(sa).packed, ipaddress.ip_address(da).packed
-    if (a, sp) > (b, dp):
-        a, b, sp, dp = b, a, dp, sp
-    h = hashlib.sha1(struct.pack("!H", seed) + a + b + struct.pack("!BB", PROTO[proto], 0) + struct.pack("!HH", sp, dp))
-    return "1:" + base64.b64encode(h.digest()).decode()
-
+from nsmlog import community_id  # noqa: E402
 
 want = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 conns = {nsmlog.get(r, "uid"): r for r in nsmlog.read_file("conn.log")} if os.path.exists("conn.log") else {}

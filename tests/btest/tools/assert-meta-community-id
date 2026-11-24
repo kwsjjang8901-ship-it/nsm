@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""conn.log 과 연결 단위 선별 전송 로그(meta/*.log)의 community_id 를 검사한다(JSON 또는 TSV).
+
+  assert-meta-community-id <최소 행 수> <seed> <스트림,스트림,...>
+
+  - conn.log 의 TCP·UDP 행은 community_id 가 Community ID v1 스펙(주어진 seed, base64)대로 5-tuple 에서 계산한 값이어야 한다.
+  - 주어진 스트림마다 meta/<스트림>.log 가 있어야 하고, 모든 행에 community_id 가 있어야 하며,
+    같은 uid 의 conn.log 값과 같아야 한다.
+  - evidence.log 가 있으면 conn.log 에 있는 uid 의 근거 행도 같은 값이어야 한다(근거와 선별 로그를 같은 키로 잇는지).
+  선별 로그에서 대조한 행이 최소 행 수보다 적으면 실패.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nsmlog  # noqa: E402
+from nsmlog import community_id  # noqa: E402
+
+want, seed, streams = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3].split(",")
+errors, checked = [], 0
+
+conn_cid = {}
+for c in nsmlog.read_file("conn.log"):
+    proto = nsmlog.get(c, "proto")
+    if proto not in ("tcp", "udp"):
+        continue
+    exp = community_id(nsmlog.get(c, "id.orig_h"), nsmlog.get(c, "id.resp_h"),
+                       int(nsmlog.get(c, "id.orig_p")), int(nsmlog.get(c, "id.resp_p")), proto, seed)
+    got = nsmlog.get(c, "community_id")
+    if got != exp:
+        errors.append("conn %s: got %s expected %s" % (nsmlog.get(c, "uid"), got, exp))
+    conn_cid[nsmlog.get(c, "uid")] = exp
+
+for s in streams:
+    path = "meta/%s.log" % s
+    if not os.path.exists(path):
+        errors.append("%s 없음" % path)
+        continue
+    rows = nsmlog.read_file(path)
+    if not rows:
+        errors.append("%s 에 행이 없음" % path)
+    for r in rows:
+        uid, got = nsmlog.get(r, "uid"), nsmlog.get(r, "community_id")
+        if got in (None, "", "-"):
+            errors.append("%s %s: community_id 없음" % (s, uid))
+        elif uid not in conn_cid:
+            errors.append("%s %s: conn.log 에 uid 없음" % (s, uid))
+        elif got != conn_cid[uid]:
+            errors.append("%s %s: got %s expected %s" % (s, uid, got, conn_cid[uid]))
+        else:
+            checked += 1
+
+if os.path.exists("evidence.log"):
+    for e in nsmlog.read_file("evidence.log"):
+        uid = nsmlog.get(e, "uid")
+        if uid in conn_cid and nsmlog.get(e, "community_id") != conn_cid[uid]:
+            errors.append("evidence %s %s: got %s expected %s" % (nsmlog.get(e, "note"), uid, nsmlog.get(e, "community_id"), conn_cid[uid]))
+
+if errors or checked < want:
+    nsmlog.fail("assert-meta-community-id FAILED: checked=%d (min %d), errors=%d\n  %s"
+                % (checked, want, len(errors), "\n  ".join(errors[:10])))
+print("assert-meta-community-id: %d rows ok" % checked)

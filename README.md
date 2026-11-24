@@ -33,6 +33,7 @@ nsm_rules/
     filter_log.zeek         # 로그 출력 필터/경로
   metadata/
     main.zeek               # 메타데이터 선별 전송 (/log/zeek/meta, docs/METADATA_EXPORT_PLAN.md)
+    community_id.zeek       # 연결 단위 선별 로그·conn 의 Community ID (Suricata 경보 등과 잇는 키)
   asset-id/                 # 자산 식별 센서 (asset_signal.log, claudtest2 PoC 에서 머지, docs/asset-id/)
   sensor/                   # 센서 상태 로그(nsm_sensor.log, 1분마다)·패키지 버전·스키마 버전(schema/build.py 가 생성)
 tests/

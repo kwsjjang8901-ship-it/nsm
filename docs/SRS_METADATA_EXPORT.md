@@ -102,6 +102,7 @@ flowchart LR
 | FR-M14 | 탐지 로그(notice·nsm_detection·evidence)는 이 기능의 켬·끔·상한과 무관하게 기록된다 | 전체 btest |
 | FR-M15 | 클러스터에서 판정·요약은 워커에서 하고, 로거에는 통과한 행과 요약 행만 간다 | `cluster/meta-export-worker` |
 | FR-M16 | 선별 전송 행 로그의 연결 주소·포트는 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 보내고, 센서에 남기는 원본(T2)은 Zeek 이름 그대로 둔다 | `rules/meta-export`, `rules/meta-export-off` |
+| FR-M17 | 연결 단위 행 로그(kerberos·ntlm·smb_mapping·smb_files·dce_rpc·rdp·ssh·ssl·http)와 conn에 `community_id`(Community ID v1, seed `community_id_seed`)를 붙인다. 값은 근거(evidence)의 `community_id`와 같다 | `rules/meta-community-id` |
 
 ### 4.1 스트림별 선별 규칙
 
@@ -156,8 +157,11 @@ flowchart LR
 | uid | 문자열 | 연결 ID. T2 원본이나 탐지 근거(evidence)와 조인 |
 | orig_h, orig_p | 주소, 포트 | 출발지 |
 | resp_h, resp_p | 주소, 포트 | 목적지 |
+| community_id | 문자열 | 연결의 Community ID v1(`1:` + base64, seed `community_id_seed`, 기본 0) |
 
 연결 주소·포트는 Zeek 원래 이름(`id.orig_h` 등) 대신 요약 로그와 같은 `orig_h`·`orig_p`·`resp_h`·`resp_p`로 보냅니다(`meta_field_name_map`, 2026-11 변경). 점이 들어간 이름은 수집기·DB에서 따로 바꿔야 해서 센서에서 통일합니다. 센서에 남기는 원본 로그(T2, `meta_keep_raw_local`)는 Zeek 이름 그대로입니다.
+
+`community_id`는 Manager가 다른 제품의 이벤트(Suricata 경보 등)를 이 센서의 연결 기록과 연결 단위로 잇는 키입니다([Suricata 연동 설계](SURICATA_INTEGRATION_DESIGN.md) 3.3절, 2026-11 추가). 방향과 무관한 값이라 출발·목적지를 바꿔 기록한 제품과도 맞습니다. 센서가 기록 직전에 연결 5-tuple로 계산하고(`nsm_rules/metadata/community_id.zeek`), 근거(`evidence.log`)의 `community_id`와 같은 값입니다. conn은 Manager로 요약(`flow_summary`)만 가므로, conn의 값(Zeek `policy/protocols/conn/community-id-logging`)은 원본 conn.log를 남기는 센서(T2)에서만 보입니다. 요약 로그와 상태 로그(capture_loss·stats·reporter)에는 없습니다. 행당 48바이트(gzip 뒤 약 19바이트)가 늡니다. 저장소 합성 pcap 64개 합계에서는 선별 로그가 7.4%(gzip 뒤 15%) 커졌고, 비율은 트래픽의 행 로그 비중에 따라 달라 운영 pcap으로 8.2절 측정에서 확인합니다.
 
 ### 5.2 행 단위 로그별 필드
 
@@ -238,8 +242,8 @@ flowchart LR
 ### 5.7 행 예시
 
 ```json
-{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
-{"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","orig_h":"10.0.0.71","orig_p":47984,"resp_h":"93.184.215.131","resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"uri_path":"/download/file.zip"}
+{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac","community_id":"1:LNQXqASgVUUskz445ygEN3r5Me8="}
+{"ts":1794182421.003,"uid":"CpcHTD4WbwGY0SpwS5","orig_h":"10.0.0.71","orig_p":47984,"resp_h":"93.184.215.131","resp_p":80,"method":"GET","host":"files.example-cdn.net","request_body_len":0,"response_body_len":2,"status_code":200,"community_id":"1:AYfVhZdiD0r6pIUP4RjIudxFuHc=","uri_path":"/download/file.zip"}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}
 {"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
 {"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":["A","AAAA"],"rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
@@ -276,6 +280,7 @@ flowchart LR
 | `meta_stats_interval` | 5min | 통계 주기 | |
 | `meta_keep_raw_local` | F | T2: 선별 대상 원본도 로컬에 Zeek 기본 이름(`conn.log`, `dns.log` …)으로 남김. 켜면 flow_summary·dns_summary에 `sample_uid`를 붙여 원본과 조인할 수 있다 | 디스크 여유가 있는 센서만 |
 | `meta_raw_path_prefix` | `/hdd_tmp/log/zeek/` | T2 원본 경로 앞부분(예: `/hdd_tmp/log/zeek/conn.log`) | |
+| `community_id_seed`(근거와 공용) | 0 | Community ID seed(선별 행 로그·conn·근거 모두). Zeek `CommunityID::seed`도 이 값으로 맞춤 | 연동하는 Suricata(`community-id-seed`) 등과 같아야 함 |
 | `dns_tunnel_resolvers`(탐지 08과 공용) | 비어 있음 | 내부 재귀 리졸버. DNS 요약에서 출발지로 빼고 탐지 08에서도 뺌 | 배포 시 등록 권장 |
 
 ### 6.3 스트림 설정(`meta_export_streams`)
@@ -352,6 +357,7 @@ redef NSM::meta_domain_allowlist += { "windowsupdate.com", "update.microsoft.com
 | `rules/meta-export-summary` | meta_summary.pcap | ssl·http 경계·예외 도메인·중복 억제·`uri_path`, 쿼리 값 미포함, http_ua_summary(요청 수·Host), flow_summary 묶음·범위·필드, dns_summary 묶음·제외 조건, 출발지별 도메인 상한(`(other)`), 원본 conn·dns가 없으면 `sample_uid` 없음, 원본 conn만 유지 목록에 있으면 흐름 요약에만 있음 |
 | `rules/meta-export-dns-merge` | meta_dns_qtypes.pcap | 같은 도메인의 A·AAAA·NXDOMAIN 질의가 한 행으로(`qtypes=A,AAAA`, `rcodes=NOERROR:2,NXDOMAIN:1`), 거짓인 `unique_names_capped`는 쓰지 않음 |
 | `rules/meta-export-dedup` | meta_dedup.pcap | 중복 억제 기간: 기본(ssl 24시간)은 1시간 뒤 같은 SNI도 억제, 10분으로 줄이면 기간이 끝난 뒤 다시 보냄 |
+| `rules/meta-community-id` | meta_export.pcap, meta_summary.pcap | 연결 단위 행 로그 9종·conn의 `community_id`가 스펙(seed, base64)대로 계산한 값과 같고 근거와 같음, `community_id_seed`를 바꾸면 함께 바뀜, 요약·상태 로그에는 없음 |
 | `cluster/meta-export-worker` | (워커가 직접 행 기록) | 판정 위치가 워커(통계 node=worker-1), 로거에는 통과 행·요약만 |
 
 CI는 Zeek 9.0.1과 8.0.9에서 위 테스트를 포함한 전체 btest를 돌립니다. 합성 pcap은 `tests/gen_pcaps.py`가 고정 시드로 만들고, CI가 재현성을 검사합니다.

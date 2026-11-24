@@ -4,12 +4,12 @@
 # Kerberos: AS 2(사전인증 요구 오류 + 성공) + TGS 1
 # @TEST-EXEC: assert-rows meta/kerberos.log eq 3 orig_h=10.0.0.60
 # @TEST-EXEC: assert-rows meta/kerberos.log eq 1 request_type=TGS service=MSSQLSvc/db01.corp.example:1433 cipher=rc4-hmac
-# @TEST-EXEC: assert-fields meta/kerberos.log ts uid orig_h orig_p resp_h resp_p request_type client service success error_msg cipher
+# @TEST-EXEC: assert-fields meta/kerberos.log ts uid orig_h orig_p resp_h resp_p request_type client service success error_msg cipher community_id
 #
 # NTLM: 성공 1·실패 1
 # @TEST-EXEC: assert-rows meta/ntlm.log eq 1 username=user01 domainname=CORP success=T
 # @TEST-EXEC: assert-rows meta/ntlm.log eq 1 username=user02
-# @TEST-EXEC: assert-fields meta/ntlm.log ts uid orig_h orig_p resp_h resp_p username domainname hostname success
+# @TEST-EXEC: assert-fields meta/ntlm.log ts uid orig_h orig_p resp_h resp_p username domainname hostname success community_id
 #
 # SMB 공유: 같은 (출발지, 경로) 두 번 연결 -> 중복 억제로 1행
 # @TEST-EXEC: assert-rows meta/smb_mapping.log eq 1 orig_h=10.0.0.60
