@@ -1,6 +1,6 @@
 # 통합 상관·공격 스토리 설계안 (MDS·MTA·NSM)
 
-작성: 2026-11-20 · 상태: 설계안(결정 대기, 11장) · 화면 목업: [`ui/mockup/integrated_story_mockup.html`](../ui/mockup/integrated_story_mockup.html) · 관련: [센서 로그 형식 검토](LOG_SCHEMA_REVIEW.md), [Suricata 연동 설계안](SURICATA_INTEGRATION_DESIGN.md), [통합 리포트 스펙](REPORT_SPEC.md), [MDS Manager 목업](../ui/mockup/mdsm_nsm_mockup.html)
+작성: 2026-11-20 · 상태: 설계안(결정 대기, 11장) · 화면 목업: [`ui/mockup/integrated_story_mockup.html`](../ui/mockup/integrated_story_mockup.html) · 관련: [센서 로그 형식 검토](LOG_SCHEMA_REVIEW.md), [Suricata 연동 설계](SURICATA_INTEGRATION_DESIGN.md)(경보를 Manager로 바로 받아 이 엔진의 입력으로 씀), [통합 리포트 스펙](REPORT_SPEC.md), [MDS Manager 목업](../ui/mockup/mdsm_nsm_mockup.html)
 
 ## 0. 요약
 
@@ -46,6 +46,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | MTA | 악성 첨부, 피싱 URL, 스팸, 발신 위조(SPF·DKIM 실패) 판정 | 수신자 메일 주소, 발신자·발신 도메인, 첨부 파일 해시·이름, 본문 URL, 메일 ID, 조치(격리·차단·태그) | 메일 한 통에 수신자 여러 명 |
 | MDS | 파일 정적·동적 분석 판정, 에이전트 실행 차단 | 파일 해시(SHA-256), 파일 이름, 유입 경로(메일·웹·SMB), 판정 등급, 단말(에이전트가 있으면 호스트명·IP), 분석 ID | **판정이 유입보다 늦게 올 수 있음**(동적 분석 수 분\~수 시간) |
 | NSM | 단독 탐지 48종, 킬체인 상관 | IP(출발·대상), 목적지 이름(SNI·Host·프록시 CONNECT 대상), 계정(NTLM·Kerberos), 자산 식별(호스트명·머신 계정·로그온 사용자) | `nsm_detection.log` + `evidence.log`, 로그 형식은 [LOG_SCHEMA_REVIEW](LOG_SCHEMA_REVIEW.md) |
+| NSM(Suricata) | 시그니처 경보. Manager가 단계별 8종(`Suricata_*`)으로 바꿈 | IP(출발·대상), `community_id`(선별 전송 연결 로그와 Zeek 근거로 목적지 이름·uid를 찾음), SID·시그니처 | `suricata_alert` 스트림. Zeek를 거치지 않음([Suricata 연동 설계](SURICATA_INTEGRATION_DESIGN.md) 3장) |
 
 **확인 필요(제품 담당):** MDS·MTA 이벤트의 실제 필드 이름과 전송 방식(Syslog·API·DB 조회), 메일 수신자 주소와 AD 계정의 대응 관계, MDS 판정 등급 체계. 이 문서는 위 표의 값이 있다고 가정합니다.
 
@@ -75,6 +76,7 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | `entity_conf` | int | `host`·`user` 연결 신뢰도 0\~100 | 연결 경로에 따라 | 에이전트면 높음 | 자산 판정 신뢰도 |
 | `raw_ref` | string | 원본 이벤트 위치(화면 링크) | ✓ | ✓ | ✓ |
 
+- **NSM의 두 엔진:** Zeek 탐지와 Suricata 경보는 모두 `product` = `NSM`이고 `engine`(`Zeek`·`Suricata`)으로 나눕니다. Suricata 경보의 `event_uid`는 `NSM:<sensor_id>:suri-<flow_id>-<SID>`, 시그니처 값(`sig_id` 등)은 Suricata 연동 설계 4.1절에 있습니다.
 - **시각:** MDS는 판정 시각이 아니라 파일이 들어오거나 실행된 시각을 `time`으로 씁니다. 판정 시각은 `observed_at`·원본에 남깁니다. 그래야 "메일 → 실행 → C2" 순서가 맞습니다.
 - 이 필드는 센서 로그 형식 검토의 P1 항목(`sensor_id`, `rule`, `severity_id`, 근거의 `dst_name`)을 전제로 합니다. 이 중 `rule`·`severity_id`와 탐지 요약의 계정·목적지 이름·프록시(`accounts`·`dst_names`·`relays`), 계정 나누기(`user_name`·`user_domain`·`user_domain_type`), 상관 탐지의 갈래 합치기·갱신 번호(`revision`)·구성 탐지 id(`member_detection_ids`)는 센서에 반영됐습니다(SRS 5.1.2·6.2·6.3). 근거 공통 필드(`src_port`·`dst_port`·`proto`·`community_id`·`dst_name`·`proxy`·`bytes`·`window_s`, E1)도 반영됐고, `sensor_id`(수집 에이전트)가 남았습니다.
 
@@ -154,8 +156,9 @@ MDS Manager가 MDS(샌드박스)·MTA(메일)·NSM(네트워크) 탐지를 한�
 | 상관 | 어디서 | 입력 | 결과 |
 | --- | --- | --- | --- |
 | 네트워크 킬체인(지금) | NSM 센서(클러스터 매니저) | NSM 단독 탐지 | `Correlated_KillChain` |
-| 통합 상관(새로) | MDS Manager | 세 제품 탐지 + NSM 상관 결과 + 다른 센서 | `Correlated_Cross` |
+| 통합 상관(새로) | MDS Manager | 세 제품 탐지(NSM은 Zeek 탐지와 Suricata 경보) + NSM 상관 결과 + 다른 센서 | `Correlated_Cross` |
 
+- Suricata 경보는 센서 상관에 들어가지 않고 통합 상관으로만 이어집니다. 시그니처와 행위 탐지를 잇는 기본 시나리오는 Suricata 연동 설계 5.2절(S-01\~S-04)에 있습니다.
 - 센서 상관을 Sigma로 옮기지 않습니다. 센서 상관은 네트워크 세부 정보(근거·uid)를 갖고 있고 센서 안에서 빨리 판정합니다.
 - 통합 상관 결과가 센서 상관 결과를 포함하면(같은 host, 겹치는 단계) **같은 사건으로 묶어** 알림을 한 번만 보냅니다. 사건 id는 먼저 난 탐지의 것을 씁니다.
 
@@ -311,8 +314,10 @@ x-nsm-require-distinct: sensor_id
 | 0 | 공통 이벤트 모델·엔티티 키 확정, MDS·MTA 이벤트 필드 확인 | 센서 로그 형식: 센서 쪽은 반영됨(#124\~#129, [LOG_SCHEMA.md](LOG_SCHEMA.md)). 수집 에이전트의 `sensor_id`만 남음 | 세 제품 샘플 이벤트가 3장 모델로 변환됨 |
 | 1 | 엔티티 연결(메일함·사용자·PC·IP·파일·도메인) | 디렉터리 연동 또는 사용자 대장, 자산 판정 | 실험실 시나리오에서 메일 수신자 → PC 연결 정확도 확인 |
 | 2 | **통합 공격 스토리**(탐지 로직 없이 묶기만) | 1 | 시나리오 3종이 한 스토리로 보임 |
-| 3 | 상관 엔진 + 기본 제공 시나리오 5\~10개(C-01\~C-04 등) | 2 | 시나리오별 탐지, 정상 업무 데이터 2주 오탐 측정 |
+| 3 | 상관 엔진 + 기본 제공 시나리오 5\~10개(C-01\~C-04, Suricata S-01\~S-04 등) | 2 | 시나리오별 탐지, 정상 업무 데이터 2주 오탐 측정 |
 | 4 | 고객 정의 Sigma 룰(편집기, 사전 검증, 버전, 예외) | 3 | 고객이 룰 추가 → 사전 검증 → 배포 |
+
+Suricata 연동(경보 정규화·예외·사건 묶기)은 0\~2단계와 동시에 진행합니다(2026-11-24 결정, Suricata 연동 설계 7장).
 
 **검증 데이터:** 지금 PoC 데이터(CIC-IDS2017, 고객 pcap)에는 메일·샌드박스 로그가 없습니다. 실험실에서 시나리오(악성 첨부 메일 수신 → 실행 → C2 → 확산, 피싱 URL 클릭, 같은 파일 여러 PC 실행)를 재현해 MTA·MDS·NSM 로그를 같은 시간대로 모으는 일부터 계획합니다.
 

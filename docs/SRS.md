@@ -1735,7 +1735,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 ## 10. 알려진 한계와 향후 과제
 
-자산 식별은 머지했습니다(5.5절). 다음 단계는 OCSF 변환기 연동과, 자산 식별의 서버 역할을 탐지 조건·예외에 반영하는 작업(예외 엔진 E4)입니다. Suricata 시그니처 경보를 이 탐지 흐름(예외·근거·사건 묶기·킬체인)에 합치는 설계는 [SURICATA_INTEGRATION_DESIGN.md](SURICATA_INTEGRATION_DESIGN.md)에 있습니다(결정 대기).
+자산 식별은 머지했습니다(5.5절). 다음 단계는 OCSF 변환기 연동과, 자산 식별의 서버 역할을 탐지 조건·예외에 반영하는 작업(예외 엔진 E4)입니다. Suricata 시그니처 경보는 Zeek를 거치지 않고 Manager로 바로 보내, Manager가 예외·사건 묶기·통합 상관에 넣기로 했습니다(2026-11-24, [SURICATA_INTEGRATION_DESIGN.md](SURICATA_INTEGRATION_DESIGN.md)). 센서 쪽 작업은 conn과 연결 단위 선별 전송 로그에 `community_id`를 넣는 것입니다.
 
 | 한계 | 영향 | 대응·계획 |
 | --- | --- | --- |
