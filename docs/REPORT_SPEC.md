@@ -139,6 +139,8 @@ Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 �
 
 pcap 모드에서 Suricata는 경보를 시간 순서대로 내지 않아, `-y`의 `threshold.config` 기본값(60초에 1건)이 실행마다 조금 다르게 거를 수 있습니다(surica DESIGN 10장). 리포트는 시각순으로 다시 정렬합니다. 검증은 `tests/suricata/e2e.sh`(7장).
 
+**측정 요약(S5):** `python3 tests/suricata/measure.py <출력 디렉터리> ...`는 여러 실행(일괄 모드 출력 포함)을 모아 Markdown 표로 출력합니다. 값은 pcap별 경보·시그니처 탐지·Zeek와 겹침(같은 연결 묶음)·경보 파일 크기, ET 카테고리별 경보·탐지·겹침, 단계별 경보, 겹친 Zeek 탐지 종류, 경보가 많은 SID입니다. 주소·호스트명·시그니처 문장은 출력하지 않아 그대로 공유할 수 있습니다.
+
 ---
 
 ## 3. `report_pcap.py` 스펙

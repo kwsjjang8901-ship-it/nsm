@@ -278,7 +278,7 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 | S5. 측정 | CIC-IDS2017 5일에 ET Open: 카테고리별 경보 수, 오탐, Zeek 탐지와 겹침, 센서 부하, `threshold` 뒤 전송량. 결과로 6.1절 기본값과 `suri_join_wait` 확정 | nsm·surica | 1주 |
 | S6. PoC 리포트 | `report_pcap.py`가 eve 경보도 읽어 같은 규칙(단계·위험도·연결 찾기)으로 목업형 리포트에 넣음 | nsm | 완료(2026-11-24, `run_pcap.sh -s`, REPORT_SPEC 3.9절) |
 
-S5는 `tests/run_pcap.sh -S -R et -y <surica 경로> <pcap 디렉터리>`로 Zeek와 Suricata(센서와 같은 설정·룰 범위)를 같은 pcap에 함께 돌려 잽니다(REPORT_SPEC 2.6절). Suricata는 로컬 설치(7 이상)가 있으면 로컬로, 없으면 Docker로 돌고, ET 룰을 받으려면 rules.emergingthreats.net에 닿아야 합니다.
+S5는 `tests/run_pcap.sh -S -R et -y <surica 경로> <pcap 디렉터리>`로 Zeek와 Suricata(센서와 같은 설정·룰 범위)를 같은 pcap에 함께 돌려 잽니다(REPORT_SPEC 2.6절). Suricata는 로컬 설치(7 이상)가 있으면 로컬로, 없으면 Docker로 돌고, ET 룰을 받으려면 rules.emergingthreats.net에 닿아야 합니다(받아 둔 룰은 `ET_URL=<emerging.rules.tar.gz>`). 카테고리 기본값을 정하려면 `-y` 없이(룰 범위·억제 없이 전체 ET) 한 번, `-y`로 한 번 돌리고, 두 결과를 `tests/suricata/measure.py`로 요약해 비교합니다(주소 없이 숫자만).
 
 S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다. S1은 센서에 반영했습니다(`nsm_rules/metadata/community_id.zeek`, btest `rules/meta-community-id`).
 
