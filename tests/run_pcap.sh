@@ -21,9 +21,10 @@
 #     -s FILE   같은 pcap 을 Suricata 로 돌린 경보 파일(eve-alert.json 또는 suricata_alert envelope JSONL, 여러 번 가능).
 #               Manager 규칙(docs/SURICATA_INTEGRATION_DESIGN.md 3~5장)으로 시그니처 탐지를 만들어 목업형 리포트에 넣는다.
 #               pcap 하나일 때만 쓴다(여러 pcap 이면 무시). 만드는 법은 docs/REPORT_SPEC.md "Suricata 경보"
-#     -S        같은 pcap 을 Suricata 로도 돌려(Docker SURICATA_IMAGE, 기본 jasonish/suricata:8.0.6) 경보를 바로 리포트에 넣는다.
-#               여러 pcap 이면 파일마다. Suricata 가 실패해도 Zeek 결과·리포트는 그대로 만든다(장애 격리).
-#     -R FILE   -S 의 룰 파일(여러 번 가능). "-R et" 는 컨테이너 안에서 suricata-update 로 ET Open 을 받는다
+#     -S        같은 pcap 을 Suricata 로도 돌려 경보를 바로 리포트에 넣는다. 로컬 suricata(7 이상)가 있으면 로컬로
+#               (설정 SURICATA_CONF, 기본 /etc/suricata/suricata.yaml), 없으면 Docker(SURICATA_IMAGE, 기본 jasonish/suricata:8.0.6).
+#               SURICATA_DOCKER=1 이면 Docker. 여러 pcap 이면 파일마다. Suricata 가 실패해도 Zeek 결과·리포트는 그대로 만든다.
+#     -R FILE   -S 의 룰 파일(여러 번 가능). "-R et" 는 suricata-update(로컬 또는 컨테이너)로 ET Open 을 받는다
 #               (rules.emergingthreats.net 접근 필요, ET_URL 로 다른 주소·로컬 tar.gz). -y 가 있으면 surica disable.conf 적용
 #     -y DIR    surica 저장소 경로. 주면 센서와 같은 설정(tools/render_config.py: 경보·통계 파일 분리, threshold.config,
 #               Community ID)으로 돌린다. 없으면 이미지 기본 설정 + HOME_NET + Community ID
@@ -35,7 +36,7 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,35p' "$0"; exit 2; }
+usage() { sed -n '2,36p' "$0"; exit 2; }
 OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=(); SURI=()
 SURI_RUN=""; SURI_RULES=(); SURICA=""
 while getopts "o:n:x:r:z:u:g:s:SR:y:kh" opt; do
@@ -62,7 +63,12 @@ shift $((OPTIND - 1))
 if [ -n "$SURI_RUN" ]; then
     [ ${#SURI_RULES[@]} -gt 0 ] || { echo "-S 는 룰이 필요합니다: -R <룰 파일> 또는 -R et" >&2; exit 2; }
     [ ${#SURI[@]} -eq 0 ] || { echo "-s(경보 파일)와 -S(Suricata 실행)는 함께 쓰지 않습니다" >&2; exit 2; }
-    command -v docker > /dev/null || { echo "-S 는 docker 가 필요합니다" >&2; exit 2; }
+    SURI_LOCAL=""
+    if [ "${SURICATA_DOCKER:-}" != 1 ] && command -v suricata > /dev/null 2>&1; then
+        sv=$(suricata -V 2>/dev/null | sed -nE 's/.*version ([0-9]+)\..*/\1/p')
+        [ "${sv:-0}" -ge 7 ] && SURI_LOCAL=1
+    fi
+    [ -n "$SURI_LOCAL" ] || command -v docker > /dev/null || { echo "-S 는 Suricata 7 이상(로컬 설치) 또는 docker 가 필요합니다" >&2; exit 2; }
 fi
 
 # 디렉터리 또는 여러 파일: 파일마다 이 스크립트를 다시 불러 따로 실행하고, 끝에 결과 표와 index.html 을 만든다.
@@ -270,28 +276,52 @@ if span >= 600:
 PY
 
 # ---------------------------------------------------------------- Suricata (-S)
+# 로컬 suricata(7 이상)가 있으면 로컬로, 없으면 Docker 로 돌린다(Zeek 와 같은 방식). SURICATA_DOCKER=1 이면 Docker.
+# 로컬은 설치본 설정(SURICATA_CONF, 기본 /etc/suricata/suricata.yaml)을 바탕으로 쓰고, 경로는 실제 경로 그대로다.
 SURICATA_IMAGE="${SURICATA_IMAGE:-jasonish/suricata:8.0.6}"
+SURICATA_CONF="${SURICATA_CONF:-/etc/suricata/suricata.yaml}"
 echo
 if [ -n "$SURI_RUN" ]; then
-    echo "[2/4] Suricata 실행: $SURICATA_IMAGE${SURICA:+ (surica 센서 설정)}"
     SDIR="$OUT/suricata"
     rm -rf "$SDIR"; mkdir -p "$SDIR/rules" "$SDIR/cfg" "$SDIR/log"
     : > "$SDIR/rules/suricata.rules"; : > "$SDIR/rules/local.rules"
     sfail=""
+    if [ -n "$SURI_LOCAL" ]; then
+        echo "[2/4] Suricata 실행: 로컬 $(suricata -V 2>/dev/null | sed -nE 's/.*(version [0-9.]+).*/\1/p') (설정 $SURICATA_CONF)${SURICA:+, surica 센서 설정}"
+        RULEP="$SDIR/rules"; CFGP="$SDIR/cfg"; LOGP="$SDIR/log"; PCAPP="$PCAP"; BASECONF="$SURICATA_CONF"
+    else
+        echo "[2/4] Suricata 실행: $SURICATA_IMAGE${SURICA:+ (surica 센서 설정)}"
+        RULEP=/rules; CFGP=/cfg; LOGP=/out; PCAPP="/pcap/$(basename "$PCAP")"; BASECONF=/etc/suricata/suricata.yaml
+    fi
+    # suricata 를 로컬 또는 컨테이너에서 실행(경로는 위 *P 변수로)
+    suri() {
+        if [ -n "$SURI_LOCAL" ]; then suricata "$@"
+        else docker run --rm --user "$(id -u):$(id -g)" -v "$SDIR/rules:/rules:ro" -v "$SDIR/cfg:/cfg:ro" \
+                -v "$(dirname "$PCAP"):/pcap:ro" -v "$SDIR/log:/out" --entrypoint suricata "$SURICATA_IMAGE" "$@"; fi
+    }
     for r in "${SURI_RULES[@]}"; do
         if [ "$r" = et ]; then
-            # ET Open: 컨테이너 안 suricata-update. ET_URL 이 로컬 파일이면 그 파일을, 주소면 그 주소를 쓴다
-            uargs=(--data-dir /w/sud -o /w/rules/et --no-test --no-reload); umount=()
-            [ -n "$SURICA" ] && { umount+=(-v "$SURICA/suricata/update:/u:ro"); uargs+=(--disable-conf /u/disable.conf); }
-            if [ -n "${ET_URL:-}" ] && [ -f "$ET_URL" ]; then
-                umount+=(-v "$(dirname "$(realpath "$ET_URL")"):/et:ro"); uargs+=(--url "file:///et/$(basename "$ET_URL")")
-            elif [ -n "${ET_URL:-}" ]; then
-                uargs+=(--url "$ET_URL")
-            fi
-            penv=(); for v in HTTPS_PROXY HTTP_PROXY https_proxy http_proxy NO_PROXY no_proxy; do [ -n "${!v:-}" ] && penv+=(-e "$v"); done
+            # ET Open: suricata-update. ET_URL 이 로컬 파일이면 그 파일을, 주소면 그 주소를 쓴다(없으면 기본 et/open)
             mkdir -p "$SDIR/sud" "$SDIR/rules/et"
-            if docker run --rm --user "$(id -u):$(id -g)" ${penv[@]+"${penv[@]}"} -v "$SDIR:/w" ${umount[@]+"${umount[@]}"} \
-                    --entrypoint suricata-update "$SURICATA_IMAGE" "${uargs[@]}" > "$SDIR/suricata-update.log" 2>&1; then
+            if [ -n "$SURI_LOCAL" ]; then
+                uargs=(--data-dir "$SDIR/sud" -o "$SDIR/rules/et" --no-test --no-reload)
+                [ -n "$SURICA" ] && uargs+=(--disable-conf "$SURICA/suricata/update/disable.conf")
+                if [ -n "${ET_URL:-}" ] && [ -f "$ET_URL" ]; then uargs+=(--url "file://$(realpath "$ET_URL")")
+                elif [ -n "${ET_URL:-}" ]; then uargs+=(--url "$ET_URL"); fi
+                ucmd=(suricata-update "${uargs[@]}")
+            else
+                uargs=(--data-dir /w/sud -o /w/rules/et --no-test --no-reload); umount=()
+                [ -n "$SURICA" ] && { umount+=(-v "$SURICA/suricata/update:/u:ro"); uargs+=(--disable-conf /u/disable.conf); }
+                if [ -n "${ET_URL:-}" ] && [ -f "$ET_URL" ]; then
+                    umount+=(-v "$(dirname "$(realpath "$ET_URL")"):/et:ro"); uargs+=(--url "file:///et/$(basename "$ET_URL")")
+                elif [ -n "${ET_URL:-}" ]; then
+                    uargs+=(--url "$ET_URL")
+                fi
+                penv=(); for v in HTTPS_PROXY HTTP_PROXY https_proxy http_proxy NO_PROXY no_proxy; do [ -n "${!v:-}" ] && penv+=(-e "$v"); done
+                ucmd=(docker run --rm --user "$(id -u):$(id -g)" ${penv[@]+"${penv[@]}"} -v "$SDIR:/w" ${umount[@]+"${umount[@]}"}
+                      --entrypoint suricata-update "$SURICATA_IMAGE" "${uargs[@]}")
+            fi
+            if "${ucmd[@]}" > "$SDIR/suricata-update.log" 2>&1; then
                 cat "$SDIR/rules/et/suricata.rules" >> "$SDIR/rules/suricata.rules"
             else
                 echo "      ET 룰 받기 실패($SDIR/suricata-update.log). rules.emergingthreats.net 접근이나 ET_URL 을 확인하세요." >&2
@@ -306,9 +336,12 @@ if [ -n "$SURI_RUN" ]; then
     # HOME_NET 은 Zeek 의 내부 판정과 같게: 사설 대역 + -n
     HOME_NETS="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16${NETS:+,$NETS}"
     sargs=()
-    if ! docker run --rm --entrypoint cat "$SURICATA_IMAGE" /etc/suricata/suricata.yaml > "$SDIR/cfg/base.yaml" 2> "$SDIR/image.log"; then
+    if [ -n "$SURI_LOCAL" ] && [ ! -r "$SURICATA_CONF" ]; then
+        echo "      Suricata 설정을 읽을 수 없습니다($SURICATA_CONF, SURICATA_CONF 로 지정)" >&2; sfail=1
+    elif [ -z "$SURI_LOCAL" ] && ! docker run --rm --entrypoint cat "$SURICATA_IMAGE" /etc/suricata/suricata.yaml > "$SDIR/cfg/base.yaml" 2> "$SDIR/image.log"; then
         echo "      Suricata 이미지를 쓸 수 없습니다($SURICATA_IMAGE, $SDIR/image.log)" >&2; sfail=1
     elif [ -n "$SURICA" ]; then
+        [ -n "$SURI_LOCAL" ] && cp "$SURICATA_CONF" "$SDIR/cfg/base.yaml"
         # 센서와 같은 설정: surica 렌더러(PyYAML 필요)로 배포본을 읽어 경보·통계 파일 분리·threshold·Community ID 반영
         python3 - "$SDIR/cfg/sensor.json" "$NAME" "$HOME_NETS" <<'PY'
 import json, sys
@@ -317,23 +350,28 @@ json.dump({"sensor_id": name, "asset_nets": nets.split(","), "community_id_seed"
           open(path, "w"), indent=1)
 PY
         if python3 "$SURICA/tools/render_config.py" -c "$SDIR/cfg/sensor.json" -o "$SDIR/cfg/r" --base "$SDIR/cfg/base.yaml" \
-                --rule-path /rules --threshold-file /cfg/r/suricata/threshold.config > "$SDIR/render.log" 2>&1; then
+                --rule-path "$RULEP" --threshold-file "$CFGP/r/suricata/threshold.config" > "$SDIR/render.log" 2>&1; then
             cp "$SURICA/suricata/threshold.config" "$SDIR/cfg/r/suricata/threshold.config"
-            sargs=(-c /cfg/r/suricata/suricata.yaml)
+            sargs=(-c "$CFGP/r/suricata/suricata.yaml")
         else
             echo "      surica 설정 생성 실패($SDIR/render.log, PyYAML 필요)" >&2; sfail=1
         fi
     else
+        # 설치본(또는 이미지) 기본 설정 + 이 실행의 룰만(-S) + HOME_NET + eve-log 의 Community ID
         cat "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" > "$SDIR/rules/all.rules"
-        sargs=(-c /etc/suricata/suricata.yaml -S /rules/all.rules --set "vars.address-groups.HOME_NET=[$HOME_NETS]"
-               --set outputs.1.eve-log.community-id=true)
+        eidx=$(suri -c "$BASECONF" --dump-config 2> /dev/null | sed -nE 's/^outputs\.([0-9]+)\.eve-log = .*/\1/p' | head -1 || true)
+        sargs=(-c "$BASECONF" -S "$RULEP/all.rules" --set "vars.address-groups.HOME_NET=[$HOME_NETS]")
+        if [ -n "$eidx" ]; then sargs+=(--set "outputs.$eidx.eve-log.enabled=yes" --set "outputs.$eidx.eve-log.community-id=true")
+        else echo "      주의: 설정에 eve-log 출력이 없어 경보를 얻지 못할 수 있습니다($BASECONF)." >&2; fi
     fi
     sstart=$(date +%s)
-    if [ -z "$sfail" ] && docker run --rm --user "$(id -u):$(id -g)" -v "$SDIR/rules:/rules:ro" -v "$SDIR/cfg:/cfg:ro" \
-            -v "$(dirname "$PCAP"):/pcap:ro" -v "$SDIR/log:/out" --entrypoint suricata "$SURICATA_IMAGE" \
-            "${sargs[@]}" -r "/pcap/$(basename "$PCAP")" -k none -l /out > "$SDIR/run.log" 2>&1; then
-        # 경보 파일: 센서 설정이면 eve-alert.json, 기본 설정이면 eve.json 의 경보 줄. 센서와 같은 필드만 남기고 시각순
-        src="$SDIR/log/eve-alert.json"; [ -f "$src" ] || src="$SDIR/log/eve.json"
+    if [ -z "$sfail" ] && suri "${sargs[@]}" -r "$PCAPP" -k none -l "$LOGP" > "$SDIR/run.log" 2>&1; then
+        # 경보 파일: 센서 설정이면 eve-alert.json, 기본 설정이면 eve 출력 파일의 경보 줄. 센서와 같은 필드만 남기고 시각순
+        src="$SDIR/log/eve-alert.json"
+        if [ ! -f "$src" ]; then
+            efile=$(suri -c "$BASECONF" --dump-config 2> /dev/null | sed -nE "s/^outputs\.${eidx:-1}\.eve-log\.filename = (.*)/\1/p" | head -1 || true)
+            src="$SDIR/log/$(basename "${efile:-eve.json}")"
+        fi
         [ -f "$src" ] || : > "$src"
         python3 "$ROOT/tests/suricata/slim.py" "$src" > "$SDIR/eve-alert.json"
         SURI=(--suricata-eve "$SDIR/eve-alert.json")
