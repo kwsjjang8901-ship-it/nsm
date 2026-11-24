@@ -13,10 +13,11 @@
 
 ### Suricata 연동 화면
 
-시그니처(Suricata) 탐지 화면은 [`docs/SURICATA_INTEGRATION_DESIGN.md`](../docs/SURICATA_INTEGRATION_DESIGN.md)의 연동이 끝났을 때를 기준으로 그렸습니다(설계 9장 제안을 따른다고 가정). 시그니처 탐지는 단계별 탐지 8개(`Suricata_Recon`…`Suricata_Other`)로 들어와 행위 탐지와 같은 목록·공격 스토리·예외·반복 묶기를 씁니다.
+시그니처(Suricata) 탐지 화면은 [`docs/SURICATA_INTEGRATION_DESIGN.md`](../docs/SURICATA_INTEGRATION_DESIGN.md)의 연동이 끝났을 때를 기준으로 그렸습니다. 경보는 Zeek를 거치지 않고 Manager로 바로 오고, Manager가 단계별 탐지 8개(`Suricata_Recon`…`Suricata_Other`)로 바꿔 행위 탐지와 같은 목록·공격 스토리·예외·반복 묶기에 넣습니다. 센서 킬체인 상관에는 들어가지 않고 통합 상관으로 이어집니다.
 
 - 예시 데이터: `SIGS`(SID별 시그니처), `suri()`로 만든 `EV` 항목(`eng:'Suricata'`, `sid`, `sig`, 목적지 역할로 올린 경우 `roleUp`). 같은 연결의 행위 탐지가 있으면 그 탐지에 `also`로 묶이고 시그니처 쪽은 `mergedInto`가 붙어 목록에서 빠집니다.
-- 화면: 탐지 목록의 방식 칸·탐지 방식 필터, 상세의 시그니처 정보, 공격 스토리 단계, 대시보드의 탐지 방식·많이 나온 시그니처, 장비 현황의 Suricata 상태, 관리 › NSM 룰 정책 › 시그니처 룰 탭, NSM 예외의 시그니처(SID) 조건과 예외 파일 `sid` 칸(14칸, 옛 13칸 형식도 읽음).
+- 화면: 탐지 목록의 방식 칸·탐지 방식 필터, 상세의 시그니처 정보, 공격 스토리 단계, 대시보드의 탐지 방식·많이 나온 시그니처, 장비 현황의 Suricata 상태, 관리 › NSM 룰 정책 › 시그니처 룰 탭, NSM 예외의 시그니처(SID) 조건. 시그니처 탐지 예외는 "Manager 적용"으로 표시하고 저장하면 바로 반영됩니다. 센서 예외 파일(TSV, 13칸)에는 들어가지 않고, 가져오기에서 시그니처 탐지 범위는 오류로 알립니다. 한 예외에 시그니처 탐지와 행위 탐지를 섞지 못합니다.
+- 상세의 기술 상세: 시그니처 탐지는 Manager 공통 이벤트(`engine`, `sig_*`, `community_id`, `role_up`)를 보여 줍니다.
 - 리포트 모드에서는 시그니처 탐지가 없으면 이 화면들을 숨깁니다(지금 리포트는 Suricata 경보를 넣지 않음).
 
 ### ATT&CK 표시

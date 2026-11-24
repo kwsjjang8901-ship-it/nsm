@@ -76,7 +76,7 @@ docs/
   LOG_SCHEMA.md             # Manager 로 가는 로그의 필드·타입·열거값(schema/build.py 가 생성, Manager 테이블 기준)
   LOG_SCHEMA_REVIEW.md      # 센서 로그 형식 검토(Manager 개발 관점: 등급 숫자, 센서 식별, 상관 갱신, 근거 필드)
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
-  SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 NSM 탐지 흐름에 합치는 설계안(예외·킬체인·중복 정리)
+  SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 Manager로 바로 보내 합치는 설계(정규화·예외·통합 상관·중복 정리)
   INTEGRATED_CORRELATION_DESIGN.md # MDS·MTA·NSM 통합 공격 스토리와 Sigma 상관 룰 기반 통합 상관 설계안
   examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만), 기본 예외 목록(exceptions.proxy-beacon.tsv)
 ```
