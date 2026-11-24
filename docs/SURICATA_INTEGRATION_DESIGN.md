@@ -278,6 +278,8 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 | S5. 측정 | CIC-IDS2017 5일에 ET Open: 카테고리별 경보 수, 오탐, Zeek 탐지와 겹침, 센서 부하, `threshold` 뒤 전송량. 결과로 6.1절 기본값과 `suri_join_wait` 확정 | nsm·surica | 1주 |
 | S6. PoC 리포트 | `report_pcap.py`가 eve 경보도 읽어 같은 규칙(단계·위험도·연결 찾기)으로 목업형 리포트에 넣음 | nsm | 완료(2026-11-24, `run_pcap.sh -s`, REPORT_SPEC 3.9절) |
 
+S5는 `tests/run_pcap.sh -S -R et -y <surica 경로> <pcap 디렉터리>`로 Zeek와 Suricata(센서와 같은 설정·룰 범위)를 같은 pcap에 함께 돌려 잽니다(REPORT_SPEC 2.6절). 컨테이너에서 rules.emergingthreats.net에 닿아야 합니다.
+
 S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다. S1은 센서에 반영했습니다(`nsm_rules/metadata/community_id.zeek`, btest `rules/meta-community-id`).
 
 화면은 [목업](../ui/mockup/mdsm_nsm_mockup.html)에 그려 두었습니다. 화면 목록은 [`ui/README.md`](../ui/README.md)의 "Suricata 연동 화면"에 있습니다.

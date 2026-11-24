@@ -4,7 +4,7 @@
 # 초기 침투, 단계 근거 = 룰 메타데이터. Zeek SQL_Injection 과 같은 연결(같은 연결 묶음)
 alert http any any -> $HOME_NET any (msg:"NSM-TEST SQL Injection UNION SELECT in URI"; flow:established,to_server; http.uri; content:"UNION SELECT"; nocase; classtype:web-application-attack; metadata:mitre_tactic_id TA0001, mitre_technique_id T1190; sid:9910001; rev:1;)
 # 서버 응답에서 걸리는 경보(direction to_client): 출발지는 연결을 시작한 쪽(외부 공격자)으로 바꾼다. 단계 근거 = classtype
-alert http $HOME_NET 80 -> $EXTERNAL_NET any (msg:"NSM-TEST Web server answered external client"; flow:established,to_client; http.stat_code; content:"200"; classtype:web-application-attack; sid:9910002; rev:1;)
+alert http $HOME_NET 80 -> any any (msg:"NSM-TEST Web server answered client"; flow:established,to_client; http.stat_code; content:"200"; classtype:web-application-attack; sid:9910002; rev:1;)
 # 외부 연락(C2): 연결마다 경보 -> 반복 묶기. 출발지는 내부(감염) host
 alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"NSM-TEST Beacon to update-check.net"; flow:established,to_server; http.host; content:"update-check.net"; classtype:trojan-activity; metadata:mitre_tactic_id TA0011, mitre_technique_id T1071.001; sid:9910003; rev:1;)
 # 내부 확산: target 키워드(alert.source·target)로 출발지·대상

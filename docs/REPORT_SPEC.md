@@ -43,7 +43,8 @@ flowchart TD
 ### 2.1 사용법과 옵션
 
 ```
-tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-s Suricata 경보 파일] [-k] <pcap | 디렉터리> ...
+tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더]
+                  [-s Suricata 경보 파일 | -S -R 룰 파일|et [-y surica 경로]] [-k] <pcap | 디렉터리> ...
 ```
 
 | 옵션 | 기본값 | 뜻 |
@@ -56,6 +57,10 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `-u FILE` | 없음 | OUI 목록 CSV(IEEE 원본 `oui.csv`·`mam.csv`·`oui36.csv` 또는 maclookup.app 내보내기, 여러 번 가능). 자산 표에 MAC 제조사. 한 줄도 못 읽은 파일은 화면 요약·리포트에 경고 |
 | `-g DIR` | 없음 | Recog 지문 xml 폴더(github.com/rapid7/recog 의 `xml/`). 자산 표에 제품·장비 종류 |
 | `-s FILE` | 없음 | 같은 pcap을 Suricata로 돌린 경보 파일(`eve-alert.json` 또는 `suricata_alert` envelope JSONL, 여러 번 가능). 목업형 리포트에 시그니처 탐지를 넣음(3.9절). pcap 하나일 때만 |
+| `-S` | 끔 | 같은 pcap을 Suricata로도 돌려 경보를 바로 리포트에 넣음(2.6절). 여러 pcap이면 파일마다. `-s`와 함께 쓰지 않음 |
+| `-R FILE`, `-R et` | 없음(`-S`면 필요) | `-S`의 룰 파일(여러 번 가능). `et`는 컨테이너 안 `suricata-update`로 ET Open을 받음(rules.emergingthreats.net 접근 필요, `ET_URL`로 다른 주소나 로컬 tar.gz) |
+| `-y DIR` | 없음 | surica 저장소 경로. 주면 센서와 같은 설정으로 돌리고, `-R et`에 surica `disable.conf`(룰 범위 기본값)를 적용 |
+| `SURICATA_IMAGE` 환경 변수 | `jasonish/suricata:8.0.6` | `-S`의 Suricata 이미지 |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
 
@@ -90,6 +95,7 @@ OUT/
     conn.log  dns.log …                                                       -k 원본 로그
     meta/  kerberos.log … flow_summary.log  dns_summary.log  meta_export_stats.log  선별 전송
   asset_report/  report.html  report.txt  assets.csv  assets.json             -r 자산 판정
+  suricata/      eve-alert.json(리포트 입력)  rules/  cfg/  log/  run.log       -S Suricata
 ```
 
 ### 2.4 화면 요약
@@ -114,6 +120,21 @@ OUT/
 - 출력은 `OUT/<이름>/`이고, 하위 디렉터리 파일은 경로를 `_`로 이어 이름을 만듭니다. 이름이 겹치면 시작 전에 멈춥니다.
 - 각 실행의 화면 출력은 `OUT/<이름>/run.txt`에 남고, 한 파일이 실패해도 나머지는 계속합니다. 끝에 파일별 상태·탐지 건수 표와 `OUT/index.html`(각 리포트·`run.txt` 링크)을 만들고, 실패가 있으면 0이 아닌 값으로 끝납니다.
 - 파일 사이의 탐지 집계·상관은 이어지지 않습니다. 한 캡처를 나눠 저장한 파일은 `mergecap`으로 합쳐 한 번에 돌립니다.
+
+### 2.6 Zeek + Suricata 한 번에(`-S`)
+
+같은 pcap을 Zeek(nsm_rules, 1단계)와 Suricata(Docker, 2단계)로 각각 돌리고, 경보를 `--suricata-eve`로 목업형 리포트에 넣습니다(3.9절).
+
+| 항목 | 동작 |
+| --- | --- |
+| 룰 | `-R` 파일을 `suricata/rules/local.rules`에, `-R et`는 ET Open을 `suricata/rules/suricata.rules`에(`-y`면 surica `disable.conf` 적용) |
+| 설정 | `-y` 있음: surica `render_config.py`로 이미지의 배포본 설정을 읽어 센서와 같은 설정(경보·통계 파일 분리, `threshold.config` 기본값, Community ID seed 0)을 만듦(PyYAML 필요). `-y` 없음: 이미지 기본 설정에 `HOME_NET`과 Community ID만 바꿈 |
+| `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음) |
+| 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀 |
+| 화면 요약 | 경보 수, 시그니처 종류 수, 단계별 경보 수(주소·시그니처 이름은 출력하지 않음), 읽지 못한 룰 수 |
+| 장애 격리 | 이미지가 없거나 설정 생성·실행이 실패하면 경고하고 Suricata 없이 리포트를 만듦(종료 코드 0). 깨진 룰은 Suricata가 건너뛰고, 화면에 읽지 못한 룰 수와 "읽은 룰이 하나도 없음"을 알림 |
+
+pcap 모드에서 Suricata는 경보를 시간 순서대로 내지 않아, `-y`의 `threshold.config` 기본값(60초에 1건)이 실행마다 조금 다르게 거를 수 있습니다(surica DESIGN 10장). 리포트는 시각순으로 다시 정렬합니다. 검증은 `tests/suricata/e2e.sh`(7장).
 
 ---
 
@@ -289,7 +310,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 시그니처 예외는 Manager가 적용하므로(설계 4.4) pcap 실행에는 없습니다.
 
-**경보 파일 만들기:** 센서에서는 surica 렌더러가 만든 설정으로 `eve-alert.json`이 생깁니다. pcap만 있을 때는 Suricata 8.0.6으로 `suricata -r <pcap> -k none`을 돌리고 eve의 경보 줄을 씁니다(`tests/suricata/gen_eve.sh`가 그 예: 기본 설정 + `HOME_NET` + Community ID 켬, 센서와 같은 필드만 남김). Community ID seed는 Zeek와 같아야 합니다(기본 0).
+**경보 파일 만들기:** 센서에서는 surica 렌더러가 만든 설정으로 `eve-alert.json`이 생깁니다. pcap만 있을 때는 `run_pcap.sh -S`(2.6절)가 Suricata를 함께 돌립니다. 직접 만들 때는 Suricata 8.0.6으로 `suricata -r <pcap> -k none`을 돌리고 eve의 경보 줄을 씁니다(`tests/suricata/gen_eve.sh`가 그 예: 기본 설정 + `HOME_NET` + Community ID 켬, 센서와 같은 필드만 남김). Community ID seed는 Zeek와 같아야 합니다(기본 0).
 
 **테스트 고정본:** `tests/suricata/killchain_story.eve-alert.json`은 `killchain_story.pcap`을 테스트 룰(`tests/suricata/test.rules`, SID 9910001\~9910006)로 돌린 결과입니다. CI에 Suricata가 없어 저장소에 둡니다. 룰이나 pcap을 바꾸면 `tests/suricata/gen_eve.sh`로 다시 만듭니다(`flow_id`만 달라짐).
 
@@ -382,6 +403,15 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
+
+`run_pcap.sh -S`(2.6절)는 Docker로 Suricata를 돌려야 해서 CI 밖의 통합 테스트 `tests/suricata/e2e.sh`로 확인합니다(`SURICA_ROOT=<surica 경로>`를 주면 2·3번까지).
+
+| 번호 | 확인 내용 |
+| --- | --- |
+| 1 | 기본 설정: 경보가 고정본과 같음(시그니처·출발지·대상별 건수), 목업형 리포트에 시그니처 7건 |
+| 2 | surica 센서 설정(`-y`): 경보·통계 파일 분리, threshold로 경보 수가 줄어도 시그니처 탐지 7건 |
+| 3 | ET 룰 받기(`-R et`): surica 표본을 `ET_URL`로 받아 `disable.conf` 뒤 4개 |
+| 4 | 장애 격리: 깨진 룰은 경고 후 계속, 없는 이미지는 Suricata 없이 리포트(종료 코드 0) |
 
 ---
 
