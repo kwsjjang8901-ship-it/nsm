@@ -1524,9 +1524,10 @@ const SIGCATS=[
  ['scan','스캔 도구','part','도구 지문 룰만 켬. 횟수로 보는 룰은 포트·호스트 스캔·비밀번호 대입 행위 탐지와 겹쳐 끔',410],
  ['dns','DNS','off','DNS 터널링·DGA 행위 탐지와 겹침',880],
  ['policy, info, hunting, user_agents 등','정책·정보성','off','정보성 경보가 대부분. AI 서비스·비표준 포트·자체 서명 인증서 행위 탐지와 겹침',9120],
- ['ciarmy, compromised, drop, dshield, tor','IP 평판 목록','off','IOC는 IOC 일치 탐지로 한 곳에서 관리',6300],
+ ['ciarmy, compromised, drop, dshield, tor, botcc','IP 평판·C2 IP 목록','off','IOC는 IOC 일치 탐지로 한 곳에서 관리',6900],
  ['ja3','TLS 지문','off','TLS 지문은 범위에서 뺌(2026-11 결정)',2100],
  ['adware_pup, dos','광고·PUP·DoS','off','PUP는 MDS가 봄. DoS는 미러 구간에서 의미가 작음(고객 요청 시 켬)',600],
+ ['SURICATA 기본 이벤트','디코더·스트림·앱 계층 이상(Suricata 기본 룰)','off','미러 구간의 패킷 누락으로 계속 울림. 같은 이상은 Zeek가 봄. 조사할 때만 켬',370],
  ['사내 룰','고객·사내에서 만든 룰','on','',12],
 ];
 const SIGCFG={cat:Object.fromEntries(SIGCATS.map(c=>[c[0],c[2]])),sid:Object.fromEntries(Object.keys(SIGS).map(k=>[k,{on:true,stage:''}])),sev:Object.assign({},SURI_SEV),roleUp:ROLE_UP};
