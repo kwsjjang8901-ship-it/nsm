@@ -76,11 +76,11 @@ Zeek와 Suricata는 같은 패킷을 따로 봅니다. 서로 통신하지도, �
 
 | 항목 | 설계 |
 | --- | --- |
-| eve 출력 | 경보(alert)와 stats를 나눔. 경보는 `suricata_alert` 스트림으로 Manager에 보냄(**기본 켬**, surica DESIGN 0.2의 전송 경로 그대로) |
+| eve 출력 | 경보 `eve-alert.json`과 통계 `eve-stats.json`으로 나눔. 경보는 `suricata_alert` 스트림으로 Manager에 보냄(**기본 켬**, surica DESIGN 0.2의 전송 경로 그대로). anomaly·프로토콜 로그는 켰을 때만 `eve-other.json`(센서 로컬) |
 | 경보 필드 | `timestamp`, `flow_id`, `src_ip`·`src_port`·`dest_ip`·`dest_port`·`proto`, `direction`, `community_id`, `app_proto`, `alert.{signature_id, rev, signature, category, severity, metadata, source, target}`. payload·packet·http 본문은 받지 않음(surica DESIGN 8장) |
 | 룰 범위 | 6.1절 기본값을 `disable.conf`로 |
-| 반복 억제 | `threshold.config`: (SID, 출발지, 목적지) 기준 limit. 기본값은 surica 값으로 시작해 S5에서 확정 |
-| Community ID seed | Suricata `community-id-seed` = Zeek `community_id_seed`(기본 0). 렌더러가 같은 값을 넣음 |
+| 반복 억제 | `threshold.config`: 자체 횟수 조건이 없는 룰에 (룰, 출발지, 목적지)마다 60초에 1건(`sig_id 0`, `track by_both`, `type limit`). 자체 조건이 있는 룰은 룰 조건을 씀(Suricata 8.0.6 확인, surica DESIGN 4.1). S5에서 확정 |
+| Community ID seed | `sensor.yaml`의 `community_id_seed`(기본 0) 하나로 Suricata `community-id-seed`, Zeek `NSM::community_id_seed`·`CommunityID::seed`에 같은 값을 넣음(렌더러) |
 | 센서 식별 | 수집 에이전트가 붙이는 `sensor_id`(NSM 로그와 같음, LOG_SCHEMA_REVIEW D2) |
 | Zeek | 경보를 읽지 않음. Suricata가 꺼지거나 멈춰도 Zeek 경로는 그대로 |
 
@@ -244,14 +244,17 @@ ET Open 카테고리별 기본값 제안입니다. **CIC-IDS2017 5일에 ET Open
 | --- | --- | --- |
 | exploit, exploit_kit, web_server, web_specific_apps, web_client, attack_response, shellcode, malware, mobile_malware, worm, coinminer, phishing, current_events | 켬 | 알려진 공격 서명. Zeek 행위 룰에 없는 정보 |
 | sql, smb, netbios, rpc, scada | 켬(scada는 고객망에 OT가 있을 때만) | 프로토콜 익스플로잇 |
-| ciarmy, compromised, drop, dshield, tor(IP 평판 목록) | **끔** | IOC 피드는 `IOC_Match`로 일원화(IOC를 두 곳에 넣지 않음) |
+| ciarmy, compromised, drop, dshield, tor, botcc(IP 평판·C2 IP 목록) | **끔** | IOC 피드는 `IOC_Match`로 일원화(IOC를 두 곳에 넣지 않음) |
 | scan | 도구 지문 룰만 켬, 횟수 기반 룰은 끔 | 횟수 기반은 Zeek `Port_Scan`·`Host_Scan`·`SSH_Bruteforce`·`FTP_Bruteforce`와 겹침. Nmap 스크립트 엔진 같은 도구 지문은 Zeek에 없음 |
 | dns | 끔 | Zeek `DNS_Tunneling`·`DGA_Domain`과 겹침. 악성 도메인 조회 룰은 malware·current_events에 있음 |
 | policy, info, hunting, inappropriate, games, chat, p2p, user_agents, icmp, icmp_info | 끔 | 정책·정보성 경보가 대부분. AI 서비스(33)·비표준 포트(24)·자체 서명 인증서(09)와 겹치는 룰 포함 |
 | ja3 | 끔 | TLS 지문은 범위에서 뺌(2026-11 결정) |
 | adware_pup, dos | 끔(고객 요청 시 켬) | MDS가 PUP를 이미 봄. DoS는 미러 구간에서 의미가 작음 |
+| Suricata 기본 이벤트 룰(`msg:"SURICATA ..."`, 약 370개, ET 카테고리 아님) | 끔(조사할 때만 켬) | suricata-update가 기본으로 넣는 디코더·스트림·앱 계층 이상 룰. 미러 구간은 패킷 누락이 흔해 STREAM·체크섬 경보가 계속 나고 Zeek `weird.log`와 겹침. 단계가 없는 경보(`Suricata_Other`) |
 
 surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_Heartbleed`(27)와 겹쳐 끈 것으로, 이 원칙과 같습니다.
+
+이 표는 surica `suricata/update/disable.conf`에 들어 있습니다(surica #2). surica 통합 테스트가 ET 파일 이름을 흉내 낸 표본으로 켜지는 룰을 확인하고, 실제 ET Open 파일 이름·룰 수는 S5에서 확인합니다.
 
 ### 6.2 같은 연결에 둘 다 나온 경우 (Manager 표시)
 
@@ -269,7 +272,7 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 | 단계 | 범위 | 저장소 | 규모(추정) |
 | --- | --- | --- | --- |
 | S1. Community ID | conn `community-id-logging` 로드, 연결 단위 선별 전송 로그에 `community_id`(3.3), 스키마(`schema/`, LOG_SCHEMA), SRS_METADATA_EXPORT, btest, 선별 전송 증가분 측정 | nsm | 완료(2026-11-24) |
-| S2. 렌더러 | eve 경보·stats 분리, `suricata_alert` 스트림 기본 켬, 6.1절 기본값을 `disable.conf`로, `threshold.config` 기본값, Community ID seed 맞춤, AssetID 위치 갱신(8장) | surica | 3\~5일 |
+| S2. 렌더러 | eve 경보·stats 분리, `suricata_alert` 스트림 기본 켬, 6.1절 기본값을 `disable.conf`로, `threshold.config` 기본값, Community ID seed 맞춤, 경보 `source`·`target` 전송, AssetID 위치 갱신(8장) | surica | 완료(2026-11-24, surica #2) |
 | S3. Manager 정규화 | 3.2절 처리(단계·위험도·연결 찾기·프록시·예외·사건 묶기), 공통 이벤트 저장, 화면(목업) | Manager | 통합 상관 0\~2단계와 함께 |
 | S4. 통합 상관 시나리오 | 5.2절 S-01\~S-04 | Manager | 통합 상관 3단계와 함께 |
 | S5. 측정 | CIC-IDS2017 5일에 ET Open: 카테고리별 경보 수, 오탐, Zeek 탐지와 겹침, 센서 부하, `threshold` 뒤 전송량. 결과로 6.1절 기본값과 `suri_join_wait` 확정 | nsm·surica | 1주 |
@@ -285,10 +288,11 @@ S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다
 | --- | --- | --- |
 | 자산 식별 위치 | `claudtest2` 저장소의 Zeek 패키지 | 센서 패키지는 nsm `nsm_rules/asset-id/`로 옮김(2026-11-12). 리졸버만 claudtest2 |
 | 경보 전송 | `suricata_alert` 스트림으로 Manager에 보내 결합 | **그대로**. 결합 뒤 공통 이벤트로 바꾸는 단계(3.2)를 더함 |
-| eve 출력 | eve-log 하나(alert + stats) | 경보와 stats를 나눔(가는 곳이 다름) |
+| eve 출력 | eve-log 하나(alert + stats) | 경보 `eve-alert.json`과 통계 `eve-stats.json`으로 나눔(가는 곳이 다름). 반영: surica DESIGN 0.3 |
 | 사건 묶기 | Manager가 `community_id`로 notice·경보를 한 사건으로 | Manager 사건 묶기(3.4) + 같은 연결 묶어 보이기(6.2). Zeek 쪽은 근거와 연결 단위 선별 전송 로그에 `community_id`가 있음(3.3) |
-| Community ID seed | 언급 없음 | Zeek `community_id_seed`와 같게(3.1) |
-| IOC 평판 룰 | 언급 없음 | 끔(6.1). IOC는 `IOC_Match` |
+| Community ID seed | 언급 없음 | `sensor.yaml` `community_id_seed`로 두 엔진에 같게(3.1). 반영: surica DESIGN 0.3 |
+| IOC 평판 룰 | 언급 없음 | 끔(6.1, botcc 포함). IOC는 `IOC_Match` |
+| Suricata 기본 이벤트 룰 | 언급 없음 | 끔(6.1) |
 
 ## 9. 결정 기록과 남은 것
 
