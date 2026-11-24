@@ -4,6 +4,31 @@
 
 redef AssetID::enable_agent_policy = T;
 
+# 지문은 파일을 다 읽은 뒤 따로 계산하므로 pcap 이 짧으면 계산 전에 끝날 수 있다.
+#   pcap 을 다 읽어도 바로 끝내지 않고, 세 파일의 지문 행이 모두 기록된 뒤 끝낸다.
+redef exit_only_after_terminate = T;
+
+global pcap_done = F;
+
+function maybe_finish()
+	{
+	if ( pcap_done && "exception" in NSM::data_file_sha1 && "ioc" in NSM::data_file_sha1
+	     && AssetID::agent_policy_sha1 != "" )
+		terminate();
+	}
+
+# 지문을 기록하는 처리(우선순위 0) 뒤에 확인한다
+event file_hash(f: fa_file, kind: string, hash: string) &priority=-10
+	{
+	maybe_finish();
+	}
+
+event Pcap::file_done(path: string)
+	{
+	pcap_done = T;
+	maybe_finish();
+	}
+
 # @TEST-START-FILE check.py
 import hashlib, json, os, time
 
