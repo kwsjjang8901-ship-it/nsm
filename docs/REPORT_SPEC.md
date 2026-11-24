@@ -43,7 +43,7 @@ flowchart TD
 ### 2.1 사용법과 옵션
 
 ```
-tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-k] <pcap | 디렉터리> ...
+tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-s Suricata 경보 파일] [-k] <pcap | 디렉터리> ...
 ```
 
 | 옵션 | 기본값 | 뜻 |
@@ -55,6 +55,7 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `-z ARGS` | 없음 | zeek에 넘길 추가 인자(예: `-z "AssetID::suppress_interval=30min"`) |
 | `-u FILE` | 없음 | OUI 목록 CSV(IEEE 원본 `oui.csv`·`mam.csv`·`oui36.csv` 또는 maclookup.app 내보내기, 여러 번 가능). 자산 표에 MAC 제조사. 한 줄도 못 읽은 파일은 화면 요약·리포트에 경고 |
 | `-g DIR` | 없음 | Recog 지문 xml 폴더(github.com/rapid7/recog 의 `xml/`). 자산 표에 제품·장비 종류 |
+| `-s FILE` | 없음 | 같은 pcap을 Suricata로 돌린 경보 파일(`eve-alert.json` 또는 `suricata_alert` envelope JSONL, 여러 번 가능). 목업형 리포트에 시그니처 탐지를 넣음(3.9절). pcap 하나일 때만 |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
 
@@ -123,7 +124,7 @@ OUT/
 ```
 python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--assets assets.json] [--asset-report 상대 경로]
         [--pcap 이름] [--elapsed 초] [--tz 9] [--nets CIDRS] [--oui OUI.csv ...] [--recog DIR]
-        [--mockup-out 경로] [--no-mockup]
+        [--mockup-out 경로] [--no-mockup] [--suricata-eve 경보 파일 ...]
 ```
 
 | 인자 | 뜻 |
@@ -136,6 +137,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | `--tz` | 표시 시간대(UTC 오프셋, 기본 9 = KST) |
 | `--nets` | 내부 대역(`-n`과 같음). 사설 대역은 항상 내부 |
 | `--oui`, `--recog` | 자산 정보 보강 DB(`-u`·`-g`와 같음). 없으면 로컬·랜덤 MAC 여부와 TCP SYN 계열만 |
+| `--suricata-eve` | Suricata 경보 파일(`-s`와 같음, 3.9절) |
 
 `run_pcap.sh` 없이 단독으로도 돌릴 수 있습니다(예: 운영 센서 로그 디렉터리를 복사해 와서).
 
@@ -248,6 +250,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | `signal_counts`, `signal_rows`, `signal_ips` | 자산 신호 종류별 건수, 행·IP 수 |
 | `meta`, `mgr`, `local`, `raw` | 선별 전송 로그별 바이트·행, Manager 전송 로그(탐지 요약·근거·예외·자산 신호), 센서 로컬, `-k` 원본 |
 | `sensor` | 최대 캡처 손실(%), NSM 외 notice, Zeek 경고 |
+| `suricata` | `--suricata-eve`를 줬을 때만: 파일 이름, 경보 수, 정규화한 시그니처 탐지(`events`, 3.9절) |
 
 JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있어도 페이지가 깨지지 않습니다. 화면에 쓰는 모든 값은 JS의 `esc()`로 이스케이프합니다.
 
@@ -265,6 +268,30 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | 예외(`exc`) | `nsm_exception.log`의 적재·거부·적중. 조건(주소·도메인)은 로그에 없어 비어 있음. 기본 예외 목록(`EX-pb-*`)은 따로 표시 |
 | 센서(`sensors`·`sent`) | pcap 1개를 센서 1대로. 최대 캡처 손실, 경고, Manager로 가는 기록량(선별 전송·자산 신호·탐지·예외) |
 | 내부 주소(`internal`) | 내부로 판정된 탐지·스토리·자산 주소. 프록시(중계 장비)는 빼서 외부처럼 그림 |
+| 시그니처(`ev`의 `eng: Suricata`, `sigs`) | `--suricata-eve`를 줬을 때만. 3.9절 |
+
+### 3.9 Suricata 경보 (`suricata_alerts.py`)
+
+`--suricata-eve`(또는 `run_pcap.sh -s`)로 같은 pcap의 Suricata 경보를 주면, Manager가 할 정규화([Suricata 연동 설계](SURICATA_INTEGRATION_DESIGN.md) 3\~6장)를
+`tests/suricata_alerts.py`가 PoC로 해서 목업형 리포트에 시그니처 탐지로 넣습니다. 기존 리포트(`_report.html`)에는 넣지 않습니다.
+
+| 처리 | 규칙 |
+| --- | --- |
+| 입력 | 센서 경보 파일(`eve-alert.json`, Suricata eve 줄) 또는 전송 스트림(`suricata_alert` envelope JSONL). 경보만 읽고 시각순으로 정렬(pcap 모드 Suricata는 경보를 시각순으로 쓰지 않음) |
+| 단계 | SID 지정 → 룰 메타데이터 `mitre_tactic_id` → 분류(eve `category` 설명을 classtype으로 바꿔 설계 4.2절 표) → 단계 없음(`Suricata_Other`) |
+| 출발지·대상 | 경보 `source`·`target`(룰 `target` 키워드) → C2·유출은 내부 쪽이 출발지 → 응답 방향(`to_client`)이면 뒤집음 |
+| 연결 찾기 | `community_id`로 연결 단위 선별 전송 로그(`meta/http`·`ssl` 등)와 원본 `conn.log`(있으면): `uid`, 목적지 이름(SNI·Host). http가 `CONNECT`면 대상은 프록시, 실제 목적지는 CONNECT 대상(`via`·`host`) |
+| 반복 묶기 | (탐지 종류, 출발지, 대상)이 15분 간격 안에 다시 나오면 한 탐지(`occ`). 묶인 시그니처는 근거 줄에 모두 |
+| 위험도 | 리포트 등급은 다른 탐지와 같은 체계(`Information`). Suricata 우선순위 변환값(1 High, 2 Medium, 3·4 Low)과 목적지가 DC·DB 서버면 한 단계 올린 값은 상세의 시그니처 정보(`sigSev`·`roleUp`) |
+| 같은 연결 묶기 | 같은 `community_id`·같은 단계·10분 안의 Zeek 단독 탐지가 있으면 Zeek 탐지에 `also`, 시그니처 탐지에 `mergedInto`(목록에서는 Zeek 탐지 한 줄에 "+시그니처") |
+| 공격 스토리 | 스토리에 나온 host가 출발지·대상인 시그니처 탐지(스토리 기간 앞뒤 2시간)는 그 스토리 단계로 넣음. 단계 없음·Low도 이미 시작된 스토리면 들어감. 시그니처만으로 새 스토리는 만들지 않음. 같은 연결로 묶인 것은 Zeek 단계에 이미 있음 |
+| 화면 | 시그니처 정의(`sigs`: SID별 메시지·분류·우선순위·단계·근거·기법), 장비 현황 Suricata 칸("경보 N건(pcap, 파일)"), ATT&CK 커버리지에 이 pcap 경보의 기법 |
+
+시그니처 예외는 Manager가 적용하므로(설계 4.4) pcap 실행에는 없습니다.
+
+**경보 파일 만들기:** 센서에서는 surica 렌더러가 만든 설정으로 `eve-alert.json`이 생깁니다. pcap만 있을 때는 Suricata 8.0.6으로 `suricata -r <pcap> -k none`을 돌리고 eve의 경보 줄을 씁니다(`tests/suricata/gen_eve.sh`가 그 예: 기본 설정 + `HOME_NET` + Community ID 켬, 센서와 같은 필드만 남김). Community ID seed는 Zeek와 같아야 합니다(기본 0).
+
+**테스트 고정본:** `tests/suricata/killchain_story.eve-alert.json`은 `killchain_story.pcap`을 테스트 룰(`tests/suricata/test.rules`, SID 9910001\~9910006)로 돌린 결과입니다. CI에 Suricata가 없어 저장소에 둡니다. 룰이나 pcap을 바꾸면 `tests/suricata/gen_eve.sh`로 다시 만듭니다(`flow_id`만 달라짐).
 
 ## 4. 화면 구성
 
@@ -327,6 +354,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | 탐지 로그 목록 필드 형식 | `split_list`(배열·쉼표 문자열 모두 읽음), `chain_text`(상관은 `->`, 단일은 `, `로 이어 화면에 표시) |
 | 선별 전송 로그 추가·필드 변경 | `STORY_META`, `enrich`의 필드 이름, `obs_sig`(확인이 필요한 내부 접속의 종류) |
 | 리포트 섹션 추가 | `collect()` 반환 JSON에 키 추가 → `PAGE`에 `<section>` 추가 → JS에서 그리기 |
+| Suricata 단계·분류 규칙 변경 | `suricata_alerts.py`의 `TACTIC_STAGE`·`CLASSTYPE_STAGE`(설계 4.2절과 같게), Suricata 버전을 올리면 `CLASSTYPE_DESC`(classification.config 설명) |
 
 `run_pcap.sh`의 화면 요약과 `report_pcap.py`는 로그를 따로 읽습니다. 로그 이름·Manager 전송 구분(`MGR`, `SENSOR_LOCAL`)을 바꾸면 두 곳을 함께 고칩니다.
 
@@ -350,6 +378,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-proxy-target` | 프록시 경유 유출 탐지의 대상: CONNECT를 본 연결은 실제 목적지, 못 본 연결은 "목적지 확인 안 됨". 프록시는 관련 탐지 수·스토리 레인에서 중계 장비로 |
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
 | `rules/report-mockup` | 목업형 리포트: 등급은 센서 값(단독 Information, 상관 Suspicious), 템플릿 + 데이터 블록 하나, 시각순 id, 공격자별 가장 긴 상관 체인 1건, 스토리 단계와 이벤트 id 연결, 대상 없는 비콘의 목적지, 내부 주소, 프록시 경유(`via`·`host`, 프록시는 내부 목록에서 뺌), `--no-mockup` |
+| `rules/report-suricata` | Suricata 경보 고정본(3.9절): 단계(메타데이터·분류·단계 없음), 출발지·대상(응답 방향·`target`·C2·유출), 반복 묶기, 같은 연결·같은 단계의 Zeek 탐지와 한 탐지, 단계가 다르면 따로, 스토리 단계로 넣기, 시그니처 정의·센서 표시. 정규화 단위 테스트(`tests/suricata/test_normalize.py`: SID 지정 우선, 프록시 CONNECT, envelope 입력, 15분 간격) |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).

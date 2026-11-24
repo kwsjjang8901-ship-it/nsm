@@ -1,0 +1,15 @@
+# 목업형 리포트의 Suricata 경보 테스트용 룰 (SID 9910000~). tests/pcaps/killchain_story.pcap 에서 결정적으로 걸린다.
+# 운영 룰셋에 넣지 않는다. 경보 고정본은 gen_eve.sh 로 만든다(docs/REPORT_SPEC.md "Suricata 경보").
+
+# 초기 침투, 단계 근거 = 룰 메타데이터. Zeek SQL_Injection 과 같은 연결(같은 연결 묶음)
+alert http any any -> $HOME_NET any (msg:"NSM-TEST SQL Injection UNION SELECT in URI"; flow:established,to_server; http.uri; content:"UNION SELECT"; nocase; classtype:web-application-attack; metadata:mitre_tactic_id TA0001, mitre_technique_id T1190; sid:9910001; rev:1;)
+# 서버 응답에서 걸리는 경보(direction to_client): 출발지는 연결을 시작한 쪽(외부 공격자)으로 바꾼다. 단계 근거 = classtype
+alert http $HOME_NET 80 -> $EXTERNAL_NET any (msg:"NSM-TEST Web server answered external client"; flow:established,to_client; http.stat_code; content:"200"; classtype:web-application-attack; sid:9910002; rev:1;)
+# 외부 연락(C2): 연결마다 경보 -> 반복 묶기. 출발지는 내부(감염) host
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"NSM-TEST Beacon to update-check.net"; flow:established,to_server; http.host; content:"update-check.net"; classtype:trojan-activity; metadata:mitre_tactic_id TA0011, mitre_technique_id T1071.001; sid:9910003; rev:1;)
+# 내부 확산: target 키워드(alert.source·target)로 출발지·대상
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"NSM-TEST SMB connection between internal hosts"; flow:to_server; flags:S; target:dest_ip; classtype:attempted-admin; metadata:mitre_tactic_id TA0008, mitre_technique_id T1021.002; sid:9910004; rev:1;)
+# 단계 없음(Suricata_Other)·Low: misc-activity
+alert udp $HOME_NET any -> $HOME_NET 88 (msg:"NSM-TEST Kerberos request"; classtype:misc-activity; sid:9910005; rev:1;)
+# 정보 유출: 외부로 큰 데이터. 출발지는 내부 host
+alert tcp $HOME_NET any -> $EXTERNAL_NET 443 (msg:"NSM-TEST Large outbound data on 443"; flow:established,to_server; stream_size:client,>,1000000; threshold:type limit, track by_src, count 1, seconds 3600; classtype:policy-violation; metadata:mitre_tactic_id TA0010, mitre_technique_id T1041; sid:9910006; rev:1;)

@@ -916,8 +916,17 @@ def collect(z, assets_path, args):
     warn = [l.strip() for l in open(stderr, encoding="utf-8", errors="replace")
             if any(w in l.lower() for w in ("warning", "error", "fatal"))][:20] if os.path.exists(stderr) else []
 
+    # Suricata 경보(--suricata-eve): Manager 정규화 규칙으로 시그니처 탐지를 만든다(목업형 리포트에만 보임)
+    suricata = None
+    if getattr(args, "suricata_eve", None):
+        import suricata_alerts
+        alerts = suricata_alerts.load(args.suricata_eve)
+        suricata = {"files": [os.path.basename(p) for p in args.suricata_eve], "alerts": len(alerts),
+                    "events": suricata_alerts.normalize(alerts, z, internal)}
+
     return {
         "pcap": args.pcap or "", "elapsed": args.elapsed, "tz": args.tz, "obs_common": OBS_COMMON, "span": span,
+        "suricata": suricata,
         "start": min(ts_all) if ts_all else None, "end": max(ts_all) if ts_all else None,
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "detections": detections, "stories": stories, "stage_order": STAGES, "coverage": coverage,
@@ -1298,6 +1307,9 @@ def main():
     ap.add_argument("--recog", help="Recog 지문 xml 폴더(github.com/rapid7/recog 의 xml/). 배너·헤더로 제품·장비 종류 표시")
     ap.add_argument("--mockup-out", help="목업형 리포트 경로(기본: -o 이름에 _mockup 을 붙임)")
     ap.add_argument("--no-mockup", action="store_true", help="목업형 리포트를 만들지 않음")
+    ap.add_argument("--suricata-eve", action="append",
+                    help="Suricata 경보 파일(eve-alert.json 또는 suricata_alert envelope JSONL, 여러 번 가능). "
+                         "Manager 규칙으로 시그니처 탐지를 만들어 목업형 리포트에 넣음")
     args = ap.parse_args()
     data = collect(args.zeek_dir, args.assets, args)
     blob = json.dumps(data, ensure_ascii=False, default=list).replace("</", "<\\/")
@@ -1311,7 +1323,9 @@ def main():
         if os.path.exists(report_mockup.TEMPLATE):
             mock = report_mockup.build(data, args.zeek_dir, args.tz)
             report_mockup.render(mock, mo)
-            print(f"목업형 리포트: {mo} (탐지 {len(mock['ev'])}건, 공격 스토리 {len(mock['stories'])}개, 자산 {len(mock['assets'])}개)")
+            nsig = sum(1 for e in mock["ev"] if e.get("eng") == "Suricata")
+            print(f"목업형 리포트: {mo} (탐지 {len(mock['ev'])}건{f', 그중 시그니처 {nsig}건' if nsig else ''}, "
+                  f"공격 스토리 {len(mock['stories'])}개, 자산 {len(mock['assets'])}개)")
         else:
             print(f"  경고: 목업 템플릿이 없어 목업형 리포트를 건너뜀({report_mockup.TEMPLATE})")
     ei = data.get("enrich") or {}

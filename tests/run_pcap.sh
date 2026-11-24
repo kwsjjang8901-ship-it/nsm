@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pcap 하나를 운영과 같은 설정으로 한 번 돌려 탐지·자산 식별·메타데이터 선별 전송 결과를 한 화면에 요약한다.
 #
-#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-k] <pcap | 디렉터리> ...
+#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-s Suricata 경보 파일] [-k] <pcap | 디렉터리> ...
 #
 #     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
 #       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
@@ -17,6 +17,9 @@
 #     -u FILE   IEEE OUI 목록 CSV(MA-L·MA-M·MA-S, 여러 번 가능). 리포트 자산 표에 MAC 제조사를 붙인다.
 #     -g DIR    Recog 지문 xml 폴더(github.com/rapid7/recog 의 xml/). 배너·헤더로 제품·장비 종류를 붙인다.
 #               (-u·-g 는 Manager 후처리 시제품. DB 는 저장소에 넣지 않으며 라이선스는 docs/asset-id/SPEC.md 4.11)
+#     -s FILE   같은 pcap 을 Suricata 로 돌린 경보 파일(eve-alert.json 또는 suricata_alert envelope JSONL, 여러 번 가능).
+#               Manager 규칙(docs/SURICATA_INTEGRATION_DESIGN.md 3~5장)으로 시그니처 탐지를 만들어 목업형 리포트에 넣는다.
+#               pcap 하나일 때만 쓴다(여러 pcap 이면 무시). 만드는 법은 docs/REPORT_SPEC.md "Suricata 경보"
 #     -k        Zeek 원본 로그를 모두 남긴다(conn·dns·http·ssl·files·weird 등, DIR/zeek/ 에 기본 이름으로).
 #               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
@@ -25,9 +28,9 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,25p' "$0"; exit 2; }
-OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=()
-while getopts "o:n:x:r:z:u:g:kh" opt; do
+usage() { sed -n '2,28p' "$0"; exit 2; }
+OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=(); SURI=()
+while getopts "o:n:x:r:z:u:g:s:kh" opt; do
     case $opt in
         o) OUT=$OPTARG ;;
         n) NETS=$OPTARG; PASS+=(-n "$OPTARG") ;;
@@ -37,6 +40,7 @@ while getopts "o:n:x:r:z:u:g:kh" opt; do
         k) KEEP_RAW=1; PASS+=(-k) ;;
         u) ENRICH+=(--oui "$(realpath "$OPTARG")"); PASS+=(-u "$(realpath "$OPTARG")") ;;
         g) ENRICH+=(--recog "$(realpath "$OPTARG")"); PASS+=(-g "$(realpath "$OPTARG")") ;;
+        s) [ -f "$OPTARG" ] || { echo "Suricata 경보 파일 없음: $OPTARG" >&2; exit 2; }; SURI+=(--suricata-eve "$(realpath "$OPTARG")") ;;
         *) usage ;;
     esac
 done
@@ -45,6 +49,7 @@ shift $((OPTIND - 1))
 
 # 디렉터리 또는 여러 파일: 파일마다 이 스크립트를 다시 불러 따로 실행하고, 끝에 결과 표와 index.html 을 만든다.
 if [ $# -gt 1 ] || [ -d "$1" ]; then
+    [ ${#SURI[@]} -eq 0 ] || echo "경고: -s(Suricata 경보 파일)는 pcap 하나일 때만 씁니다. 이번 실행에서는 무시합니다." >&2
     if [ $# -eq 1 ]; then BASE_NAME=$(basename "$(realpath "$1")"); else BASE_NAME=batch; fi
     BASE=$(realpath -m "${OUT:-out/$BASE_NAME}")
     mkdir -p "$BASE"
@@ -261,7 +266,7 @@ fi
 echo
 echo "[3/3] 통합 리포트"
 REPORT="$OUT/${NAME}_report.html"
-python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} ${ENRICH[@]+"${ENRICH[@]}"} | sed 's/^/      /'
+python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} ${ENRICH[@]+"${ENRICH[@]}"} ${SURI[@]+"${SURI[@]}"} | sed 's/^/      /'
 echo
 echo "결과: $OUT"
 echo "  - $(basename "$REPORT")    통합 리포트(공격 스토리·탐지·킬체인·자산·전송량·예외·센서 상태). 주소·호스트명 원문이 들어 있으니 외부로 보내지 않는다"

@@ -6,6 +6,10 @@
 등급은 센서 값(단독 탐지 Information, 상관 탐지 Suspicious)을 그대로 쓰고, 탐지명·공격 단계·탐지 기준은
 목업의 룰 표(RULES, 룰별 기본값)에서 채운다.
 
+Suricata 경보를 주면(report_pcap.py --suricata-eve) suricata_alerts.normalize() 결과를 시그니처 탐지로 넣는다:
+같은 연결(community_id)·같은 단계·10분 안의 Zeek 탐지와는 한 탐지로 묶고(also·mergedInto), 공격 스토리에 나온 host 의
+시그니처 탐지는 그 스토리의 단계로 넣는다(Manager 통합 스토리와 같은 규칙, 설계 5장). 단독 스토리는 새로 만들지 않는다.
+
 리포트에 없는 것(Manager 기능): 대응 현황·조치, 보고서·로그 메뉴, MDS·MTA 탐지, 정책·예외 편집과 배포, 과거 기록 검색.
 화면에서 숨기거나 읽기 전용으로 둔다. 기존 리포트(report_pcap.py 의 PAGE)는 그대로 함께 만든다.
 """
@@ -23,6 +27,8 @@ MAX_EV = 3000        # 탐지 행 상한(브라우저가 무거워지지 않게,
 MAX_ASSETS = 2000
 MAX_META = 12        # 탐지마다 붙이는 같은 시간대 통신 기록
 MAX_PEERS = 6
+SAME_CONN_WINDOW = 600      # 같은 연결 묶어 보이기: 같은 community_id·같은 단계·10분 안(설계 6.2)
+STORY_MARGIN = 2 * 3600     # 스토리 host 의 시그니처 탐지를 그 스토리에 넣는 시간 여유(스토리 기간 앞뒤)
 
 SIG_KO = {"machine_account": "도메인 컴퓨터 계정", "dhcp_client_id": "DHCP 클라이언트 ID", "mac": "MAC 주소", "hostname": "호스트 이름",
           "fqdn": "FQDN", "domain": "도메인", "os_hint": "OS 추정", "service": "열린 서비스", "device": "장비 종류",
@@ -130,6 +136,8 @@ def build(data, zeek_dir, tz=9.0):
         else:
             e["note"] = note or (d.get("diagnosis") or "").split(".")[-1]
             e["meta"] = [[hm(ts), log, src, e["dst"], f"{label}: {text}"] for label, text, log in (d.get("how") or [])[:MAX_META]]
+            e["_cids"] = {x["community_id"] for x in evs if x.get("community_id")}
+            e["_stage"] = str(d.get("stages") or "").strip()   # 단독 탐지의 킬체인 단계
         ev.append((i, e))
     # 상관 탐지는 체인이 길어질 때마다 새로 나온다. 공격자별로 가장 긴(같으면 마지막) 체인만 남긴다(기존 리포트의 기본 보기와 같음)
     best = {}
@@ -140,11 +148,23 @@ def build(data, zeek_dir, tz=9.0):
                 best[k] = (i, e)
     keep = {id(e) for _, e in best.values()}
     ev = [(i, e) for i, e in ev if not e.get("corr") or id(e) in keep]
+    # ---- 시그니처 탐지(Suricata)
+    sur = data.get("suricata") or {}
+    sigdefs = {}
+    for k, g in enumerate(sur.get("events") or []):
+        e, sg = _sig_event(g, hm, md, dt, data.get("pcap") or "NSM")
+        ev.append((("sig", k), e))
+        for sid, x in g["defs"].items():
+            sigdefs.setdefault(str(sid), x)
+        for ip, inside in ((g["src"], g["src_internal"]), (g["dst"], g["dst_internal"])):
+            if ip and inside:
+                internal.add(ip)
     ev = sorted(ev, key=lambda x: x[1]["ts"] or 0)[-MAX_EV:]
     for n, (i, e) in enumerate(ev, 1):
         e["id"] = f"NSM-{n:05d}"
         ev_id[i] = e["id"]
     ev = [e for _, e in ev]
+    _same_conn(ev)
 
     # ---- 공격 스토리
     note_of = {x["id"]: x.get("note", "") for x in ev}
@@ -201,6 +221,11 @@ def build(data, zeek_dir, tz=9.0):
                                                     "common": (s.get("observed_skip") or {}).get("common", 0)},
                         "ext": s.get("ext_keys") or [], "obsHosts": obs_hosts})
 
+    _sig_into_stories(stories, ev, hm, md)
+    for e in ev:
+        e.pop("_cids", None)
+        e.pop("_stage", None)
+
     # ---- 자산
     sig = _rows(os.path.join(zeek_dir, "asset_signal.log"))
     by_ip = collections.defaultdict(list)
@@ -232,6 +257,13 @@ def build(data, zeek_dir, tz=9.0):
                     "vendor": "local" if a.get("mac_local") else (a.get("vendor") or ""),
                     "fp": [[f.get("src", ""), f.get("text", "")] for f in a.get("fp") or []],
                     "tcp": a.get("tcp_os") or "", "osSrc": a.get("os_src") or ""}
+
+    # 시그니처 위험도: 목적지가 DC·DB 서버면 한 단계 올림(설계 4.3). 화면 등급(sev)은 센서 값 체계 그대로
+    role = {a["ip"]: a.get("role") or "" for a in assets}
+    for e in ev:
+        if e.get("eng") == "Suricata" and re.search(r"도메인 컨트롤러|DB 서버", role.get(e["dst"], "")) and e["sigSev"] != "High":
+            e["sigSev"] = {"Low": "Medium", "Medium": "High"}[e["sigSev"]]
+            e["roleUp"] = True
 
     # ---- 주로 통신한 상대(흐름 요약, 탐지·스토리에 나온 내부 host 만)
     want = {x["src"] for x in ev} | {ip for s in stories for x in s["steps"] for ip in (x[4], x[5])}
@@ -279,7 +311,8 @@ def build(data, zeek_dir, tz=9.0):
     sensors = [{"name": data.get("pcap") or "NSM 센서", "ip": "-", "grp": "PoC", "st": "warn" if loss > 1 or sen.get("warnings") else "ok",
                 "hb": f"{md(data.get('end'))} {hm(data.get('end'))}", "cpu": None, "mem": None, "disk": None, "ifc": "pcap",
                 "pps": "-", "bps": "-", "sig": "-", "ioc": "-", "loss": loss, "zeek": "경고 있음" if sen.get("warnings") else "정상",
-                "suri": "사용 안 함", "lag": "-", "send": "-", "eng": "-", "zv": "-"}]
+                "suri": f"경보 {sur['alerts']}건(pcap, {', '.join(sur['files'])})" if sur else "사용 안 함",
+                "lag": "-", "send": "-", "eng": "-", "zv": "-"}]
 
     # 프록시(중계 장비)는 피해 장비가 아니라 외부처럼 그린다(기존 리포트와 같음)
     internal -= {v["ip"] for d in dets for v in d.get("victims") or [] if v.get("proxy")}
@@ -289,7 +322,81 @@ def build(data, zeek_dir, tz=9.0):
             f"탐지 {len(ev)}건 · 화면은 MDS Manager 목업과 같고, 대응·편집·배포 같은 Manager 기능은 빠져 있습니다",
             "day": md(start or end), "span": f"캡처 {_dur(span)}", "internal": sorted(internal), "ev": ev, "stories": stories,
             "assets": assets, "devx": devx, "peers": peers, "exc": exc, "builtin": bool(bihits), "bihits": bihits,
-            "excver": "pcap 실행", "sensors": sensors, "sent": sent}
+            "excver": "pcap 실행", "sensors": sensors, "sent": sent, "sigs": sigdefs}
+
+
+STAGE_KO = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and Control": "외부 연락(C2)", "Credential Access": "계정 탈취",
+            "Lateral Movement": "내부 확산", "Exfiltration": "정보 유출", "Impact": "피해", "": "단계 없음"}
+BY_KO = {"mitre": "룰 메타데이터(mitre_tactic_id)", "classtype": "분류(classtype)", "sid_map": "사내 지정(SID 단계 표)"}
+
+
+def _sig_event(g, hm, md, dt, sensor):
+    """suricata_alerts.normalize() 한 건 -> 목업 탐지 행과 시그니처 정의(SIGS)."""
+    import suricata_alerts as sa
+    ts = g["ts"]
+    sg = g["defs"][g["sid"]]
+    rows = [["시그니처", f"{s[1]} (SID {s[0]}{f', {s[2]}번' if s[2] > 1 else ''})"] for s in g["signatures"][:5]]
+    rows.append(["단계 근거", f"{STAGE_KO[g['stage']]} · {BY_KO.get(g['stage_by'], g['stage_by'])}"])
+    if g["occ"] > 1:
+        rows.append(["반복", f"{g['occ']}번(같은 탐지 종류·출발지·대상, 15분 간격 안에서 묶음), 마지막 {hm(g['last'])}"])
+    if g["uid"] or g["dst_name"]:
+        rows.append(["Zeek 연결", " · ".join(x for x in (f"uid {g['uid']}" if g["uid"] else "", g["dst_name"]) if x)])
+    e = {"id": "", "key": f"suri-{g['sid']}-{int(ts)}", "prod": "NSM", "eng": "Suricata", "ts": ts, "t": hm(ts), "d": md(ts),
+         "y": dt(ts).strftime("%Y"), "note": g["rule"], "name": g["signature"], "diag": "NSM.Signature." + sa.DIAG[g["stage"]],
+         "stage": g["stage"], "tech": ",".join(g["technique"]), "src": g["src"] or "-", "dst": g["dst"] or "-", "sensor": sensor,
+         "occ": g["occ"], "port": str(g["dst_port"]) if g["dst_port"] is not None else "-", "proto": g["proto"],
+         # 등급은 리포트 체계(센서 값: 단독 Information). Suricata 우선순위 변환값은 sigSev(상세의 시그니처 정보)
+         "sev": "Information", "sigSev": g["sig_sev"], "sid": g["sid"], "sig": sg, "ev": rows,
+         "_cids": set(g["community_ids"])}
+    if g["community_ids"]:
+        e["cid"] = g["community_ids"][0]
+    if g["proxy"]:
+        e["via"] = g["proxy"]
+        e["host"] = g["dst_name"] or "목적지 확인 안 됨"
+    elif g["dst_name"]:
+        e["host"] = g["dst_name"]
+    return e, sg
+
+
+def _same_conn(ev):
+    """같은 연결(community_id)·같은 단계·10분 안의 Zeek 탐지와 시그니처 탐지를 한 탐지로(설계 6.2)."""
+    zeek = [e for e in ev if not e.get("eng") and not e.get("corr") and e.get("_cids")]
+    for s in (e for e in ev if e.get("eng") == "Suricata"):
+        for z in zeek:
+            if z["_stage"] == s["stage"] and z["_cids"] & s["_cids"] and abs((z["ts"] or 0) - (s["ts"] or 0)) <= SAME_CONN_WINDOW:
+                z.setdefault("also", []).append(s["id"])
+                s["mergedInto"] = z["id"]
+                break
+
+
+def _sig_into_stories(stories, ev, hm, md):
+    """스토리에 나온 내부 host 의 시그니처 탐지를 그 스토리 단계로(Manager 통합 스토리 규칙, 설계 5.1).
+
+    시작점이 되지 않는 경보(단계 없음·Low)도 이미 시작된 스토리의 host 가 낸 것이면 들어간다.
+    같은 연결로 Zeek 탐지와 묶인 것은 Zeek 단계에 이미 들어 있어 따로 넣지 않는다.
+    """
+    by_id = {e["id"]: e for e in ev}
+    for s in stories:
+        ids = [x[8] for x in s["steps"]]
+        ts = [by_id[i]["ts"] for i in ids if i in by_id and by_id[i].get("ts")]
+        if not ts:
+            continue
+        hosts = {ip for x in s["steps"] for ip in (x[4], x[5])}
+        lo, hi = min(ts) - STORY_MARGIN, max(ts) + STORY_MARGIN
+        add = [e for e in ev if e.get("eng") == "Suricata" and not e.get("mergedInto") and e["id"] not in ids
+               and (e["src"] in hosts or e["dst"] in hosts) and lo <= (e["ts"] or 0) <= hi]
+        if not add:
+            continue
+        for e in add:
+            occ = f", {e['occ']}번" if e["occ"] > 1 else ""
+            text = f"{e['src']} → {e.get('host') or e['dst']}: 시그니처 탐지 {e['name']} (SID {e['sid']}{occ})"
+            s["steps"].append([0, [e["note"], e["src"]], e["t"], e["stage"], e["src"], e["dst"], text[:400], 0, e["id"]])
+        s["steps"].sort(key=lambda x: by_id[x[8]]["ts"] or 0)
+        for k, x in enumerate(s["steps"], 1):
+            x[0] = k
+        last = max(by_id[x[8]]["ts"] or 0 for x in s["steps"])
+        s["last"], s["d2"] = hm(last), md(last)
+        s["single"] = len(s["steps"]) == 1
 
 
 def render(mock, out_path, template=TEMPLATE):
