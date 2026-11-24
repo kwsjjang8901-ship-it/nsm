@@ -109,7 +109,7 @@ conn.log는 Manager로 가지 않고 `flow_summary`(묶음)로만 갑니다(SRS_
 | **연결 단위 선별 전송 로그** | `meta/ssl`·`http`·`ssh`·`rdp`·`smb_files`·`smb_mapping`·`kerberos`·`ntlm`·`dce_rpc`에 `community_id`를 붙임. Manager가 경보와 맞추는 키 |
 | 근거(`evidence.log`) | 이미 있음(#126). Zeek 탐지와 경보를 같은 연결로 묶는 키(6.2) |
 
-행당 약 32바이트가 늡니다. 선별 전송 측정에서 증가분을 확인합니다(S1).
+행당 48바이트(gzip 뒤 약 19바이트)가 늡니다. 저장소 합성 pcap 64개 합계로 선별 로그가 7.4%(gzip 뒤 15%) 커졌고, 운영 비율은 S5에서 확인합니다(SRS_METADATA_EXPORT 5.1절).
 
 맞추는 규칙:
 - 같은 `community_id`, 경보 시각이 연결 시간 안에 있으면 같은 연결입니다. 연결 로그의 `uid`, 서비스, 목적지 이름(ssl `server_name`, http `host`), `CONNECT` 여부를 경보에 붙입니다.
@@ -268,14 +268,14 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 
 | 단계 | 범위 | 저장소 | 규모(추정) |
 | --- | --- | --- | --- |
-| S1. Community ID | conn `community-id-logging` 로드, 연결 단위 선별 전송 로그에 `community_id`(3.3), 스키마(`schema/`, LOG_SCHEMA), SRS_METADATA_EXPORT, btest, 선별 전송 증가분 측정 | nsm | 3\~4일 |
+| S1. Community ID | conn `community-id-logging` 로드, 연결 단위 선별 전송 로그에 `community_id`(3.3), 스키마(`schema/`, LOG_SCHEMA), SRS_METADATA_EXPORT, btest, 선별 전송 증가분 측정 | nsm | 완료(2026-11-24) |
 | S2. 렌더러 | eve 경보·stats 분리, `suricata_alert` 스트림 기본 켬, 6.1절 기본값을 `disable.conf`로, `threshold.config` 기본값, Community ID seed 맞춤, AssetID 위치 갱신(8장) | surica | 3\~5일 |
 | S3. Manager 정규화 | 3.2절 처리(단계·위험도·연결 찾기·프록시·예외·사건 묶기), 공통 이벤트 저장, 화면(목업) | Manager | 통합 상관 0\~2단계와 함께 |
 | S4. 통합 상관 시나리오 | 5.2절 S-01\~S-04 | Manager | 통합 상관 3단계와 함께 |
 | S5. 측정 | CIC-IDS2017 5일에 ET Open: 카테고리별 경보 수, 오탐, Zeek 탐지와 겹침, 센서 부하, `threshold` 뒤 전송량. 결과로 6.1절 기본값과 `suri_join_wait` 확정 | nsm·surica | 1주 |
 | S6. PoC 리포트 | `report_pcap.py`가 eve 경보도 읽어 같은 규칙(단계·위험도·연결 찾기)으로 목업형 리포트에 넣음 | nsm | 3일 |
 
-S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다. S1은 Manager 일정과 상관없이 바로 할 수 있습니다.
+S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다. S1은 센서에 반영했습니다(`nsm_rules/metadata/community_id.zeek`, btest `rules/meta-community-id`).
 
 화면은 [목업](../ui/mockup/mdsm_nsm_mockup.html)에 그려 두었습니다. 화면 목록은 [`ui/README.md`](../ui/README.md)의 "Suricata 연동 화면"에 있습니다.
 

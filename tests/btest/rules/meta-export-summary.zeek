@@ -27,7 +27,7 @@
 # HTTP: 외부만, 같은 요청 2번 -> 1행, 예외 호스트 제외, 경로만(쿼리 문자열 없음)
 # @TEST-EXEC: assert-rows meta/http.log eq 1 host=files.example-cdn.net uri_path=/download/file.zip method=GET status_code=200
 # @TEST-EXEC: assert-rows meta/http.log eq 1
-# @TEST-EXEC: assert-fields meta/http.log ts uid orig_h orig_p resp_h resp_p method host uri_path status_code request_body_len response_body_len
+# @TEST-EXEC: assert-fields meta/http.log ts uid orig_h orig_p resp_h resp_p method host uri_path status_code request_body_len response_body_len community_id
 # User-Agent 는 (출발지, UA)별 요약으로: 범위·예외를 통과한 요청 2건(중복 억제 전)
 # @TEST-EXEC: assert-rows meta/http_ua_summary.log eq 1 orig_h=10.0.0.71 user_agent=Mozilla/5.0 requests=2 hosts=1 sample_host=files.example-cdn.net
 # @TEST-EXEC: ! grep -q SECRET123 meta_*.log

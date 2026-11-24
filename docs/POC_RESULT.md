@@ -12,7 +12,7 @@ Zeek 센서 하나로 탐지·자산 식별·메타데이터 선별 전송을 �
 | 탐지 | 룰 파일 34개, 탐지 유형(notice) 48개, 공격 단계 7개(정찰\~영향). 근거(evidence)·탐지 요약(사건 묶기)·킬체인 상관·예외 엔진 공통 적용 |
 | 자산 식별 | 19종 신호로 자산 키(머신 계정·DHCP·MAC·호스트명)와 역할·OS 판정. 탐지 리포트의 공격자·대상 IP에 이름·역할·OS 표시 |
 | 메타데이터 | 조사용 프로토콜 로그 9종(행 단위)과 요약 3종만 골라 전송. CIC 8시간 캡처당 Manager 전송량 21\~24MB(탐지·자산 신호 포함) |
-| 검증 | btest 142개(Zeek 9.0.1·8.0.9 CI), 합성 pcap 64개, 통합 리포트(공격 스토리·킬체인·자산·전송량) |
+| 검증 | btest 143개(Zeek 9.0.1·8.0.9 CI), 합성 pcap 64개, 통합 리포트(공격 스토리·킬체인·자산·전송량) |
 | CIC-IDS2017 | 공격 14종 중 탐지 9종. 미탐 5종(DoS 4종·DDoS)은 탐지 범위 밖 |
 | 오탐 | 5일 19건(예외 파일 16행 + 룰 기본값). 공격 탐지 30건(사건 기준) |
 
@@ -106,7 +106,7 @@ flowchart LR
 - 명시적 프록시 인식: PC가 프록시(예: 3128/tcp)로 나가는 환경에서 CONNECT 대상·절대 URL로 실제 목적지를 알아내 유출(10·12·14)과 C2·AI(09·24·33) 탐지에 씁니다. 근거에는 실제 목적지(`host=`)와 프록시(`via_proxy=`)를 남기고, 리포트는 프록시를 중계 장비로 보여 줍니다. 고객 프록시 환경 1.4시간 측정에서 AI 서비스 사용 37쌍(PC·서비스)이 모두 프록시를 거쳐 이전에는 보이지 않았습니다. 주기 접속(07·30)은 정상 OS·SaaS 주기 통신이 많아(새로 45건) 기본으로 끄고, 켤 때 쓰는 기본 예외 목록을 제공합니다.
 - 통합 리포트: 공격자별 공격 스토리를 킬체인 진행 보드·확산 경로 그래프·세로 내러티브 세 가지로 보여 줍니다. 같은 사건은 한 행(횟수·마지막 시각)으로 보입니다.
 
-테스트는 btest 142개(룰·계약·예외·선별 전송 95개, 클러스터·자산 식별 47개)입니다. Zeek 9.0.1에서 모두 통과하고, 8.0.9에서는 9.x 분석기가 필요한 6개를 빼고 통과합니다. 룰마다 탐지돼야 하는 호스트와 비슷하지만 탐지되면 안 되는 호스트를 한 pcap에 넣어 확인합니다.
+테스트는 btest 143개(룰·계약·예외·선별 전송 96개, 클러스터·자산 식별 47개)입니다. Zeek 9.0.1에서 모두 통과하고, 8.0.9에서는 9.x 분석기가 필요한 6개를 빼고 통과합니다. 룰마다 탐지돼야 하는 호스트와 비슷하지만 탐지되면 안 되는 호스트를 한 pcap에 넣어 확인합니다.
 
 ### AI 관련 위협 탐지
 
@@ -520,7 +520,7 @@ Manager는 `nsm_detection.log`로 알림을 올리고, `evidence_id`로 `evidenc
 위에서부터 kerberos 행, flow_summary, dns_summary, http_ua_summary, meta_export_stats 예시입니다.
 
 ```json
-{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac"}
+{"ts":1794182402.03,"uid":"Cq4cC54InF9kHckVU9","orig_h":"10.0.0.60","orig_p":62228,"resp_h":"10.0.0.10","resp_p":88,"request_type":"TGS","client":"user01/CORP.EXAMPLE","service":"MSSQLSvc/db01.corp.example:1433","success":true,"cipher":"rc4-hmac","community_id":"1:LNQXqASgVUUskz445ygEN3r5Me8="}
 {"ts":1794182429.495996,"node":"zeek","orig_h":"10.0.0.73","resp_h":"93.184.215.133","resp_p":443,"proto":"tcp","conns":3,"orig_bytes":0,"resp_bytes":0,"states":"SF:3"}
 {"ts":1794182401.0,"ts_end":1794182403.0,"node":"zeek","orig_h":"10.0.0.90","domain":"example-mixed.com","qtypes":["A","AAAA"],"rcodes":"NOERROR:2,NXDOMAIN:1","queries":3,"unique_names":2,"sample_names":["www.example-mixed.com","api.example-mixed.com"],"answers":["93.184.215.150"]}
 {"ts":1794182421.003,"ts_end":1794182422.042,"node":"zeek","orig_h":"10.0.0.71","user_agent":"Mozilla/5.0","requests":2,"hosts":1,"sample_host":"files.example-cdn.net"}

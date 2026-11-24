@@ -629,6 +629,12 @@
   },
   "meta_default": {
     "title_prefix": "선별 전송: ",
-    "desc": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다."
+    "desc": "Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필드 뜻은 Zeek 문서의 같은 로그를 따른다.",
+    "fields": {
+      "community_id": {
+        "desc": "연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3)",
+        "pattern": "^1:[A-Za-z0-9+/]{27}=$"
+      }
+    }
   }
 }

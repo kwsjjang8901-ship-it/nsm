@@ -8,8 +8,14 @@
     그 외                 -> 문자열 그대로
 """
 
+import base64
+import hashlib
+import ipaddress
 import json
+import struct
 import sys
+
+PROTO = {"tcp": 6, "udp": 17, "icmp": 1}
 
 
 def render(v):
@@ -63,3 +69,12 @@ def get(rec, field):
 def fail(msg, code=1):
     print(msg, file=sys.stderr)
     sys.exit(code)
+
+
+def community_id(sa, da, sp, dp, proto, seed=0):
+    """Community ID v1(base64). ICMP 는 type/code 짝 규칙이 있어 여기서는 TCP·UDP 만 쓴다."""
+    a, b = ipaddress.ip_address(sa).packed, ipaddress.ip_address(da).packed
+    if (a, sp) > (b, dp):
+        a, b, sp, dp = b, a, dp, sp
+    h = hashlib.sha1(struct.pack("!H", seed) + a + b + struct.pack("!BB", PROTO[proto], 0) + struct.pack("!HH", sp, dp))
+    return "1:" + base64.b64encode(h.digest()).decode()

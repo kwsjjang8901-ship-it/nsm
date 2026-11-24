@@ -2,7 +2,7 @@
 
 이 문서는 `schema/build.py`가 만듭니다. 직접 고치지 말고 `schema/overlay.json`(설명·열거값)이나 Zeek 코드(필드)를 고친 뒤 다시 만드세요. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema(draft 2020-12)입니다.
 
-- 스키마 버전: `db6b91e3ec51`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
+- 스키마 버전: `cbb6703be7d3`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
 - 형식: JSON 한 줄 = 한 행. 값이 없는 선택 필드는 쓰지 않습니다(키가 없음). 필수 필드는 항상 있습니다.
 - 타입: `time`은 epoch 초(소수), IP는 문자열, 목록은 JSON 배열, 정해 두지 않은 필드는 없습니다(`additionalProperties: false`).
 - 검증: CI가 btest 전체 출력의 해당 로그를 이 스키마로 검사하고(`schema/validate.py`), 코드의 필드가 스키마와 달라지면 실패합니다(`schema/build.py --check`).
@@ -24,16 +24,16 @@
 | `meta/dns_summary` | DNS 요약 | `/log/zeek/meta/dns_summary.log` | 13 | [`meta/dns_summary.schema.json`](../schema/logs/meta/dns_summary.schema.json) |
 | `meta/http_ua_summary` | HTTP User-Agent 요약 | `/log/zeek/meta/http_ua_summary.log` | 8 | [`meta/http_ua_summary.schema.json`](../schema/logs/meta/http_ua_summary.schema.json) |
 | `meta/capture_loss` | 선별 전송: capture_loss | `/log/zeek/meta/capture_loss.log` | 6 | [`meta/capture_loss.schema.json`](../schema/logs/meta/capture_loss.schema.json) |
-| `meta/dce_rpc` | 선별 전송: dce_rpc | `/log/zeek/meta/dce_rpc.log` | 8 | [`meta/dce_rpc.schema.json`](../schema/logs/meta/dce_rpc.schema.json) |
-| `meta/http` | 선별 전송: http | `/log/zeek/meta/http.log` | 12 | [`meta/http.schema.json`](../schema/logs/meta/http.schema.json) |
-| `meta/kerberos` | 선별 전송: kerberos | `/log/zeek/meta/kerberos.log` | 12 | [`meta/kerberos.schema.json`](../schema/logs/meta/kerberos.schema.json) |
-| `meta/ntlm` | 선별 전송: ntlm | `/log/zeek/meta/ntlm.log` | 10 | [`meta/ntlm.schema.json`](../schema/logs/meta/ntlm.schema.json) |
-| `meta/rdp` | 선별 전송: rdp | `/log/zeek/meta/rdp.log` | 9 | [`meta/rdp.schema.json`](../schema/logs/meta/rdp.schema.json) |
+| `meta/dce_rpc` | 선별 전송: dce_rpc | `/log/zeek/meta/dce_rpc.log` | 9 | [`meta/dce_rpc.schema.json`](../schema/logs/meta/dce_rpc.schema.json) |
+| `meta/http` | 선별 전송: http | `/log/zeek/meta/http.log` | 13 | [`meta/http.schema.json`](../schema/logs/meta/http.schema.json) |
+| `meta/kerberos` | 선별 전송: kerberos | `/log/zeek/meta/kerberos.log` | 13 | [`meta/kerberos.schema.json`](../schema/logs/meta/kerberos.schema.json) |
+| `meta/ntlm` | 선별 전송: ntlm | `/log/zeek/meta/ntlm.log` | 11 | [`meta/ntlm.schema.json`](../schema/logs/meta/ntlm.schema.json) |
+| `meta/rdp` | 선별 전송: rdp | `/log/zeek/meta/rdp.log` | 10 | [`meta/rdp.schema.json`](../schema/logs/meta/rdp.schema.json) |
 | `meta/reporter` | 선별 전송: reporter | `/log/zeek/meta/reporter.log` | 4 | [`meta/reporter.schema.json`](../schema/logs/meta/reporter.schema.json) |
-| `meta/smb_files` | 선별 전송: smb_files | `/log/zeek/meta/smb_files.log` | 11 | [`meta/smb_files.schema.json`](../schema/logs/meta/smb_files.schema.json) |
-| `meta/smb_mapping` | 선별 전송: smb_mapping | `/log/zeek/meta/smb_mapping.log` | 8 | [`meta/smb_mapping.schema.json`](../schema/logs/meta/smb_mapping.schema.json) |
-| `meta/ssh` | 선별 전송: ssh | `/log/zeek/meta/ssh.log` | 11 | [`meta/ssh.schema.json`](../schema/logs/meta/ssh.schema.json) |
-| `meta/ssl` | 선별 전송: ssl | `/log/zeek/meta/ssl.log` | 11 | [`meta/ssl.schema.json`](../schema/logs/meta/ssl.schema.json) |
+| `meta/smb_files` | 선별 전송: smb_files | `/log/zeek/meta/smb_files.log` | 12 | [`meta/smb_files.schema.json`](../schema/logs/meta/smb_files.schema.json) |
+| `meta/smb_mapping` | 선별 전송: smb_mapping | `/log/zeek/meta/smb_mapping.log` | 9 | [`meta/smb_mapping.schema.json`](../schema/logs/meta/smb_mapping.schema.json) |
+| `meta/ssh` | 선별 전송: ssh | `/log/zeek/meta/ssh.log` | 12 | [`meta/ssh.schema.json`](../schema/logs/meta/ssh.schema.json) |
+| `meta/ssl` | 선별 전송: ssl | `/log/zeek/meta/ssl.log` | 12 | [`meta/ssl.schema.json`](../schema/logs/meta/ssl.schema.json) |
 | `meta/stats` | 선별 전송: stats | `/log/zeek/meta/stats.log` | 27 | [`meta/stats.schema.json`](../schema/logs/meta/stats.schema.json) |
 
 ## 탐지 요약 (`nsm_detection`)
@@ -281,6 +281,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `resp_p` | integer | 필수 |  |  |
 | `endpoint` | string |  |  |  |
 | `operation` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: http (`meta/http`)
 
@@ -299,6 +300,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `request_body_len` | integer | 필수 |  |  |
 | `response_body_len` | integer | 필수 |  |  |
 | `status_code` | integer |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 | `uri_path` | string |  |  |  |
 
 ## 선별 전송: kerberos (`meta/kerberos`)
@@ -319,6 +321,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `success` | boolean |  |  |  |
 | `error_msg` | string |  |  |  |
 | `cipher` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: ntlm (`meta/ntlm`)
 
@@ -336,6 +339,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `hostname` | string |  |  |  |
 | `domainname` | string |  |  |  |
 | `success` | boolean |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: rdp (`meta/rdp`)
 
@@ -352,6 +356,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `cookie` | string |  |  |  |
 | `result` | string |  |  |  |
 | `security_protocol` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: reporter (`meta/reporter`)
 
@@ -381,6 +386,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `name` | string |  |  |  |
 | `size` | integer | 필수 |  |  |
 | `prev_name` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: smb_mapping (`meta/smb_mapping`)
 
@@ -396,6 +402,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `resp_p` | integer | 필수 |  |  |
 | `path` | string |  |  |  |
 | `share_type` | string | 필수 |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: ssh (`meta/ssh`)
 
@@ -414,6 +421,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `direction` | string |  |  |  |
 | `client` | string |  |  |  |
 | `server` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: ssl (`meta/ssl`)
 
@@ -432,6 +440,7 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 | `server_name` | string |  |  |  |
 | `established` | boolean | 필수 |  |  |
 | `ja3` | string |  |  |  |
+| `community_id` | string |  | 형식 `^1:[A-Za-z0-9+/]{27}=$` | 연결의 Community ID v1(seed community_id_seed, 기본 0, base64). conn 5-tuple 로 계산하며 근거(evidence)의 community_id 와 같은 값이다. Manager 가 Suricata 경보 등 다른 제품의 이벤트와 연결 단위로 잇는 키(SURICATA_INTEGRATION_DESIGN 3.3) |
 
 ## 선별 전송: stats (`meta/stats`)
 
