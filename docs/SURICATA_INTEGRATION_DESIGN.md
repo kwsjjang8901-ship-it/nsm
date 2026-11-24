@@ -232,6 +232,8 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 
 S4를 S1과 함께 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다. 경보량이 크면 S1의 억제 기본값을 그에 맞춰 정합니다.
 
+S3 화면은 연동이 끝났을 때를 기준으로 [목업](../ui/mockup/mdsm_nsm_mockup.html)에 먼저 그려 두었습니다(9장 제안대로라고 가정: 근거 필드 `sig_*`·`stage_by`, 예외 파일 `sid` 칸, Low는 시작점만 아님). 화면 목록은 [`ui/README.md`](../ui/README.md)의 "Suricata 연동 화면"에 있습니다.
+
 ## 8. surica DESIGN 0.2에서 바꿀 점
 
 | 항목 | 0.2 | 바꿀 내용 |

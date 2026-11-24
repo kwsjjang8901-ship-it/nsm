@@ -83,6 +83,7 @@ table.t{width:100%;border-collapse:collapse}
 .nw,.t td.nw{white-space:nowrap}
 .tw{overflow-x:auto}
 .sub{display:block;font-size:11px;color:var(--ink3);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.chip.sig{background:#e6f4f1;color:#0f766e}
 .chip{display:inline-block;background:#eef1f5;border-radius:3px;padding:0 5px;font-size:11px;color:var(--ink2);margin:1px 2px 1px 0;white-space:nowrap}
 .chip.warn{background:var(--high-bg);color:var(--high)}.chip.bad{background:var(--crit-bg);color:var(--crit)}.chip.ok{background:var(--low-bg);color:var(--low)}.chip.sup{background:var(--med-bg);color:#8a6700}.chip.obs{background:var(--new-bg);color:var(--obs)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px}
@@ -213,6 +214,10 @@ pre.diff span{display:block}pre.diff .a{color:#1b7f3b;background:#e9f7ee}pre.dif
     <div class="panel"><h3>공격 단계별 탐지 <span class="r">공격이 어디까지 진행됐나</span></h3><div class="pbody" id="stages"></div></div>
     <div class="panel"><h3>센서 상태 <span class="r">패킷 수집과 기록 전송</span></h3><div class="pbody" id="sensorMini"></div></div>
   </div>
+  <div class="grid g2" style="margin-top:12px" id="sigRow">
+    <div class="panel"><h3>탐지 방식 <span class="r">행위 탐지(Zeek)·시그니처(Suricata)</span></h3><div class="pbody" id="engbox"></div></div>
+    <div class="panel"><h3>많이 나온 시그니처 <span class="r">상위 5개 · 누르면 시그니처 설정</span></h3><div class="pbody" id="sigtop"></div></div>
+  </div>
   <div class="grid g2" style="margin-top:12px">
     <div class="panel"><h3>탐지가 많은 PC·서버 <span class="r">상위 10대</span></h3><div class="tw"><table class="t" id="topAssets"></table></div></div>
     <div class="panel"><h3>최근 위험 탐지 <span class="r">Critical·High</span></h3><div class="tw"><table class="t" id="recent"></table></div></div>
@@ -270,6 +275,7 @@ pre.diff span{display:block}pre.diff .a{color:#1b7f3b;background:#e9f7ee}pre.dif
       <select class="sel" id="dSevF"><option value="">위험도 전체</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
       <select class="sel" id="dStageF"></select>
       <select class="sel" id="dTypeF"></select>
+      <select class="sel" id="dEngF"><option value="">탐지 방식 전체</option><option value="Zeek">행위 탐지(Zeek)</option><option value="Suricata">시그니처(Suricata)</option><option value="both">둘 다(같은 연결)</option></select>
       <select class="sel" id="dDispF"><option value="">처리 전체</option><option value="alert">알림</option><option value="suppressed">알림 끔(예외)</option></select>
       <input class="inp" id="dq" placeholder="탐지명·IP·계정·이벤트 ID" style="width:220px">
       <label class="note"><input type="checkbox" id="dCorr"> 여러 단계로 이어진 공격만</label>
@@ -419,6 +425,27 @@ const RULES=[
  ['21','SMB_Ransomware','랜섬웨어 의심(파일 대량 변경)','Impact','T1486','Critical','1분 안에 확장자 변경 30개',1],
 ];
 const R={};RULES.forEach(r=>R[r[1]]={file:r[0],note:r[1],ko:r[2],stage:r[3],tech:r[4],sev:r[5],cond:r[6],agg:!!r[7]});
+// ---- Suricata 시그니처 경보(docs/SURICATA_INTEGRATION_DESIGN.md): 센서(Zeek)가 경보 파일을 읽어 단계별 탐지 8종으로 바꾸고
+//   예외·사건 묶기·킬체인·공격 스토리를 행위 탐지와 같은 흐름으로 처리한다. 화면에서는 "시그니처" 표시로 구분한다.
+const SURI_NOTES=[['Suricata_Recon','Recon'],['Suricata_Initial_Access','Initial Access'],['Suricata_C2','Command and Control'],['Suricata_Credential','Credential Access'],['Suricata_Lateral','Lateral Movement'],['Suricata_Exfil','Exfiltration'],['Suricata_Impact','Impact'],['Suricata_Other','']];
+const SURI_DIAG={Recon:'Recon','Initial Access':'InitialAccess','Command and Control':'C2','Credential Access':'CredentialAccess','Lateral Movement':'Lateral',Exfiltration:'Exfil',Impact:'Impact','':'Other'};
+const stageKo=s=>s?STAGE_KO[s]:'단계 없음';
+SURI_NOTES.forEach(([n,st])=>R[n]={file:'S',note:n,ko:'시그니처 · '+stageKo(st),stage:st,tech:'',sev:'',cond:'Suricata 시그니처 경보'+(st?` (단계: ${STAGE_KO[st]})`:' (단계 없음: 정책 위반 등, 공격 스토리 시작점이 되지 않음)'),agg:false,sig:true});
+// Suricata 우선순위(1이 가장 높음) → 화면 위험도(설계 4.3). Critical은 주지 않고, 목적지가 DC·DB면 한 단계 올린다(ROLE_UP)
+const SURI_SEV={1:'High',2:'Medium',3:'Low',4:'Low'};let ROLE_UP=true;
+const BYKO={mitre:'룰 메타데이터(mitre_tactic_id)',classtype:'분류(classtype)',sid_map:'사내 지정(SID 단계 표)'};
+// 예시 시그니처: SID·이름은 화면 설명용 예시입니다(실제 룰 번호와 다를 수 있음). cat=ET 카테고리, cls=classtype, pri=우선순위
+const SIGS={
+ 2026001:{rev:4,msg:'ET WEB_SERVER Possible SQL Injection (UNION SELECT) in URI',cat:'web_server',cls:'web-application-attack',pri:1,stage:'Initial Access',by:'classtype',tech:'T1190'},
+ 2026002:{rev:2,msg:'ET MALWARE Observed Cobalt Strike Default TLS Certificate',cat:'malware',cls:'command-and-control',pri:1,stage:'Command and Control',by:'mitre',tech:'T1071.001'},
+ 2026003:{rev:3,msg:'ET EXPLOIT Ivanti Connect Secure Authentication Bypass (CVE-2023-46805)',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Initial Access',by:'mitre',tech:'T1190'},
+ 2026004:{rev:2,msg:'ET EXPLOIT Ivanti Connect Secure Command Injection (CVE-2024-21887)',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Initial Access',by:'mitre',tech:'T1190'},
+ 2026005:{rev:1,msg:'ET MALWARE Possible Sliver C2 HTTP Beacon',cat:'malware',cls:'trojan-activity',pri:1,stage:'Command and Control',by:'mitre',tech:'T1071.001'},
+ 2026006:{rev:5,msg:'ET SCAN Nmap Scripting Engine User-Agent Detected',cat:'scan',cls:'attempted-recon',pri:3,stage:'Recon',by:'classtype',tech:'T1595.002'},
+ 2026007:{rev:6,msg:'ET EXPLOIT Possible ETERNALBLUE MS17-010 Exploit Attempt',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Lateral Movement',by:'sid_map',tech:'T1210'},
+ 9000001:{rev:1,msg:'[사내] 승인 안 된 원격 제어 도구 접속(AnyDesk)',cat:'사내 룰',cls:'policy-violation',pri:2,stage:'',by:'classtype',tech:''},
+};
+const engTag=e=>!e?'':e.eng==='Suricata'?' <span class="chip sig">시그니처</span>':e.also?' <span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지했습니다">+시그니처</span>':'';
 // 쉬운 설명 · 확인할 것
 const GUIDE={
  Port_Scan:['어떤 서비스가 열려 있는지 포트를 하나씩 두드려 봅니다.','출발지가 점검 장비인지 확인하고, 아니면 같은 장비의 다른 탐지를 함께 봅니다.'],
@@ -505,6 +532,7 @@ const ASSETS=[
  {ip:'10.10.10.70',host:'AI-GPU-01',role:'AI 서버',os:'Ubuntu 22.04',mac:'00:11:22:33:44:70',agent:[],key:['호스트 이름',80],last:'11-18 10:45',svc:['tcp/8265','tcp/11434']},
  {ip:'10.10.10.80',host:'PC-80',role:'업무 PC',os:'macOS 15',mac:'00:11:22:33:44:80',agent:[],key:['호스트 이름',70],last:'11-18 10:46',svc:[]},
  {ip:'10.10.10.91',host:'raspberrypi',role:'',os:'Linux',mac:'b8:27:eb:12:34:91',agent:[],key:['호스트 이름',70],last:'11-18 10:40',svc:['tcp/22']},
+ {ip:'10.10.0.5',host:'VPN-GW-01',role:'VPN 장비',os:'',mac:'00:11:22:33:00:05',agent:[],key:['호스트 이름',70],last:'11-18 10:50',svc:['tcp/443']},
  {ip:'10.10.0.15',host:'PROXY-01',role:'프록시',os:'Linux',mac:'00:11:22:33:00:15',agent:[],key:['호스트 이름',70],last:'11-18 10:50',svc:['tcp/3128']},
  {ip:'10.10.10.1',host:'CORE-SW-01',role:'',os:'Cisco IOS 15.2',mac:'00:1b:54:3c:10:01',agent:[],key:['SNMP 장비 이름',70],last:'11-18 10:50',svc:['udp/161','tcp/22']},
  {ip:'10.10.10.100',host:'PRN-3F-01',role:'프린터',os:'',mac:'3c:2a:f4:51:00:64',agent:[],key:['SNMP 장비 이름',70],last:'11-18 10:42',svc:['tcp/9100','udp/161','tcp/80']},
@@ -546,6 +574,10 @@ const conf=c=>c>=85?'높음':c>=60?'보통':'낮음';
 // =============================================================== 탐지 데이터
 let seq=1024;const EV=[];
 function nsm(t,note,src,dst,extra={}){const r=R[note];EV.push(Object.assign({id:'NSM-2611180'+(seq++),prod:'NSM',t,note,name:r.ko,diag:'NSM.'+note,stage:r.stage,tech:r.tech,sev:r.sev,src,dst,sensor:'NSM-SENSOR-01',occ:1},extra))}
+// 시그니처 탐지: 단계·진단명·기법·위험도는 시그니처 정의(SIGS)와 변환표(SURI_SEV)에서 정한다
+function suri(t,sid,src,dst,extra={}){const g=SIGS[sid],note=SURI_NOTES.find(x=>x[1]===g.stage)[0];
+  let sv=SURI_SEV[g.pri];const up=ROLE_UP&&A[dst]&&/도메인 컨트롤러|DB 서버/.test(A[dst].role)&&SEV.indexOf(sv)>0;if(up)sv=SEV[SEV.indexOf(sv)-1];   // 목적지가 DC·DB면 한 단계 위
+  EV.push(Object.assign({id:'NSM-2611180'+(seq++),prod:'NSM',eng:'Suricata',t,note,name:g.msg,diag:'NSM.Signature.'+SURI_DIAG[g.stage],stage:g.stage,tech:g.tech,sev:sv,roleUp:up,sid,sig:g,src,dst,sensor:'NSM-SENSOR-01',occ:1},extra))}
 function other(prod,t,name,src,dst,sev,extra={}){EV.push(Object.assign({id:prod+'-2611180'+(seq++),prod,t,name,src,dst,sev,sensor:prod==='MDS'?'MDS-01':'MTA-01'},extra))}
 nsm('09:02','Port_Scan','198.51.100.23','10.10.10.5',{proto:'tcp',port:'-',ev:[['포트 스캔','두드린 포트 31개(22, 80, 443, 8080 …), 응답 없음·거부']]});
 nsm('09:06','SQL_Injection','198.51.100.23','10.10.10.5',{proto:'tcp',port:80,ev:[['웹 요청',"GET /item.php?id=1' union select user,pass from users--"]]});
@@ -566,6 +598,20 @@ nsm('10:33','Host_Scan','10.10.10.50','10.10.10.0/24',{proto:'tcp',port:445,ev:[
 nsm('10:41','Encrypted_C2','10.10.10.40','203.0.113.120',{proto:'tcp',port:443,ev:[['수상한 인증서','자체 서명(2점) + 도메인 이름 없음(1점) = 3점']]});
 nsm('10:36','DNS_Tunneling','10.10.10.80','tun.example-c2.net',{proto:'udp',port:53,ev:[['DNS 터널','무작위 이름 86개, 수상한 비율 91%']]});
 nsm('10:44','Exfil_DNS','10.10.10.80','tun.example-c2.net',{proto:'udp',port:53,ev:[['DNS로 보낸 양','5분 동안 조회 이름에 담아 412KB, 도메인 tun.example-c2.net']]});
+// 시그니처 탐지 예시
+//  - same: 같은 연결·같은 단계의 행위 탐지(Zeek)가 있으면 화면에서 한 탐지로 묶는다(설계 6.2)
+suri('09:06',2026001,'198.51.100.23','10.10.10.5',{proto:'tcp',port:80,same:'SQL_Injection',cid:'1:pH0v5Q2nWm8sLkR3tYcA9dZe1Xo=',ev:[['시그니처','ET WEB_SERVER Possible SQL Injection (UNION SELECT) in URI (SID 2026001 rev 4)'],['분류','web_server · web-application-attack · 우선순위 1']]});
+suri('09:25',2026002,'10.10.10.5','203.0.113.40',{proto:'tcp',port:443,sni:'update-check.example',same:'TLS_Beaconing',cid:'1:Qe7cT1bVn4kJm2Xs8RdF0wYz5Ag=',ev:[['시그니처','ET MALWARE Observed Cobalt Strike Default TLS Certificate (SID 2026002 rev 2)'],['분류','malware · command-and-control · 우선순위 1']]});
+suri('10:31',2026007,'10.10.10.32','10.10.10.20',{proto:'tcp',port:445,cid:'1:Zk3mP8rT2wQ5vY1nB7cX4hL9sDa=',ev:[['시그니처','ET EXPLOIT Possible ETERNALBLUE MS17-010 Exploit Attempt (SID 2026007 rev 6)'],['분류','exploit · attempted-admin · 우선순위 1'],['단계','사내 SID 단계 표에서 "확산"으로 지정(내부 → 내부 공격)']]});
+suri('10:12',2026003,'203.0.113.70','10.10.0.5',{proto:'tcp',port:443,occ:2,cid:'1:Lm4nB8vC2xZ6qW1eR9tY3uI7oPa=',ev:[['시그니처','ET EXPLOIT Ivanti Connect Secure Authentication Bypass (CVE-2023-46805) (SID 2026003 rev 3)'],['시그니처','ET EXPLOIT Ivanti Connect Secure Command Injection (CVE-2024-21887) (SID 2026004 rev 2), 1분 뒤 같은 사건으로 묶음'],['분류','exploit · attempted-admin · 우선순위 1']]});
+suri('10:20',2026005,'10.10.0.5','203.0.113.71',{proto:'tcp',port:80,occ:5,host:'cdn-static.example',cid:'1:Vb6nM2cX8zA4sD1fG7hJ3kL5qWe=',ev:[['시그니처','ET MALWARE Possible Sliver C2 HTTP Beacon (SID 2026005 rev 1)'],['분류','malware · trojan-activity · 우선순위 1'],['반복','30분 동안 5번(같은 사건)']]});
+nsm('10:29','AD_Enumeration','10.10.0.5','10.10.10.10',{proto:'tcp',port:445,victims:['10.10.10.10','10.10.10.11','10.10.10.20','10.10.10.30','10.10.10.31','10.10.10.32','10.10.10.40','10.10.10.5','10.10.10.8','10.10.10.80'],ev:[['AD 정보 수집','5분 동안 10대에 로그온 사용자·관리자 그룹 조회(srvsvc NetSessionEnum, samr)']]});
+suri('09:15',2026001,'10.10.0.50','10.10.10.5',{proto:'tcp',port:80,disp:'suppressed',exc:'X-scan-web-sig',cid:'1:Rt5yU1iO7pA3sD9fG2hJ6kL4zXc=',ev:[['시그니처','ET WEB_SERVER Possible SQL Injection (UNION SELECT) in URI (SID 2026001 rev 4)'],['예외','웹 취약점 점검 장비라 알림만 끔(X-scan-web-sig, 시그니처 조건)']]});
+suri('08:22',2026006,'10.10.10.50','10.10.10.40',{proto:'tcp',port:8080,cid:'1:Ws2eD8rF4tG6yH1uJ9iK3oL7pMn=',ev:[['시그니처','ET SCAN Nmap Scripting Engine User-Agent Detected (SID 2026006 rev 5)'],['분류','scan · attempted-recon · 우선순위 3(Low라 공격 스토리 시작점이 되지 않음)']]});
+suri('09:48',9000001,'10.10.10.8','203.0.113.33',{proto:'tcp',port:443,cid:'1:Ex9rT3yU5iO1pA7sD2fG8hJ4kLz=',ev:[['시그니처','[사내] 승인 안 된 원격 제어 도구 접속(AnyDesk) (SID 9000001 rev 1)'],['분류','사내 룰 · policy-violation · 우선순위 2, 공격 단계 없음']]});
+(function(){let x=11;const rnd=()=>(x=(x*1103515245+12345)%2147483648)/2147483648;
+ for(let i=0;i<9;i++){const sid=rnd()<0.6?2026006:9000001,h=7+Math.floor(rnd()*4),m=Math.floor(rnd()*60);
+  suri(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),sid,['10.10.10.8','10.10.10.31','10.10.10.80'][Math.floor(rnd()*3)],sid===2026006?'10.10.10.'+(10+Math.floor(rnd()*30)):'203.0.113.'+(30+Math.floor(rnd()*9)),{proto:'tcp',port:sid===2026006?80:443,ev:[['-','평시 시그니처 예시']]})}})();
 (function(){let x=7;const rnd=()=>(x=(x*1103515245+12345)%2147483648)/2147483648;
  const kinds=[['Port_Scan',4],['Host_Scan',3],['Nonstandard_Port',5],['HTTP_Beaconing',4],['TLS_Beaconing',3],['SSH_Bruteforce',2],['Long_Connection',2],['Encrypted_C2',1],['NTLM_Spray',1]];
  const pool=[];kinds.forEach(k=>{for(let i=0;i<k[1];i++)pool.push(k[0])});
@@ -582,7 +628,10 @@ other('MTA','08:55','악성 메일 첨부','203.0.113.60','user31@corp.example',
 other('MTA','09:20','피싱 URL','203.0.113.61','user08@corp.example','Medium',{file:'-',action:'태그'});
 other('MTA','10:40','스팸 대량 발송','203.0.113.62','다수','Low',{file:'-',action:'차단'});
 EV.sort((a,b)=>b.t.localeCompare(a.t));
-const nsmEv=()=>EV.filter(e=>e.prod==='NSM');
+// 같은 연결·같은 단계의 Zeek 탐지와 Suricata 경보는 한 탐지로 보여 준다(Zeek 탐지 쪽에 묶음, 알림은 먼저 온 쪽으로 한 번)
+function linkSame(){EV.filter(e=>e.eng==='Suricata'&&e.same).forEach(x=>{const z=EV.find(e=>!e.eng&&e.note===x.same&&e.src===x.src&&e.dst===x.dst);if(z){(z.also=z.also||[]).push(x.id);x.mergedInto=z.id}})}
+linkSame();
+const nsmEv=()=>EV.filter(e=>e.prod==='NSM'&&!e.mergedInto);
 const evOf=(note,src)=>EV.find(e=>e.note===note&&e.src===src&&e.ev&&e.ev[0][0]!=='-');
 
 // 통신 기록(선별 메타데이터) — 같은 시간대 통신
@@ -608,7 +657,7 @@ function metaFor(e){if(e.meta)return e.meta;const t=tmin(e.t),v=e.victims||[e.ds
 // steps: [번호, 탐지(note, src), 시각, 단계, 출발, 대상, 쉬운 문장, 확정 여부]
 const STORIES=[
  {id:'ST-0118-01',title:'외부에서 웹서버 침투 → 내부 확산 → 랜섬웨어',seed:'198.51.100.23',sev:'Critical',status:'조사 중',owner:'김보안',
-  first:'08:51',firstDet:'09:02',last:'10:26',dwell:'11분',
+  first:'08:51',firstDet:'09:02',last:'10:31',dwell:'11분',
   steps:[
    [1,['Port_Scan','198.51.100.23'],'09:02','Recon','198.51.100.23','10.10.10.5','외부 198.51.100.23이 웹서버(WEB-SERVER-01)의 열린 포트를 찾았습니다(31개 두드림).',1],
    [2,['SQL_Injection','198.51.100.23'],'09:06','Initial Access','198.51.100.23','10.10.10.5','웹서버의 상품 페이지에 SQL 공격 문장을 보냈습니다.',1],
@@ -619,6 +668,7 @@ const STORIES=[
    [7,['Remote_Service_Creation','10.10.10.5'],'10:09','Lateral Movement','10.10.10.5','10.10.10.32','웹서버가 PC-32에 원격 서비스(PSEXESVC)를 만들어 프로그램을 실행했습니다.',1],
    [8,['Exfil_Large_Transfer','10.10.10.31'],'10:18','Exfiltration','10.10.10.31','203.0.113.77','PC-31이 외부 files.transfer-host.example로 184MB를 올렸습니다.',1],
    [9,['SMB_Ransomware','10.10.10.32'],'10:26','Impact','10.10.10.32','10.10.10.30','PC-32가 파일 서버(FS-01)의 파일 212개 이름을 .lockd로 바꾸고 협박 안내 파일을 만들었습니다.',1],
+   [10,['Suricata_Lateral','10.10.10.32'],'10:31','Lateral Movement','10.10.10.32','10.10.10.20','PC-32가 DB 서버(DB-01)에 EternalBlue(MS17-010) 취약점 공격을 보냈습니다. 시그니처로 탐지했고, 목적지가 DB 서버라 위험도를 한 단계 올렸습니다.',1],
   ],
   obs:[
    ['08:51','외부 198.51.100.23이 웹서버의 웹 페이지에 처음 접속했습니다(첫 흔적).','first'],
@@ -643,6 +693,12 @@ const STORIES=[
   ],obs:[],infra:[],moves:[],skipped:{prior:0,common:0},ext:[],obsHosts:[]},
  {id:'ST-0118-04',title:'DEV-LNX-02의 수상한 암호화 통신',seed:'10.10.10.40',sev:'High',status:'신규',owner:'',first:'10:41',firstDet:'10:41',last:'10:41',dwell:'0분',single:true,
   steps:[[1,['Encrypted_C2','10.10.10.40'],'10:41','Command and Control','10.10.10.40','203.0.113.120','DEV-LNX-02가 자체 서명 인증서를 쓰는 외부 서버와 암호화 통신을 했습니다.',1]],obs:[],infra:[],moves:[],skipped:{prior:0,common:0},ext:['203.0.113.120'],obsHosts:[]},
+ {id:'ST-0118-05',title:'VPN 장비 취약점 공격 → 장비가 외부 서버와 연락 → AD 정보 수집',seed:'203.0.113.70',sev:'High',status:'신규',owner:'',first:'10:12',firstDet:'10:12',last:'10:29',dwell:'0분',
+  steps:[
+   [1,['Suricata_Initial_Access','203.0.113.70'],'10:12','Initial Access','203.0.113.70','10.10.0.5','외부 203.0.113.70이 VPN 장비(VPN-GW-01)에 인증 우회(CVE-2023-46805)와 명령 삽입(CVE-2024-21887) 공격을 보냈습니다. 시그니처 2개를 같은 사건으로 묶었습니다.',1],
+   [2,['Suricata_C2','10.10.0.5'],'10:20','Command and Control','10.10.0.5','203.0.113.71','VPN 장비가 외부 cdn-static.example(203.0.113.71)에 Sliver C2 형식으로 접속하기 시작했습니다(시그니처, 30분 동안 5번).',1],
+   [3,['AD_Enumeration','10.10.0.5'],'10:29','Recon','10.10.0.5','10.10.10.10','VPN 장비가 DC와 PC 10대에 로그온 사용자·관리자 그룹을 물어봤습니다(행위 탐지). 침투한 장비에서 내부를 살피는 단계입니다.',1],
+  ],obs:[],infra:[['cdn-static.example (203.0.113.71)',[['10.10.0.5','스토리 안','11-18 10:20 ~ 10:48','5회']],0]],moves:[],skipped:{prior:0,common:0},ext:['203.0.113.70','203.0.113.71'],obsHosts:[]},
 ];
 let SINGLE_HIDDEN=11;
 STORIES.forEach(s=>{s.steps.forEach(x=>{const e=evOf(x[1][0],x[1][1]);x.push(e?e.id:null)});s.reached=[...new Set(s.steps.map(x=>STAGES.indexOf(x[3])))].sort((a,b)=>a-b);s.hosts=[...new Set(s.steps.flatMap(x=>[x[4],x[5]]).filter(ip=>isInt(ip)&&!ip.includes('/')))]});
@@ -651,7 +707,7 @@ const stg=s=>`<span class="stg">${STAGES.map((_,i)=>`<i class="${s.reached.inclu
 
 // =============================================================== 센서·엔진
 const SENSORS=[
- {name:'NSM-SENSOR-01',ip:'10.10.0.11',grp:'본사 센서',st:'ok',hb:'10:50:12',cpu:38,mem:61,disk:44,ifc:'eth5 (SPAN)',pps:'182K',bps:'1.42 Gbps',sig:'2026.11.17',ioc:'2026.07.22',loss:0.02,zeek:'실행 중',suri:'실행 중',lag:'12초',send:'정상',eng:'2026.11.17-r3',zv:'9.0.1'},
+ {name:'NSM-SENSOR-01',ip:'10.10.0.11',grp:'본사 센서',st:'ok',hb:'10:50:12',cpu:38,mem:61,disk:44,ifc:'eth5 (SPAN)',pps:'182K',bps:'1.42 Gbps',sig:'2026.11.17',ioc:'2026.07.22',loss:0.02,zeek:'실행 중',suri:'실행 중',suriv:'8.0.6',sigv:'ET Open 2026.11.17 + 사내 12',sAlert:318,sDrop:0.01,lag:'12초',send:'정상',eng:'2026.11.17-r3',zv:'9.0.1'},
  {name:'NSM-SENSOR-02',ip:'10.20.0.11',grp:'본사 센서',st:'warn',hb:'10:49:58',cpu:71,mem:83,disk:79,ifc:'eth3 (TAP)',pps:'96K',bps:'0.81 Gbps',sig:'2026.11.17',ioc:'2026.07.22',loss:1.84,zeek:'실행 중',suri:'사용 안 함',lag:'4분 10초',send:'지연',eng:'2026.11.17-r3',zv:'9.0.1'},
  {name:'NSM-SENSOR-03',ip:'10.30.0.11',grp:'지사 센서',st:'bad',hb:'09:12:40',cpu:0,mem:0,disk:52,ifc:'eth1 (SPAN)',pps:'-',bps:'-',sig:'2026.11.10',ioc:'2026.07.22',loss:0,zeek:'응답 없음',suri:'응답 없음',lag:'1시간 38분',send:'실패',eng:'2026.11.10-r1',zv:'8.0.9'},
 ];
@@ -666,6 +722,7 @@ document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(!
   if(k==='det'){openDet(g.dataset.id)}
   if(k==='story'){closeDrawer();closeModal();show('nsm');nsmTab('story');openStory(g.dataset.id,g.dataset.n,g.dataset.tab)}
   if(k==='retro'){closeDrawer();show('nsm');nsmTab('retro');$('#iocIn').value=g.dataset.q;runRetro()}
+  if(k==='sigrule'){closeDrawer();if(typeof closeModal==='function')closeModal();show('admin');RKIND='sig';SIGQ=g.dataset.sid||'';adm('rules')}
   if(k==='rule'){closeDrawer();if(typeof closeModal==='function')closeModal();show('admin');adm('rules');openRule(g.dataset.n)}
   if(k==='exc-new'){closeDrawer();excForm(null,JSON.parse(g.dataset.pre))}
 });
@@ -679,7 +736,7 @@ function renderDash(){renderAssetStrip();
   $('#dashStories').innerHTML=`<tr><th>공격 스토리</th><th>어디까지 왔나</th><th>시작</th><th>마지막 활동</th><th class="num">관련 PC·서버</th><th>위험도</th><th>상태</th><th>대응</th></tr>`+open.map(s=>`<tr class="click" data-go="story" data-id="${s.id}"><td><b>${esc(s.title)}</b></td><td class="nw">${stg(s)} <span class="note">${STAGE_KO[STAGES[Math.max(...s.reached)]]}</span></td><td class="nw">${s.d||DAY} ${s.first}</td><td class="nw">${s.d2||s.d||DAY} ${s.last}</td><td class="num">${s.hosts.length}</td><td>${sev(s.sev)}</td><td><span class="chip ${s.status==='조사 중'?'warn':''}">${s.status}</span></td><td><a data-go="story" data-id="${s.id}" data-tab="resp">${respCell(s)}</a></td></tr>`).join('');
   const tot=act.length||1;
   $('#sevbox').innerHTML=`<div class="stack">${SEV.map(s=>`<i style="width:${100*bySev[s]/tot}%;background:${SEVC[s]}"></i>`).join('')}</div><div class="leg">${SEV.map(s=>`<span><i style="background:${SEVC[s]}"></i>${s} <b>${bySev[s]}</b></span>`).join('')}</div>
-   <div class="note" style="margin-top:10px">${REPORT?'센서가 정한 등급입니다. 단독 탐지는 Information, 여러 단계가 이어진 상관 탐지는 Suspicious입니다.':''}</div><div class="note" style="margin-top:10px;${REPORT?'display:none':''}">네트워크 탐지는 원래 위험도가 없어서 탐지 종류마다 위험도를 정해 둡니다. <a onclick="show('admin');adm('rules')">관리 › NSM 룰 정책</a>에서 바꿀 수 있습니다. Suricata 탐지는 Suricata가 정한 위험도를 그대로 씁니다.</div>`;
+   <div class="note" style="margin-top:10px">${REPORT?'센서가 정한 등급입니다. 단독 탐지는 Information, 여러 단계가 이어진 상관 탐지는 Suspicious입니다.':''}</div><div class="note" style="margin-top:10px;${REPORT?'display:none':''}">네트워크 탐지는 원래 위험도가 없어서 탐지 종류마다 위험도를 정해 둡니다. <a onclick="show('admin');adm('rules')">관리 › NSM 룰 정책</a>에서 바꿀 수 있습니다. 시그니처(Suricata) 탐지는 Suricata 우선순위를 위험도로 바꾸고, 목적지가 DC·DB 서버면 한 단계 올립니다(관리 › NSM 룰 정책 › 시그니처 룰).</div>`;
   const W=640,H=170,pl=28,pb=20,bw=(W-pl-8)/24,series=[...Array(24)].map(()=>SEV.map(()=>0));act.forEach(e=>series[+e.t.slice(0,2)][SEV.indexOf(e.sev)]++);
   const mx=Math.max(4,...series.map(s=>s.reduce((a,b)=>a+b,0)));let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" class="svgt">`;
   for(let i=0;i<=4;i++){const y=8+(H-pb-8)*i/4;svg+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" stroke="#eef1f5"/><text x="${pl-4}" y="${y+4}" text-anchor="end">${Math.round(mx*(1-i/4))}</text>`}
@@ -692,7 +749,19 @@ function renderDash(){renderAssetStrip();
   $('#sensorMini').innerHTML=SENSORS.map(s=>`<div style="display:flex;gap:8px;align-items:center;margin:6px 0"><span class="dot ${s.st}"></span><b style="width:120px">${s.name}</b><span class="note">패킷 누락 ${s.loss}% · 마지막 전송 ${s.lag} 전</span></div>`).join('')+`<a onclick="show('devices')" class="note">장비 현황에서 보기 →</a>`;
   const ac={};act.forEach(e=>[e.src,...(e.victims||[e.dst])].forEach(ip=>{if(A[ip]){ac[ip]=ac[ip]||{n:0,s:3};ac[ip].n++;ac[ip].s=Math.min(ac[ip].s,SEV.indexOf(e.sev))}}));
   $('#topAssets').innerHTML=`<tr><th>이름</th><th>IP</th><th>역할</th><th class="num">탐지</th><th>가장 높은 위험도</th></tr>`+Object.entries(ac).sort((a,b)=>a[1].s-b[1].s||b[1].n-a[1].n).slice(0,10).map(([ip,v])=>`<tr class="click" data-go="asset" data-ip="${ip}"><td><b>${esc(A[ip].host||'(이름 없음)')}</b></td><td class="mono">${ip}</td><td>${esc(A[ip].role)}</td><td class="num">${v.n}</td><td>${sev(SEV[v.s])}</td></tr>`).join('');
+  renderEngBox(act);
   $('#recent').innerHTML=`<tr><th>시각</th><th>탐지</th><th>출발지 → 목적지</th><th>위험도</th></tr>`+act.filter(e=>REPORT||e.sev==='Critical'||e.sev==='High').sort((x,y)=>SEV.indexOf(x.sev)-SEV.indexOf(y.sev)||y.t.localeCompare(x.t)).slice(0,8).map(e=>`<tr class="click" data-go="det" data-id="${e.id}"><td>${e.t}</td><td>${esc(e.name)}</td><td>${who(e.src)} → ${dstCell(e)}</td><td>${sev(e.sev)}</td></tr>`).join('');
+}
+
+// 탐지 방식별 건수와 많이 나온 시그니처(Suricata를 쓰지 않는 센서·리포트에서는 숨김)
+function renderEngBox(act){
+  const one=act.filter(e=>!e.corr),sig=one.filter(e=>e.eng==='Suricata'),both=one.filter(e=>e.also).length;
+  $('#sigRow').style.display=sig.length||both?'':'none';if(!sig.length&&!both)return;
+  const rows=[['행위 탐지(Zeek)',one.length-sig.length,'#5b8def'],['시그니처(Suricata)',sig.length,'#0f766e'],['같은 연결에서 둘 다',both,'#7c3aed']],m=Math.max(...rows.map(r=>r[1]),1);
+  $('#engbox').innerHTML=rows.map(r=>`<div class="hbar"><span>${r[0]}</span><span class="b"><i style="width:${100*r[1]/m}%;background:${r[2]}"></i></span><span class="num">${r[1]}</span></div>`).join('')+
+   `<div class="note" style="margin-top:8px">시그니처 탐지도 공격 단계별로 나뉘어 같은 공격 스토리·예외·반복 묶기에 들어갑니다. 같은 연결에서 행위 탐지와 시그니처가 함께 나오면 한 탐지로 보여 줍니다.</div>`;
+  const c={};sig.forEach(e=>{c[e.sid]=(c[e.sid]||0)+(e.occ||1)});const top=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,5),tm=Math.max(1,...top.map(x=>x[1]));
+  $('#sigtop').innerHTML=top.map(([sid,v])=>`<div class="hbar" style="grid-template-columns:minmax(0,1fr) 120px 40px;cursor:pointer" data-go="sigrule" data-sid="${sid}" title="${esc(SIGS[sid].msg)}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(SIGS[sid].msg)}</span><span class="b"><i style="width:${100*v/tm}%;background:#0f766e"></i></span><span class="num">${v}</span></div>`).join('');
 }
 
 // =============================================================== 탐지 현황(MDS·MTA)
@@ -732,7 +801,7 @@ function openStory(id,hl,tab){
   const board=STAGES.map((st,i)=>{const ns=s.steps.filter(x=>x[3]===st);return `<div class="${ns.length?'on':''} ${i===lastStage?'last':''}"><h4>${STAGE_KO[st]}</h4>${ns.map(x=>`<span class="nbadge" title="${esc(x[6])}" onclick="hlStep(${x[0]})">${x[0]}</span>`).join('')||'<span class="note">-</span>'}</div>`}).join('');
   // 내러티브: 탐지 + 관측을 시간순
   const items=[...s.steps.map(x=>({t:x[2],step:x})),...(showObs?s.obs.map(o=>({t:o[0].length>5?'00:00'+o[0]:o[0],obs:o})):[])].sort((a,b)=>a.t.localeCompare(b.t));
-  const narr=items.map(it=>it.step?`<li id="sn${it.step[0]}" ${String(hl)===String(it.step[0])?'class="hl"':''}><span class="tm">${it.step[2]}</span><span><span class="nbadge">${it.step[0]}</span></span><span>${esc(it.step[6])} <span class="chip">${STAGE_KO[it.step[3]]}</span><div class="ev">${(evById(it.step[8])||{ev:[]}).ev.map(v=>esc(v[0]+': '+v[1])).join(' · ')} ${it.step[8]?`· <a data-go="det" data-id="${it.step[8]}">탐지 상세</a>`:''}</div></span></li>`:
+  const narr=items.map(it=>it.step?`<li id="sn${it.step[0]}" ${String(hl)===String(it.step[0])?'class="hl"':''}><span class="tm">${it.step[2]}</span><span><span class="nbadge">${it.step[0]}</span></span><span>${esc(it.step[6])} <span class="chip">${esc(stageKo(it.step[3]))}</span>${engTag(evById(it.step[8]))}<div class="ev">${(evById(it.step[8])||{ev:[]}).ev.map(v=>esc(v[0]+': '+v[1])).join(' · ')} ${it.step[8]?`· <a data-go="det" data-id="${it.step[8]}">탐지 상세</a>`:''}</div></span></li>`:
    `<li class="obs"><span class="tm">${esc(it.obs[0].length>5?it.obs[0]:it.obs[0])}</span><span><span class="chip obs">관측</span></span><span>${esc(it.obs[1])}<div class="ev">통신 기록으로 본 내용입니다(탐지는 아님).</div></span></li>`).join('');
   el.innerHTML=`<div class="panel"><div class="pbody">
    <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap"><div><div style="font-size:18px;font-weight:700">${esc(s.title)}</div><div class="note">${s.id} · 시작 공격자 ${esc(s.seed)} · ${sev(s.sev)}</div></div>
@@ -955,30 +1024,34 @@ function storyGraph(s){
 
 // ---- NSM 탐지
 function renderDet(){
-  const s=$('#dSevF').value,st=$('#dStageF').value,ty=$('#dTypeF').value,dp=$('#dDispF').value,q=$('#dq').value.toLowerCase(),c=$('#dCorr').checked;
-  const rows=nsmEv().filter(e=>(!s||e.sev===s)&&(!st||e.stage===st)&&(!ty||e.note===ty)&&(!dp||(dp==='suppressed'?e.disp==='suppressed':e.disp!=='suppressed'))&&(!c||e.corr)&&(!q||JSON.stringify(e).toLowerCase().includes(q)));
+  const s=$('#dSevF').value,st=$('#dStageF').value,ty=$('#dTypeF').value,dp=$('#dDispF').value,q=$('#dq').value.toLowerCase(),c=$('#dCorr').checked,en=$('#dEngF').value;
+  const rows=nsmEv().filter(e=>(!s||e.sev===s)&&(!st||e.stage===st)&&(!ty||e.note===ty)&&(!en||(en==='both'?!!e.also:en==='Suricata'?e.eng==='Suricata'||!!e.also:e.eng!=='Suricata'))&&(!dp||(dp==='suppressed'?e.disp==='suppressed':e.disp!=='suppressed'))&&(!c||e.corr)&&(!q||JSON.stringify(e).toLowerCase().includes(q)));
   $('#detCount').textContent=`전체 ${rows.length}건`;
-  $('#detTable').innerHTML=`<tr><th>이벤트 ID</th><th>위험도</th><th>탐지명</th><th>공격 단계</th><th>출발지</th><th>목적지</th><th>포트</th><th>계정</th><th class="num">반복</th><th>처리</th><th>스토리</th><th>탐지 시각</th></tr>`+
-   rows.map(e=>{const st=storyOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}</td><td class="nw">${e.corr?'<span class="chip">7단계</span>':esc(STAGE_KO[e.stage])}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${st&&!st.single?`<span class="chip warn">${st.id}</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
+  $('#detTable').innerHTML=`<tr><th>이벤트 ID</th><th>위험도</th><th>탐지명</th><th>방식</th><th>공격 단계</th><th>출발지</th><th>목적지</th><th>포트</th><th>계정</th><th class="num">반복</th><th>처리</th><th>스토리</th><th>탐지 시각</th></tr>`+
+   rows.map(e=>{const st=storyOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}${e.sid?`<span class="sub">SID ${e.sid}</span>`:''}</td><td class="nw">${e.corr?'<span class="chip">상관</span>':e.eng==='Suricata'?'<span class="chip sig">시그니처</span>':'<span class="chip">행위</span>'+(e.also?'<span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지">+시그니처</span>':'')}</td><td class="nw">${e.corr?'<span class="chip">7단계</span>':esc(stageKo(e.stage))}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${st&&!st.single?`<span class="chip warn">${st.id}</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
 }
 function openDet(id){
   const e=evById(id);if(!e)return;
   const steps=e.stages||[e.stage],m=e.corr?[]:metaFor(e),v=e.victims||[e.dst],g=GUIDE[e.note],st=storyOf(e.id);
   const ext=[e.dst,...v].find(x=>x&&!isInt(x)&&!x.includes('/'));
   const iocQ=[...new Set([ext,e.sni,e.host].filter(Boolean))].join('\n');
+  const sg=e.sig,alsoEv=(e.also||[]).map(evById).filter(Boolean);
+  const sigBox=x=>`<dl class="kv"><dt>시그니처</dt><dd>${esc(x.sig.msg)}</dd><dt>SID · rev</dt><dd class="mono">${x.sid} · ${x.sig.rev}</dd><dt>분류</dt><dd>${esc(x.sig.cat)} · <span class="mono">${esc(x.sig.cls)}</span></dd><dt>위험도</dt><dd>Suricata 우선순위 ${x.sig.pri} → ${sev(SURI_SEV[x.sig.pri])}${x.roleUp?` → ${sev(x.sev)} <span class="note">목적지가 ${esc(A[x.dst].role)}라 한 단계 올림</span>`:''}</dd><dt>공격 단계</dt><dd>${esc(stageKo(x.stage))} <span class="note">정한 근거: ${BYKO[x.sig.by]}</span></dd>${x.cid?`<dt>Community ID</dt><dd class="mono">${esc(x.cid)}</dd>`:''}</dl>`;
   const stepN=st?(st.steps.find(x=>x[8]===e.id)||[])[0]:null;
   const body=`${st&&!st.single?`<div class="callout warn" style="margin-bottom:10px">이 탐지는 공격 스토리 <b>${esc(st.title)}</b>의 ${e.corr?'전체 흐름':stepN+'번째 단계'}입니다. <a data-go="story" data-id="${st.id}" data-n="${stepN||''}">공격 스토리 보기</a> · <a data-go="story" data-id="${st.id}" data-tab="resp">대응 보기</a></div>`:''}
    <div class="sec" style="margin-top:0">기본 정보</div>
    <dl class="kv"><dt>탐지 시각</dt><dd>${e.y||'2026'}-${e.d||DAY} ${e.t}${e.sec||':00'}</dd><dt>위험도</dt><dd>${sev(e.sev)}</dd><dt>탐지명</dt><dd>${esc(e.name)}</dd><dt>출발지</dt><dd>${who(e.src)}</dd><dt>목적지</dt><dd>${e.via?`<span class="mono">${esc(e.host||'목적지 확인 안 됨')}</span><div class="note">프록시 <span class="mono">${esc(e.via)}</span>(${esc(nm(e.dst))})를 거친 통신입니다. 프록시는 중계 장비라 피해 장비로 보지 않습니다</div>`:v.map(who).join('<br>')}</dd><dt>포트</dt><dd>${esc(e.port)}${e.proto?` (${esc(e.proto)})`:''}</dd>${e.account?`<dt>사용된 계정</dt><dd>${esc(e.account)}</dd>`:''}${e.occ>1?`<dt>반복</dt><dd>같은 공격이 이어져 ${e.occ}번 탐지됨(알림은 1번)</dd>`:''}${e.disp==='suppressed'?`<dt>처리</dt><dd><span class="chip sup">알림 끔</span> 예외 "${e.exc}"에 해당해 알림을 보내지 않았습니다.</dd>`:''}<dt>센서</dt><dd>${esc(e.sensor)}</dd></dl>
+   ${sg?`<div class="sec">시그니처 정보 <span class="chip sig">Suricata</span></div>${sigBox(e)}<div class="note">시그니처 탐지는 알려진 공격의 패턴(룰)과 일치한 통신입니다. 정상 프로그램이 같은 패턴을 쓰면 오탐이 될 수 있어, 같은 PC·서버의 행위 탐지와 함께 봅니다.</div>`:''}
+   ${alsoEv.length?`<div class="sec">같은 연결의 시그니처 탐지 <span class="chip sig">Zeek + Suricata</span></div><div class="note" style="margin-bottom:6px">같은 연결에서 같은 단계로 Suricata 시그니처도 탐지해 한 탐지로 보여 줍니다. 알림은 먼저 온 쪽으로 한 번만 보냈습니다.</div>${alsoEv.map(sigBox).join('')}`:''}
    <div class="sec">어떤 공격인가</div>
-   ${g?`<div>${esc(g[0])}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${esc(g[1])}</div>`:`<div>${e.corr?'여러 탐지가 공격 순서대로 이어졌습니다. 공격 스토리에서 흐름을 확인하세요.':esc(R[e.note]?R[e.note].cond:'')}</div>`}
-   <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(s=>STAGE_KO[s]).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · <a data-go="rule" data-n="${e.note}">기준 바꾸기</a></dd>`:''}</dl>
+   ${sg?`<div>${esc(sg.msg)}: ${sg.stage?esc(STAGE_KO[sg.stage])+' 단계의 알려진 공격 패턴입니다.':'공격 단계가 정해지지 않은 정책 위반 경보입니다. 공격 스토리의 시작점이 되지 않고, 이미 시작된 스토리의 장비가 낸 경우에만 스토리에 들어갑니다.'}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${sg.stage==='Initial Access'?'대상 서버의 해당 취약점 패치 여부와 이후 같은 서버의 외부 연락·확산 탐지를 확인합니다.':sg.stage==='Command and Control'?'출발지 장비의 프로그램과 같은 목적지에 접속한 다른 장비를 확인합니다.':sg.stage==='Lateral Movement'?'대상 장비의 패치 여부와 출발지 장비의 감염 여부를 확인합니다.':'출발지 장비가 점검 도구인지, 승인된 사용인지 확인합니다.'}</div>`:g?`<div>${esc(g[0])}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${esc(g[1])}</div>`:`<div>${e.corr?'여러 탐지가 공격 순서대로 이어졌습니다. 공격 스토리에서 흐름을 확인하세요.':esc(R[e.note]?R[e.note].cond:'')}</div>`}
+   <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(stageKo).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · ${R[e.note].sig?`<a data-go="sigrule" data-sid="${e.sid}">시그니처 설정</a>`:`<a data-go="rule" data-n="${e.note}">기준 바꾸기</a>`}</dd>`:''}</dl>
    <div class="sec">탐지한 근거</div><table class="t"><tr><th>항목</th><th>내용</th></tr>${(e.ev||[]).map(x=>`<tr><td class="nw">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join('')}</table>
    ${e.corr?'':`<div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분, 참고용</span></div>${m.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th></tr>${m.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td></tr>`).join('')}</table>`:'<div class="note">같은 시간대 기록이 없습니다.</div>'}`}
-   <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl><pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,techniques:e.tech.split('→'),category:e.corr?'Correlated':'Single',killchain_stages:steps,severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre></details>`;
-  const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress'};
-  const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${iocQ?`<button class="btn" data-go="retro" data-q="${esc(iocQ)}">이 외부 주소를 과거 기록에서 찾기</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비 정보</button>`:''}`;
-  openDrawer(e.name,sev(e.sev)+' '+prod('NSM'),body,foot);
+   <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl><pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,rule:e.note,techniques:e.tech?e.tech.split('→'):[],category:e.corr?'Correlated':'Single',killchain_stages:steps.filter(Boolean),severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre>${sg?`<div class="note">근거(evidence.log)의 시그니처 값</div><pre class="json">${esc(JSON.stringify({rule:e.note,sig_id:e.sid,sig_rev:sg.rev,signature:sg.msg,sig_category:sg.cat,sig_classtype:sg.cls,sig_severity:sg.pri,stage_by:sg.by,community_id:e.cid,proto:e.proto,dst_port:e.port},null,1))}</pre>`:''}</details>`;
+  const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress',sid:e.sid?String(e.sid):''};
+  const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${e.sid?`<button class="btn" data-go="sigrule" data-sid="${e.sid}">이 시그니처 설정</button>`:''}${iocQ?`<button class="btn" data-go="retro" data-q="${esc(iocQ)}">이 외부 주소를 과거 기록에서 찾기</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비 정보</button>`:''}`;
+  openDrawer(e.name,sev(e.sev)+' '+prod('NSM')+(e.eng==='Suricata'?' <span class="chip sig">시그니처</span>':e.also?' <span class="chip sig">행위 + 시그니처</span>':''),body,foot);
 }
 
 // ---- PC·서버
@@ -1164,11 +1237,11 @@ function renderDevices(t){
   const st={ok:['ok','정상'],warn:['warn','주의'],bad:['bad','연결 끊김']};
   $('#devBody').innerHTML=`<div class="callout">NSM 센서는 MTA·Mirroring과 따로 보여 줍니다. 센서가 보내는 상태 정보로 표시합니다.</div>
   <div class="panel tw"><table class="t"><tr><th>센서 이름</th><th>관리 IP</th><th>상태</th><th>마지막 응답</th><th>CPU</th><th>메모리</th><th>디스크</th><th>수집 포트</th><th class="num">초당 패킷</th><th class="num">초당 트래픽</th><th class="num">패킷 누락</th><th>분석 엔진</th><th>Suricata</th><th>마지막 기록 전송</th><th>전송 상태</th><th>탐지 엔진 버전</th><th>적용 정책</th></tr>
-  ${SENSORS.map(s=>`<tr><td class="nw"><b>${s.name}</b></td><td class="mono">${s.ip}</td><td class="nw"><span class="dot ${st[s.st][0]}"></span>${st[s.st][1]}</td><td>${s.hb}</td><td>${pct(s.cpu)}</td><td>${pct(s.mem)}</td><td>${pct(s.disk)}</td><td class="nw">${s.ifc}</td><td class="num">${s.pps}</td><td class="num nw">${s.bps}</td><td class="num" style="color:${s.loss>=1?'#c62828':''}">${s.loss}%</td><td>${s.zeek}</td><td>${s.suri}</td><td class="nw">${s.lag} 전</td><td class="nw"><span class="dot ${s.send==='정상'?'ok':s.send==='지연'?'warn':'bad'}"></span>${s.send}</td><td class="mono nw">${s.eng}${s.eng!==ENGINE.latest?' <span class="chip warn">업데이트 필요</span>':''}</td><td class="mono nw">${RULESET[s.grp]}</td></tr>`).join('')}</table></div>
+  ${SENSORS.map(s=>`<tr><td class="nw"><b>${s.name}</b></td><td class="mono">${s.ip}</td><td class="nw"><span class="dot ${st[s.st][0]}"></span>${st[s.st][1]}</td><td>${s.hb}</td><td>${pct(s.cpu)}</td><td>${pct(s.mem)}</td><td>${pct(s.disk)}</td><td class="nw">${s.ifc}</td><td class="num">${s.pps}</td><td class="num nw">${s.bps}</td><td class="num" style="color:${s.loss>=1?'#c62828':''}">${s.loss}%</td><td>${s.zeek}</td><td class="nw">${s.suri}${s.suriv?`<span class="sub">${s.suriv} · 경보 ${s.sAlert}/시간 · 누락 ${s.sDrop}%</span>`:''}</td><td class="nw">${s.lag} 전</td><td class="nw"><span class="dot ${s.send==='정상'?'ok':s.send==='지연'?'warn':'bad'}"></span>${s.send}</td><td class="mono nw">${s.eng}${s.eng!==ENGINE.latest?' <span class="chip warn">업데이트 필요</span>':''}</td><td class="mono nw">${RULESET[s.grp]}</td></tr>`).join('')}</table></div>
   <div class="grid g3" style="margin-top:12px">
    <div class="panel"><h3>${esc(SENSORS[0]?SENSORS[0].name:'센서')}이 보낸 기록 <span class="r">${REPORT?'캡처 구간':'오늘'}</span></h3><div class="pbody">${(REPORT?REPORT.sent:[['통신 기록','1.12 GB',97.6],['장비 식별 정보','14.1 MB',1.2],['센서 상태','11.8 MB',1.0],['탐지','2.3 MB',0.2]]).map(x=>`<div class="hbar"><span>${x[0]}</span><span class="b"><i style="width:${x[2]}%"></i></span><span class="num nw">${x[1]}</span></div>`).join('')}<div class="note">기록량 한도로 버린 통신 기록 0건</div></div></div>
-   <div class="panel"><h3>항목 설명</h3><div class="pbody tw"><table class="t"><tr><th>항목</th><th>보여 주는 것</th></tr><tr><td>상태</td><td>정상·주의·연결 끊김, 마지막 응답 시각</td></tr><tr><td>자원</td><td>CPU, 메모리, 디스크 사용률</td></tr><tr><td>패킷 수집</td><td>수집 포트, 초당 패킷·트래픽, 누락 비율</td></tr><tr><td>분석 엔진</td><td>Zeek·Suricata가 돌고 있는지, 엔진 버전</td></tr><tr><td>기록 전송</td><td>마지막 전송 시각, 지연·실패</td></tr><tr><td>적용 정책</td><td>지금 적용된 룰 정책 버전</td></tr></table></div></div>
-   <div class="panel"><h3>경고 기준(제안)</h3><div class="pbody"><div class="kv"><dt>패킷 누락</dt><dd>1% 넘으면 주의, 5% 넘으면 위험</dd><dt>기록 전송</dt><dd>5분 넘게 밀리면 지연, 30분 넘으면 실패</dd><dt>응답</dt><dd>3분 동안 없으면 연결 끊김</dd><dt>디스크</dt><dd>80% 넘으면 주의</dd><dt>버전</dt><dd>배포한 버전과 다르면 표시</dd></div></div></div></div>`;
+   <div class="panel"><h3>항목 설명</h3><div class="pbody tw"><table class="t"><tr><th>항목</th><th>보여 주는 것</th></tr><tr><td>상태</td><td>정상·주의·연결 끊김, 마지막 응답 시각</td></tr><tr><td>자원</td><td>CPU, 메모리, 디스크 사용률</td></tr><tr><td>패킷 수집</td><td>수집 포트, 초당 패킷·트래픽, 누락 비율</td></tr><tr><td>분석 엔진</td><td>Zeek·Suricata가 돌고 있는지, 엔진 버전</td></tr><tr><td>Suricata</td><td>엔진 버전, 시간당 경보 수, Suricata 자체 패킷 누락. 꺼져 있으면 "사용 안 함"이고 행위 탐지는 그대로 동작</td></tr><tr><td>기록 전송</td><td>마지막 전송 시각, 지연·실패</td></tr><tr><td>적용 정책</td><td>지금 적용된 룰 정책 버전</td></tr></table></div></div>
+   <div class="panel"><h3>경고 기준(제안)</h3><div class="pbody"><div class="kv"><dt>패킷 누락</dt><dd>1% 넘으면 주의, 5% 넘으면 위험</dd><dt>기록 전송</dt><dd>5분 넘게 밀리면 지연, 30분 넘으면 실패</dd><dt>응답</dt><dd>3분 동안 없으면 연결 끊김</dd><dt>Suricata</dt><dd>멈추면 주의(행위 탐지는 계속), 경보가 평소의 10배를 넘으면 주의(룰 확인)</dd><dt>디스크</dt><dd>80% 넘으면 주의</dd><dt>버전</dt><dd>배포한 버전과 다르면 표시</dd></div></div></div></div>`;
 }
 $('#devTabs').onclick=e=>{const b=e.target.closest('button');if(b)renderDevices(b.dataset.t)};
 
@@ -1272,13 +1345,17 @@ function polFile(){
 
 // ---------------------------------------------------------------- NSM 룰 정책
 const RSEL=new Set();
+let RKIND='beh',SIGQ='';   // 룰 정책 탭(행위 탐지 룰·시그니처 룰), 시그니처 검색어
+const kindBar=()=>REPORT?'':`<div class="bar"><div class="seg" id="rKind"><button data-k="beh" class="${RKIND==='beh'?'on':''}">행위 탐지 룰(Zeek) ${RULES.length}개</button><button data-k="sig" class="${RKIND==='sig'?'on':''}">시그니처 룰(Suricata)</button></div><span class="pill pnew">시그니처 룰 신규</span></div>`;
+function bindKind(){const k=$('#rKind');if(k)k.onclick=e=>{const b=e.target.closest('button');if(b){RKIND=b.dataset.k;renderRules()}}}
 function ruleChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||p.sev!==d.sev||JSON.stringify(p.params)!==JSON.stringify(d.params)}
 function sensorChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||JSON.stringify(p.params)!==JSON.stringify(d.params)}
 const custom=n=>Object.keys(POLICY[curProfile][n].params).length>0;
 function renderRules(){
+  if(RKIND==='sig'&&!REPORT){renderSigRules();return}
   $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 룰 정책';
   const nchg=RULES.filter(r=>ruleChanged(r[1])).length;
-  $('#admBody').innerHTML=`${REPORT?'<div class="callout warn">PoC 리포트: 아래 위험도 칸은 Manager에서 정할 우선순위 예시입니다. 이 리포트의 탐지 등급은 센서 값(단독 Information, 상관 Suspicious)이고, 탐지 기준은 룰 기본값입니다.</div>':''}<div class="callout">탐지 종류마다 <b>사용 여부, 위험도, 탐지 기준</b>을 정합니다. 위험도는 배포하면 바로 반영됩니다. 사용 여부와 탐지 기준은 센서에 적용되며, 적용하는 동안 센서 분석이 몇 초 멈춥니다. 정상 통신이 반복해서 탐지되면 기준을 바꾸기보다 <a onclick="adm('exc')">NSM 예외</a>에 등록하세요.</div>
+  $('#admBody').innerHTML=`${kindBar()}${REPORT?'<div class="callout warn">PoC 리포트: 아래 위험도 칸은 Manager에서 정할 우선순위 예시입니다. 이 리포트의 탐지 등급은 센서 값(단독 Information, 상관 Suspicious)이고, 탐지 기준은 룰 기본값입니다.</div>':''}<div class="callout">탐지 종류마다 <b>사용 여부, 위험도, 탐지 기준</b>을 정합니다. 위험도는 배포하면 바로 반영됩니다. 사용 여부와 탐지 기준은 센서에 적용되며, 적용하는 동안 센서 분석이 몇 초 멈춥니다. 정상 통신이 반복해서 탐지되면 기준을 바꾸기보다 <a onclick="adm('exc')">NSM 예외</a>에 등록하세요.</div>
    <div class="bar"><span class="note">정책</span><select class="sel" id="rProf">${PROFILES.map(p=>`<option ${p===curProfile?'selected':''}>${p}</option>`).join('')}</select><span class="note">${curProfile==='기본 정책'?'새 그룹을 만들 때 쓰는 기본값':curProfile+' 그룹에 적용'} · 현재 버전 <span class="mono">${RULESET[curProfile]}</span></span>
     </div>
    <div class="bar"><select class="sel" id="rStage"><option value="">공격 단계 전체</option>${STAGES.map(s=>`<option value="${s}">${STAGE_KO[s]}</option>`).join('')}</select>
@@ -1288,7 +1365,7 @@ function renderRules(){
    <div class="bar hidden" id="rBulk" style="background:#eef3fd;border:1px solid #cfdcf8;border-radius:6px;padding:6px 10px"><b id="rBulkN"></b><button class="btn sm" data-b="on">사용</button><button class="btn sm" data-b="off">사용 안 함</button><span class="note">위험도</span>${SEV.map(s=>`<button class="btn sm" data-b="sev:${s}">${s}</button>`).join('')}<button class="btn sm" data-b="clear" style="margin-left:auto">선택 해제</button></div>
    <div class="panel tw"><table class="t" id="ruleTable"></table></div>
    <div class="pending ${nchg?'':'hidden'}"><b>아직 배포 안 한 변경 ${nchg}건</b><span class="note">그중 ${RULES.filter(r=>sensorChanged(r[1])).length}건은 센서 적용 필요</span><span style="margin-left:auto"></span><button class="btn" id="rDiscard">변경 취소</button><button class="btn" id="rPrev">바뀌는 내용 보기</button><button class="btn pri" id="rDeploy">배포</button></div>`;
-  drawRules();
+  drawRules();bindKind();
   ['#rStage','#rSev','#rState'].forEach(s=>$(s).onchange=drawRules);$('#rq').oninput=drawRules;
   $('#rProf').onchange=e=>{curProfile=e.target.value;RSEL.clear();renderRules()};
   $('#rBulk').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;const a=b.dataset.b;if(a!=='clear'){RSEL.forEach(n=>{const p=POLICY[curProfile][n];if(a==='on')p.on=true;else if(a==='off')p.on=false;else p.sev=a.slice(4)});toast(`${RSEL.size}개를 바꿨습니다(배포 전)`)}RSEL.clear();renderRules()};
@@ -1306,6 +1383,66 @@ function drawRules(){
   $$('#ruleTable .rsev').forEach(s=>s.onchange=()=>{const p=POLICY[curProfile][s.closest('tr').dataset.n];p.hist.unshift(['2026-11-18 '+nowHM(),'admin',`위험도 ${p.sev} → ${s.value}`,'저장(배포 전)']);p.sev=s.value;renderRules()});
   $$('#ruleTable .rck').forEach(c=>c.onchange=()=>{const n=c.closest('tr').dataset.n;c.checked?RSEL.add(n):RSEL.delete(n);bulkBar()});
   $('#rAll').onchange=e=>{rows.forEach(r=>e.target.checked?RSEL.add(r[1]):RSEL.delete(r[1]));$$('#ruleTable .rck').forEach(c=>c.checked=e.target.checked);bulkBar()};bulkBar();
+}
+// ---------------------------------------------------------------- 시그니처 룰(Suricata)
+// ET 카테고리 기본값은 설계 6.1절 제안(CIC-IDS2017 측정 후 확정). 룰 수는 예시
+const SIGCATS=[
+ ['exploit','알려진 취약점 공격','on','알려진 공격 서명. 행위 탐지에 없는 정보',2911],
+ ['web_server, web_specific_apps','웹 서버·웹 애플리케이션 공격','on','웹 공격 서명. SQL Injection·XSS·웹쉘 행위 탐지와 같은 연결이면 한 탐지로 보여 줌',7820],
+ ['malware, current_events','악성코드 통신·최근 유행 공격','on','외부 연락(C2) 서명',14630],
+ ['phishing, coinminer, worm, attack_response, shellcode','피싱·채굴·웜·공격 응답','on','',3210],
+ ['sql, smb, netbios, rpc','프로토콜 취약점 공격','on','',1460],
+ ['scada','산업 제어 장비','off','고객망에 OT 장비가 있을 때만 켬',350],
+ ['scan','스캔 도구','part','도구 지문 룰만 켬. 횟수로 보는 룰은 포트·호스트 스캔·비밀번호 대입 행위 탐지와 겹쳐 끔',410],
+ ['dns','DNS','off','DNS 터널링·DGA 행위 탐지와 겹침',880],
+ ['policy, info, hunting, user_agents 등','정책·정보성','off','정보성 경보가 대부분. AI 서비스·비표준 포트·자체 서명 인증서 행위 탐지와 겹침',9120],
+ ['ciarmy, compromised, drop, dshield, tor','IP 평판 목록','off','IOC는 IOC 일치 탐지로 한 곳에서 관리',6300],
+ ['ja3','TLS 지문','off','TLS 지문은 범위에서 뺌(2026-11 결정)',2100],
+ ['adware_pup, dos','광고·PUP·DoS','off','PUP는 MDS가 봄. DoS는 미러 구간에서 의미가 작음(고객 요청 시 켬)',600],
+ ['사내 룰','고객·사내에서 만든 룰','on','',12],
+];
+const SIGCFG={cat:Object.fromEntries(SIGCATS.map(c=>[c[0],c[2]])),sid:Object.fromEntries(Object.keys(SIGS).map(k=>[k,{on:true,stage:''}])),sev:Object.assign({},SURI_SEV),roleUp:ROLE_UP};
+let SIGDEP=JSON.parse(JSON.stringify(SIGCFG)),SIGVER='SIG-2026.11.17-r2';
+SIGCFG.sid[2026007].stage='Lateral Movement';SIGDEP.sid[2026007].stage='Lateral Movement';   // 사내 SID 단계 표 예시
+const CATKO={on:'사용',off:'사용 안 함',part:'일부 사용'};
+function sigChanges(){const L=[];
+  SIGCATS.forEach(c=>{if(SIGCFG.cat[c[0]]!==SIGDEP.cat[c[0]])L.push(['룰 사용',`카테고리 <b>${esc(c[0])}</b>: ${CATKO[SIGDEP.cat[c[0]]]} → ${CATKO[SIGCFG.cat[c[0]]]}`])});
+  Object.keys(SIGS).forEach(k=>{const a=SIGCFG.sid[k],b=SIGDEP.sid[k];if(a.on!==b.on)L.push(['룰 사용',`SID <b>${k}</b> ${esc(SIGS[k].msg)}: ${a.on?'사용':'사용 안 함'}`]);if(a.stage!==b.stage)L.push(['단계 지정',`SID <b>${k}</b>: ${b.stage?stageKo(b.stage):'자동'} → ${a.stage?stageKo(a.stage):'자동'}`])});
+  [1,2,3,4].forEach(i=>{if(SIGCFG.sev[i]!==SIGDEP.sev[i])L.push(['위험도 변환',`우선순위 ${i}: ${SIGDEP.sev[i]} → ${SIGCFG.sev[i]}`])});
+  if(SIGCFG.roleUp!==SIGDEP.roleUp)L.push(['위험도 변환',`목적지 역할로 올리기: ${SIGCFG.roleUp?'켬':'끔'}`]);return L}
+function renderSigRules(){
+  $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 룰 정책 › 시그니처 룰';
+  const sigEv=EV.filter(e=>e.eng==='Suricata'),onRules=SIGCATS.filter(c=>SIGCFG.cat[c[0]]!=='off').reduce((a,c)=>a+(SIGCFG.cat[c[0]]==='part'?Math.round(c[4]*.3):c[4]),0),chg=sigChanges();
+  $('#admBody').innerHTML=`${kindBar()}<div class="callout">시그니처 룰은 <b>Suricata</b>가 알려진 공격의 패턴(ET Open + 사내 룰)을 찾는 룰입니다. 시그니처 탐지도 공격 단계별로 나뉘어 행위 탐지와 같은 예외·반복 묶기·공격 스토리에 들어갑니다. 룰을 끄고 켜면 센서의 Suricata가 룰만 다시 읽어 바로 적용합니다(재시작 없음, 행위 탐지는 멈추지 않음). 특정 PC·서버에서만 빼려면 룰을 끄지 말고 <a onclick="adm('exc')">NSM 예외</a>에 시그니처(SID) 조건으로 등록하세요.</div>
+   <div class="grid g4" style="margin-bottom:12px">${[['룰 세트','ET Open 2026.11.17','사내 룰 12개 포함'],['사용 중인 룰',onRules.toLocaleString()+'개',`카테고리 ${SIGCATS.filter(c=>SIGCFG.cat[c[0]]!=='off').length}/${SIGCATS.length}`],['오늘 시그니처 탐지',sigEv.length+'건',`그중 행위 탐지와 같은 연결 ${sigEv.filter(e=>e.mergedInto).length}건`],['현재 버전',SIGVER,'본사 센서 그룹']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v" style="font-size:20px">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('')}</div>
+   <div class="panel tw"><h3>카테고리 <span class="r">기본값은 행위 탐지와 겹치지 않게 정함 · 공개 데이터 측정 후 확정</span></h3><table class="t" id="sigCat"></table></div>
+   <div class="panel tw" style="margin-top:12px"><h3>시그니처 개별 설정 <span class="r">끄기·단계 지정 · 오늘 탐지된 시그니처</span></h3><div class="bar" style="padding:6px 10px;margin:0"><input class="inp" id="sq" placeholder="SID·이름·분류" style="width:240px" value="${esc(SIGQ)}"><span class="note">단계는 보통 자동으로 정합니다(룰 메타데이터 → 분류). 틀리면 SID별로 지정합니다.</span></div><table class="t" id="sigTable"></table></div>
+   <div class="grid g2" style="margin-top:12px">
+    <div class="panel"><h3>위험도 변환 <span class="r">Suricata 우선순위 → 화면 위험도</span></h3><div class="pbody"><table class="t"><tr><th>Suricata 우선순위</th><th>화면 위험도</th></tr>${[1,2,3,4].map(i=>`<tr><td>${i}${i===1?' (가장 높음)':''}</td><td><select class="sel ssev" data-p="${i}">${['High','Medium','Low'].map(v=>`<option ${SIGCFG.sev[i]===v?'selected':''}>${v}</option>`).join('')}</select></td></tr>`).join('')}</table>
+     <label class="note" style="display:block;margin-top:8px"><input type="checkbox" id="sRole" ${SIGCFG.roleUp?'checked':''}> 목적지가 DC·DB 서버면 한 단계 올림(Critical은 이 경우에만)</label><div class="note">Low 시그니처 탐지는 목록에는 보이지만 공격 스토리의 시작점이 되지 않습니다.</div></div></div>
+    <div class="panel"><h3>행위 탐지와 겹쳐 꺼 둔 것</h3><div class="pbody tw"><table class="t"><tr><th>꺼 둔 시그니처</th><th>대신 보는 행위 탐지</th></tr>
+     <tr><td>scan(횟수 기반)</td><td>포트 스캔, 호스트 스캔, SSH·FTP 비밀번호 대입</td></tr><tr><td>dns</td><td>DNS 터널링, DGA 도메인</td></tr><tr><td>Heartbleed 룰</td><td>Heartbleed</td></tr><tr><td>IP 평판 목록</td><td>IOC 일치</td></tr><tr><td>policy(AI·비표준 포트·인증서)</td><td>AI 서비스 업로드, 비표준 포트, 암호화 C2</td></tr></table></div></div>
+   </div>
+   <div class="pending ${chg.length?'':'hidden'}"><b>아직 배포 안 한 변경 ${chg.length}건</b><span style="margin-left:auto"></span><button class="btn" id="sDiscard">변경 취소</button><button class="btn pri" id="sDeploy">배포</button></div>`;
+  bindKind();drawSig();
+  $('#sq').oninput=()=>{SIGQ=$('#sq').value;drawSig()};
+  $$('.ssev').forEach(x=>x.onchange=()=>{SIGCFG.sev[x.dataset.p]=x.value;renderSigRules()});
+  $('#sRole').onchange=e=>{SIGCFG.roleUp=e.target.checked;renderSigRules()};
+  $('#sDiscard').onclick=()=>{Object.assign(SIGCFG,JSON.parse(JSON.stringify(SIGDEP)));renderSigRules();toast('배포 안 한 변경을 취소했습니다')};
+  $('#sDeploy').onclick=()=>{const L=sigChanges(),k=t=>L.filter(x=>x[0]===t).length;
+   openModal('시그니처 룰 배포',`<div class="kv"><dt>대상</dt><dd>본사 센서 그룹(Suricata 사용 센서 1대, 사용 안 함 1대는 건너뜀)</dd><dt>새 버전</dt><dd class="mono">SIG-2026.11.18-r1</dd></div><div class="sec">바뀌는 내용</div>${L.map(x=>`<div>· <span class="chip">${x[0]}</span> ${x[1]}</div>`).join('')}<div class="sec">센서에서 일어나는 일</div><table class="t"><tr><th>변경</th><th>적용 방법</th><th>분석 중단</th></tr><tr><td>룰 사용(${k('룰 사용')}건)</td><td>룰 파일을 다시 만들고(suricata-update) Suricata가 룰만 다시 읽음</td><td>없음</td></tr><tr><td>단계 지정(${k('단계 지정')}건)</td><td>센서 설정(SID 단계 표)을 바꿔 다음 경보부터 적용</td><td>없음</td></tr><tr><td>위험도 변환(${k('위험도 변환')}건)</td><td>Manager에서 바로 적용(새 탐지부터)</td><td>-</td></tr></table><div class="note" style="margin-top:6px">룰을 다시 읽다가 실패하면 센서가 이전 룰로 계속 돌고 배포 결과에 실패로 남습니다.</div>`,
+    `<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="sGo">배포</button>`);
+   $('#sGo').onclick=()=>{SIGDEP=JSON.parse(JSON.stringify(SIGCFG));SIGVER='SIG-2026.11.18-r1';closeModal();renderSigRules();toast('시그니처 룰을 배포했습니다(Suricata 룰 다시 읽기 완료, 재시작 없음)')}};
+}
+function drawSig(){
+  $('#sigCat').innerHTML=`<tr><th>사용</th><th>카테고리</th><th>내용</th><th class="num">룰 수</th><th>기본값 이유</th></tr>`+SIGCATS.map(c=>{const v=SIGCFG.cat[c[0]],ch=v!==SIGDEP.cat[c[0]];return `<tr class="${ch?'chg':''} ${v==='off'?'dim':''}"><td class="nw"><span class="toggle ${v!=='off'?'on':''}" data-cat="${esc(c[0])}"></span>${v==='part'?' <span class="chip">일부</span>':''}</td><td class="mono">${esc(c[0])}</td><td>${esc(c[1])}</td><td class="num">${c[4].toLocaleString()}</td><td class="note">${esc(c[3])}</td></tr>`}).join('');
+  $$('#sigCat [data-cat]').forEach(t=>t.onclick=()=>{const k=t.dataset.cat;SIGCFG.cat[k]=SIGCFG.cat[k]==='off'?'on':'off';renderSigRules()});
+  const q=SIGQ.toLowerCase(),n=sid=>EV.filter(e=>e.eng==='Suricata'&&String(e.sid)===String(sid)).reduce((a,e)=>a+(e.occ||1),0);
+  const rows=Object.keys(SIGS).filter(k=>!q||(k+' '+SIGS[k].msg+' '+SIGS[k].cat+' '+SIGS[k].cls).toLowerCase().includes(q));
+  $('#sigTable').innerHTML=`<tr><th>사용</th><th>SID</th><th>시그니처</th><th>분류</th><th>위험도</th><th>공격 단계</th><th class="num">오늘</th><th class="num">예외</th></tr>`+rows.map(k=>{const g=SIGS[k],c=SIGCFG.sid[k],d=SIGDEP.sid[k],ch=c.on!==d.on||c.stage!==d.stage,ex=EXC.filter(e=>e.sid&&e.sid.split(',').map(x=>x.trim()).includes(k)).length;
+   return `<tr class="${ch?'chg':''} ${c.on?'':'dim'}"><td><span class="toggle ${c.on?'on':''}" data-sid="${k}"></span></td><td class="mono">${k}</td><td>${esc(g.msg)}<span class="sub">rev ${g.rev}${g.tech?' · '+g.tech:''}</span></td><td class="nw">${esc(g.cat)}<span class="sub">${esc(g.cls)}</span></td><td class="nw">우선순위 ${g.pri} → ${sev(SIGCFG.sev[g.pri])}</td><td><select class="sel sstage" data-sid="${k}" style="padding:1px 4px"><option value="">자동: ${g.by==='sid_map'?'초기 침투':stageKo(g.stage)} (${g.by==='mitre'?'메타데이터':'분류'})</option>${STAGES.map(st=>`<option value="${st}" ${c.stage===st?'selected':''}>${STAGE_KO[st]}</option>`).join('')}</select></td><td class="num">${n(k)?`<a onclick="show('nsm');nsmTab('det');$('#dq').value='${k}';renderDet()">${n(k)}</a>`:''}</td><td class="num">${ex?`<a onclick="adm('exc');$('#xq').value='${k}';drawExc()">${ex}개</a>`:''}</td></tr>`}).join('')+(rows.length?'':'<tr><td colspan="8" class="muted" style="text-align:center;padding:16px">찾는 시그니처가 없습니다. 오늘 탐지되지 않은 시그니처는 SID로 직접 찾습니다(목업 예시는 탐지된 것만)</td></tr>');
+  $$('#sigTable [data-sid].toggle').forEach(t=>t.onclick=()=>{const c=SIGCFG.sid[t.dataset.sid];c.on=!c.on;renderSigRules()});
+  $$('#sigTable .sstage').forEach(x=>x.onchange=()=>{SIGCFG.sid[x.dataset.sid].stage=x.value;renderSigRules()});
 }
 function bulkBar(){$('#rBulk').classList.toggle('hidden',!RSEL.size);$('#rBulkN').textContent=`${RSEL.size}개 선택`}
 function openRule(n){
@@ -1360,12 +1497,13 @@ function previewRules(deploy){
 // ---------------------------------------------------------------- NSM 예외
 let EXCVER='EXC-v14',EXCDIRTY=false;
 const DISP={drop:'탐지 안 함',suppress:'알림만 끔'};
-const AXES=['src','dst','dst_port','service','domain'];
-const AXKO={src:'출발지',dst:'목적지',dst_port:'포트',service:'서비스',domain:'도메인'};
+const AXES=['src','dst','dst_port','service','domain','sid'];
+const AXKO={src:'출발지',dst:'목적지',dst_port:'포트',service:'서비스',domain:'도메인',sid:'시그니처(SID)'};
 let EXC=[
  {id:'X-backup-01',disp:'drop',src:'10.10.10.90',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['Exfil_Large_Transfer','Exfil_Volume_Aggregate'],reason:'야간 백업 서버',owner:'인프라팀',expires:'2027-05-31',ref:'CHG-1182',hits:12,h7:[10,12,11,13,12,9,12]},
  {id:'X-vulnscan',disp:'drop',src:'10.10.0.50',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['Port_Scan','Host_Scan'],reason:'분기 취약점 점검 장비',owner:'보안팀',expires:'2026-12-31',ref:'',hits:41,h7:[0,0,0,0,0,212,41]},
  {id:'X-ad-refresh',disp:'suppress',src:'',dst:'',dst_port:'',service:'',domain:'ad-refresh.example',ja4:'',scope:['HTTP_Beaconing'],reason:'광고 자동 새로고침(확인 중)',owner:'보안팀',expires:'2026-11-25',ref:'',hits:9,h7:[8,7,9,10,8,6,9]},
+ {id:'X-scan-web-sig',disp:'suppress',src:'10.10.0.50',dst:'',dst_port:'',service:'',domain:'',ja4:'',sid:'2026001',scope:['Suricata_Initial_Access'],reason:'웹 취약점 점검 장비의 SQL Injection 시그니처',owner:'보안팀',expires:'2026-12-31',ref:'',hits:7,h7:[0,0,0,0,0,52,7]},
  {id:'X-partner-8081',disp:'drop',src:'',dst:'203.0.113.15',dst_port:'8081',service:'',domain:'',ja4:'',scope:['Nonstandard_Port'],reason:'협력사 포털',owner:'영업지원',expires:'',ref:'',hits:3,h7:[4,3,5,2,3,4,3]},
  {id:'X-dns-resolver',disp:'drop',src:'10.10.10.10',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:['DNS_Tunneling','Name_Poisoning'],reason:'DC 겸 내부 DNS 서버',owner:'인프라팀',expires:'',ref:'',hits:118,h7:[120,131,99,118,140,77,118]},
  {id:'X-old-vpn',disp:'drop',src:'',dst:'198.51.100.200',dst_port:'',service:'',domain:'',ja4:'',scope:['Long_Connection'],reason:'구 VPN 장비(폐기)',owner:'인프라팀',expires:'2026-11-01',ref:'',hits:0,h7:[0,0,0,0,0,0,0]},
@@ -1396,7 +1534,7 @@ function excStatus(e){if(e.rej)return '오류';if(e.expires&&e.expires<TODAY)ret
 function renderExc(){
   $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 예외';
   const cnt=s=>EXC.filter(e=>excStatus(e)===s).length;
-  $('#admBody').innerHTML=`<div class="callout">정상인데 반복해서 탐지되는 통신을 등록합니다. <b>탐지 안 함</b>은 탐지 자체를 만들지 않고, <b>알림만 끔</b>은 기록은 남기되 알림을 보내지 않습니다. 센서에 1분 안에 반영되고(분석 중단 없음), 만료일이 지나면 자동으로 빠집니다.</div>
+  $('#admBody').innerHTML=`<div class="callout">정상인데 반복해서 탐지되는 통신을 등록합니다. <b>탐지 안 함</b>은 탐지 자체를 만들지 않고, <b>알림만 끔</b>은 기록은 남기되 알림을 보내지 않습니다. 센서에 1분 안에 반영되고(분석 중단 없음), 만료일이 지나면 자동으로 빠집니다. 시그니처(Suricata) 탐지는 <b>시그니처(SID)</b> 조건으로 특정 시그니처만 뺄 수 있습니다.</div>
    <div class="grid g4" style="margin-bottom:12px">${[['사용 중',cnt('사용 중'),''],['2주 안에 만료',cnt('곧 만료'),'#e65100'],['만료됨',cnt('만료됨'),''],['오류',cnt('오류'),'#c62828']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v" style="color:${k[2]}">${k[1]}</div></div>`).join('')}</div>
    <div class="bar"><button class="btn pri" id="xAdd">예외 추가</button><button class="btn" id="xFromDet">탐지에서 예외 만들기</button><button class="btn" id="xImp">파일 가져오기</button><button class="btn" id="xExp">파일 내보내기</button>
     <select class="sel" id="xSt"><option value="">상태 전체</option><option>사용 중</option><option>곧 만료</option><option>만료됨</option><option>오류</option></select><select class="sel" id="xDp"><option value="">처리 전체</option><option value="drop">탐지 안 함</option><option value="suppress">알림만 끔</option></select><input class="inp" id="xq" placeholder="이름·주소·도메인·사유" style="width:200px">
@@ -1415,11 +1553,11 @@ function drawExc(){
   $$('#excTable a[data-act]').forEach(a=>a.onclick=()=>{const e=EXC.find(x=>x.id===a.dataset.x);if(a.dataset.act==='edit')excForm(e,e);if(a.dataset.act==='dup')excForm(null,Object.assign({},e,{id:e.id+'-copy',rej:''}));if(a.dataset.act==='del'){if(confirm(`예외 "${e.id}"를 삭제할까요?`)){EXC=EXC.filter(x=>x!==e);EXCDIRTY=true;renderExc();toast('삭제했습니다(배포 전)')}}});
 }
 function excMatches(f){const inNet=(ip,c)=>{if(!c.includes('/'))return ip===c;const [n,b]=c.split('/');const toI=x=>x.split('.').reduce((a,o)=>a*256+(+o),0);if(!/^\d+\.\d+\.\d+\.\d+$/.test(ip))return false;const m=b==='0'?0:(~0<<(32-b))>>>0;return ((toI(ip)&m)>>>0)===((toI(n)&m)>>>0)};
-  return nsmEv().filter(ev=>!ev.corr&&(!f.scope.length||f.scope.includes(ev.note))&&(!f.src||inNet(ev.src,f.src))&&(!f.dst||(ev.victims||[ev.dst]).some(d=>inNet(d,f.dst)))&&(!f.dst_port||String(ev.port)===String(f.dst_port))&&(!f.domain||[ev.dst,ev.sni,ev.host].some(x=>x&&(x===f.domain||x.endsWith('.'+f.domain)))))}
+  return nsmEv().filter(ev=>!ev.corr&&(!f.scope.length||f.scope.includes(ev.note))&&(!f.src||inNet(ev.src,f.src))&&(!f.dst||(ev.victims||[ev.dst]).some(d=>inNet(d,f.dst)))&&(!f.dst_port||String(ev.port)===String(f.dst_port))&&(!f.domain||[ev.dst,ev.sni,ev.host].some(x=>x&&(x===f.domain||x.endsWith('.'+f.domain))))&&(!f.sid||(ev.sid&&f.sid.split(',').map(x=>x.trim()).includes(String(ev.sid)))))}
 function excForm(edit,pre){
-  const v=Object.assign({id:'',disp:'drop',src:'',dst:'',dst_port:'',service:'',domain:'',ja4:'',scope:[],reason:'',owner:'admin',expires:'2027-02-18',ref:''},pre||{});
+  const v=Object.assign({id:'',disp:'drop',src:'',dst:'',dst_port:'',service:'',domain:'',ja4:'',sid:'',scope:[],reason:'',owner:'admin',expires:'2027-02-18',ref:''},pre||{});
   if(!edit&&!v.id)v.id='X-'+(v.src||v.dst||v.domain||'new').replace(/[^a-z0-9]/gi,'-').slice(0,22);
-  const opts=STAGES.map(s=>`<optgroup label="${STAGE_KO[s]}">${RULES.filter(r=>r[3]===s).map(r=>`<option value="${r[1]}" ${v.scope.includes(r[1])?'selected':''}>${r[2]}</option>`).join('')}</optgroup>`).join('');
+  const opts=STAGES.map(s=>`<optgroup label="${STAGE_KO[s]}">${RULES.filter(r=>r[3]===s).map(r=>`<option value="${r[1]}" ${v.scope.includes(r[1])?'selected':''}>${r[2]}</option>`).join('')}</optgroup>`).join('')+(REPORT?'':`<optgroup label="시그니처(Suricata)">${SURI_NOTES.map(n=>`<option value="${n[0]}" ${v.scope.includes(n[0])?'selected':''}>${R[n[0]].ko}</option>`).join('')}</optgroup>`);
   openModal(edit?`예외 수정 · ${edit.id}`:'예외 추가',`<div class="form">
    <label>이름</label><div><input class="inp mono" id="fx-id" value="${esc(v.id)}" ${edit?'readonly':''} style="width:260px"><div class="help">영문·숫자·-·_ 만 쓸 수 있고, 다른 예외와 겹치면 안 됩니다</div></div>
    <label>처리 방법</label><div><label style="display:block"><input type="radio" name="fx-disp" value="drop" ${v.disp==='drop'?'checked':''}> <b>탐지 안 함</b> <span class="note">확실히 정상이고 양이 많은 통신(백업, 점검 장비)</span></label><label style="display:block"><input type="radio" name="fx-disp" value="suppress" ${v.disp==='suppress'?'checked':''}> <b>알림만 끔</b> <span class="note">아직 확신이 없을 때. 기록은 남아 나중에 확인 가능</span></label></div>
@@ -1428,16 +1566,19 @@ function excForm(edit,pre){
    <label>목적지 포트</label><input class="inp mono" id="fx-port" value="${esc(v.dst_port)}" placeholder="예: 8081" style="width:120px">
    <label>서비스</label><input class="inp mono" id="fx-svc" value="${esc(v.service)}" placeholder="예: ssl, http" style="width:160px">
    <label>도메인</label><div><input class="inp mono" id="fx-dom" value="${esc(v.domain)}" placeholder="example.com" style="width:100%"><div class="help">하위 도메인(a.example.com)도 함께 적용됩니다. 프록시를 거친 통신은 목적지 IP가 프록시라서 도메인으로 걸어야 맞습니다</div></div>
+   ${REPORT?'':`<label>시그니처(SID)</label><div><input class="inp mono" id="fx-sid" value="${esc(v.sid||'')}" placeholder="예: 2026001, 2026004" style="width:220px"><div class="help">Suricata 시그니처 탐지에만 씁니다. 여러 개는 쉼표로. 시그니처를 모든 곳에서 끄려면 예외 대신 <a onclick="closeModal();RKIND='sig';adm('rules')">시그니처 룰</a>에서 끕니다</div></div>`}
    <label>적용할 탐지</label><div><select class="sel" id="fx-scope" multiple size="6" style="width:100%">${opts}</select><div class="help">Ctrl(⌘)을 누른 채로 여러 개를 고릅니다. 고르지 않으면 모든 탐지에 적용됩니다</div></div>
    <label>사유</label><input class="inp" id="fx-reason" value="${esc(v.reason)}" placeholder="왜 정상인지 적어 주세요">
    <label>담당·참조</label><div style="display:flex;gap:6px"><input class="inp" id="fx-owner" value="${esc(v.owner)}" style="flex:1"><input class="inp mono" id="fx-ref" value="${esc(v.ref)}" placeholder="변경 요청 번호(선택)" style="flex:1"></div>
    <label>만료일</label><div><input class="inp" type="date" id="fx-exp" value="${esc(v.expires)}"> <span class="help">비우면 계속 적용됩니다(기한을 두는 것을 권장)</span></div>
   </div><div class="sec">확인 결과</div><div id="fx-out" class="note"></div>`,
   `<span class="note" style="margin-right:auto">저장 후 "센서에 배포"를 눌러야 적용됩니다</span><button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="fx-save">저장</button>`);
-  const read=()=>({id:$('#fx-id').value.trim(),disp:document.querySelector('input[name=fx-disp]:checked').value,src:$('#fx-src').value.trim(),dst:$('#fx-dst').value.trim(),dst_port:$('#fx-port').value.trim(),service:$('#fx-svc').value.trim(),domain:$('#fx-dom').value.trim().toLowerCase(),scope:[...$('#fx-scope').selectedOptions].map(o=>o.value),reason:$('#fx-reason').value.trim(),owner:$('#fx-owner').value.trim(),ref:$('#fx-ref').value.trim(),expires:$('#fx-exp').value});
+  const read=()=>({id:$('#fx-id').value.trim(),disp:document.querySelector('input[name=fx-disp]:checked').value,src:$('#fx-src').value.trim(),dst:$('#fx-dst').value.trim(),dst_port:$('#fx-port').value.trim(),service:$('#fx-svc').value.trim(),domain:$('#fx-dom').value.trim().toLowerCase(),sid:$('#fx-sid')?$('#fx-sid').value.trim():'',scope:[...$('#fx-scope').selectedOptions].map(o=>o.value),reason:$('#fx-reason').value.trim(),owner:$('#fx-owner').value.trim(),ref:$('#fx-ref').value.trim(),expires:$('#fx-exp').value});
   const check=()=>{const f=read(),err=[],warn=[];const ip=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/;
    if(!/^[A-Za-z0-9_-]+$/.test(f.id))err.push('이름은 영문·숫자·-·_ 만');if(!edit&&EXC.some(x=>x.id===f.id))err.push('같은 이름의 예외가 있습니다');
-   if(!AXES.some(a=>f[a]))err.push('조건(출발지·목적지·포트·서비스·도메인)을 하나 이상 넣으세요');
+   if(!AXES.some(a=>f[a]))err.push('조건(출발지·목적지·포트·서비스·도메인·시그니처)을 하나 이상 넣으세요');
+   if(f.sid&&!/^\d+(\s*,\s*\d+)*$/.test(f.sid))err.push('시그니처(SID)는 숫자, 여러 개는 쉼표로');
+   if(f.sid&&f.scope.some(n=>!R[n].sig))warn.push('시그니처 조건은 시그니처 탐지에만 맞습니다. 행위 탐지에는 적용되지 않습니다');
    if(f.src&&!ip.test(f.src))err.push('출발지 IP 형식이 맞지 않습니다');if(f.dst&&!ip.test(f.dst))err.push('목적지 IP 형식이 맞지 않습니다');if(f.dst_port&&!/^\d{1,5}$/.test(f.dst_port))err.push('포트는 숫자만');
    if(f.domain&&!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(f.domain))err.push('도메인 형식이 맞지 않습니다');if(!f.reason)err.push('사유를 적어 주세요');
    if(!f.scope.length)warn.push('적용할 탐지를 고르지 않아 모든 탐지에 적용됩니다');if(!f.expires)warn.push('만료일이 없어 계속 적용됩니다');
@@ -1455,13 +1596,14 @@ function excForm(edit,pre){
 function pickDet(){const ds=nsmEv().filter(e=>!e.corr&&e.disp!=='suppressed').slice(0,14);
   openModal('탐지에서 예외 만들기',`<div class="note" style="margin-bottom:6px">오탐으로 확인한 탐지를 고르면 출발지·탐지 종류가 채워진 예외 양식이 열립니다.</div><table class="t">${ds.map(e=>`<tr class="click" data-id="${e.id}"><td>${e.t}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}</td><td>${who(e.src)} → ${who(e.dst)}</td></tr>`).join('')}</table>`,`<button class="btn" onclick="closeModal()">취소</button>`);
   $$('#modal tr[data-id]').forEach(tr=>tr.onclick=()=>{const e=evById(tr.dataset.id);const extIp=/^\d/.test(e.dst)&&!isInt(e.dst)&&!e.dst.includes('/');
-   excForm(null,{scope:[e.note],src:extIp||e.note==='Nonstandard_Port'?'':e.src,dst:extIp?e.dst:'',domain:e.sni||e.host||(!/^\d/.test(e.dst)?e.dst:''),dst_port:e.note==='Nonstandard_Port'?String(e.port):'',reason:`오탐 확인: ${e.name}`,disp:'suppress'})})}
-const TSVH='#fields\tid\tscope\tsrc\tdst\tdst_port\tservice\tdomain\tja4\tdisposition\treason\towner\texpires\tref';
-function exportTsv(){const lines=[TSVH,...EXC.filter(e=>!e.rej).map(e=>[e.id,e.scope.join(',')||'-',e.src||'-',e.dst||'-',e.dst_port||'-',e.service||'-',e.domain||'-',e.ja4||'-',e.disp,e.reason,e.owner||'-',e.expires||'-',e.ref||'-'].join('\t')),...(BUILTIN_ON?BUILTIN_EXC.map(b=>[b[0],'HTTP_Beaconing,TLS_Beaconing','-','-','-','-',b[1].replace(/, /g,','),'-','drop','기본 예외(프록시 주기 접속) '+b[2],'nsm-default','-','-'].join('\t')):[])];
+   excForm(null,{scope:[e.note],src:extIp||e.note==='Nonstandard_Port'?'':e.src,dst:extIp?e.dst:'',domain:e.sni||e.host||(!/^\d/.test(e.dst)?e.dst:''),dst_port:e.note==='Nonstandard_Port'?String(e.port):'',sid:e.sid?String(e.sid):'',reason:`오탐 확인: ${e.name}`,disp:'suppress'})})}
+const TSVH='#fields\tid\tscope\tsrc\tdst\tdst_port\tservice\tdomain\tja4\tsid\tdisposition\treason\towner\texpires\tref';   // sid 칸 추가(옛 13칸 형식도 읽음)
+function exportTsv(){const lines=[TSVH,...EXC.filter(e=>!e.rej).map(e=>[e.id,e.scope.join(',')||'-',e.src||'-',e.dst||'-',e.dst_port||'-',e.service||'-',e.domain||'-',e.ja4||'-',e.sid||'-',e.disp,e.reason,e.owner||'-',e.expires||'-',e.ref||'-'].join('\t')),...(BUILTIN_ON?BUILTIN_EXC.map(b=>[b[0],'HTTP_Beaconing,TLS_Beaconing','-','-','-','-',b[1].replace(/, /g,','),'-','-','drop','기본 예외(프록시 주기 접속) '+b[2],'nsm-default','-','-'].join('\t')):[])];
   openModal('파일 내보내기',`<div class="note">센서에 들어가는 예외 파일(TSV) 그대로입니다. 백업하거나 다른 Manager로 옮길 때 씁니다.</div><textarea class="inp mono" rows="12" readonly>${esc(lines.join('\n'))}</textarea>`,`<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="toast('exceptions.tsv 를 내려받았습니다(목업)');closeModal()">파일로 받기</button>`)}
-function importTsv(){openModal('파일 가져오기',`<div class="note">예외 파일(TSV) 내용을 붙여 넣으면 한 줄씩 확인합니다.</div><textarea class="inp mono" id="tsvIn" rows="8">${esc(TSVH+'\nX-print-srv\tName_Poisoning\t10.10.10.15\t-\t-\t-\t-\t-\tdrop\t프린터 서버 이름 응답\t인프라팀\t2027-06-30\t-\nX-bad-row\tPort_Scan\t10.10.10.300\t-\t-\t-\t-\t-\tdrop\t잘못된 주소\tadmin\t-\t-\nX-vulnscan\tPort_Scan\t10.10.0.50\t-\t-\t-\t-\t-\tdrop\t중복\tadmin\t-\t-')}</textarea><button class="btn" id="tsvChk" style="margin-top:6px">확인</button><div id="tsvOut" style="margin-top:8px"></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="tsvOk" disabled>문제없는 줄만 가져오기</button>`);
-  let good=[];$('#tsvChk').onclick=()=>{good=[];const out=[];$('#tsvIn').value.split('\n').filter(l=>l.trim()&&!l.startsWith('#')).forEach(l=>{const c=l.split('\t');const g=i=>c[i]&&c[i]!=='-'?c[i]:'';const f={id:c[0],scope:g(1)?g(1).split(','):[],src:g(2),dst:g(3),dst_port:g(4),service:g(5),domain:g(6),ja4:g(7),disp:c[8],reason:c[9],owner:g(10),expires:g(11),ref:g(12)};
-    let e='';if(c.length<13)e='칸 수가 모자랍니다(13칸)';else if(EXC.some(x=>x.id===f.id))e='같은 이름이 이미 있습니다';else if(f.src&&(!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d+)?$/.test(f.src)||f.src.split('/')[0].split('.').some(o=>+o>255)))e='출발지 IP 형식 오류';else if(f.scope.some(s=>!R[s]))e='없는 탐지 이름';else if(!['drop','suppress'].includes(f.disp))e='처리 방법 값 오류';
+function importTsv(){openModal('파일 가져오기',`<div class="note">예외 파일(TSV) 내용을 붙여 넣으면 한 줄씩 확인합니다.</div><textarea class="inp mono" id="tsvIn" rows="8">${esc(TSVH+'\nX-print-srv\tName_Poisoning\t10.10.10.15\t-\t-\t-\t-\t-\t-\tdrop\t프린터 서버 이름 응답\t인프라팀\t2027-06-30\t-\nX-ids-scan\tSuricata_Recon\t10.10.0.50\t-\t-\t-\t-\t-\t2026006\tdrop\t점검 장비의 Nmap 시그니처\t보안팀\t2027-03-31\t-\nX-bad-row\tPort_Scan\t10.10.10.300\t-\t-\t-\t-\t-\t-\tdrop\t잘못된 주소\tadmin\t-\t-\nX-vulnscan\tPort_Scan\t10.10.0.50\t-\t-\t-\t-\t-\t-\tdrop\t중복\tadmin\t-\t-')}</textarea><button class="btn" id="tsvChk" style="margin-top:6px">확인</button><div id="tsvOut" style="margin-top:8px"></div>`,`<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="tsvOk" disabled>문제없는 줄만 가져오기</button>`);
+  let good=[];$('#tsvChk').onclick=()=>{good=[];const out=[];$('#tsvIn').value.split('\n').filter(l=>l.trim()&&!l.startsWith('#')).forEach(l=>{const c=l.split('\t');if(c.length===13)c.splice(8,0,'-');   // 옛 형식(시그니처 칸 없음)
+    const g=i=>c[i]&&c[i]!=='-'?c[i]:'';const f={id:c[0],scope:g(1)?g(1).split(','):[],src:g(2),dst:g(3),dst_port:g(4),service:g(5),domain:g(6),ja4:g(7),sid:g(8),disp:c[9],reason:c[10],owner:g(11),expires:g(12),ref:g(13)};
+    let e='';if(c.length<14)e='칸 수가 모자랍니다(14칸, 옛 형식은 13칸)';else if(f.sid&&!/^\d+(,\d+)*$/.test(f.sid))e='시그니처(SID) 값 오류';else if(EXC.some(x=>x.id===f.id))e='같은 이름이 이미 있습니다';else if(f.src&&(!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d+)?$/.test(f.src)||f.src.split('/')[0].split('.').some(o=>+o>255)))e='출발지 IP 형식 오류';else if(f.scope.some(s=>!R[s]))e='없는 탐지 이름';else if(!['drop','suppress'].includes(f.disp))e='처리 방법 값 오류';
     out.push(`<div class="${e?'errtxt':'oktxt'}">${e?'✖':'✔'} <span class="mono">${esc(f.id)}</span> ${e||'문제없음'}</div>`);if(!e)good.push(f)});$('#tsvOut').innerHTML=out.join('');$('#tsvOk').disabled=!good.length};
   $('#tsvOk').onclick=()=>{good.forEach(f=>EXC.unshift(Object.assign(f,{hits:0,h7:[0,0,0,0,0,0,0]})));EXCDIRTY=true;closeModal();renderExc();toast(`${good.length}개를 가져왔습니다(배포 전)`)}}
 function deployExc(){const nv='EXC-v'+(+EXCVER.slice(5)+1),act=EXC.filter(e=>excStatus(e)!=='만료됨'&&!e.rej).length;
@@ -1556,8 +1698,9 @@ function applyReport(D){
 
 // =============================================================== 초기화
 $('#dStageF').innerHTML='<option value="">공격 단계 전체</option>'+STAGES.map(s=>`<option value="${s}">${STAGE_KO[s]}</option>`).join('');
-$('#dTypeF').innerHTML='<option value="">탐지 종류 전체</option>'+RULES.map(r=>`<option value="${r[1]}">${r[2]}</option>`).join('');
-['#dSevF','#dStageF','#dTypeF','#dDispF','#dCorr'].forEach(s=>$(s).onchange=renderDet);$('#dq').oninput=renderDet;
+$('#dTypeF').innerHTML='<option value="">탐지 종류 전체</option><optgroup label="행위 탐지(Zeek)">'+RULES.map(r=>`<option value="${r[1]}">${r[2]}</option>`).join('')+'</optgroup>'+(REPORT?'':'<optgroup label="시그니처(Suricata)">'+SURI_NOTES.map(n=>`<option value="${n[0]}">${R[n[0]].ko}</option>`).join('')+'</optgroup>');
+if(REPORT&&!EV.some(e=>e.eng==='Suricata'))$('#dEngF').style.display='none';
+['#dSevF','#dStageF','#dTypeF','#dDispF','#dCorr','#dEngF'].forEach(s=>$(s).onchange=renderDet);$('#dq').oninput=renderDet;
 ['#fProd','#fSev'].forEach(s=>$(s).onchange=renderEvents);$('#fq').oninput=renderEvents;
 $('#aRole').innerHTML='<option value="">장비 유형 전체</option>'+[...new Set(ASSETS.map(a=>DCGROUP(dx(a).dc[0])))].map(r=>`<option>${r}</option>`).join('');
 ['#aRole','#aDet'].forEach(s=>$(s).onchange=renderAssets);$('#aq').oninput=renderAssets;
