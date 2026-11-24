@@ -53,7 +53,7 @@ tests/
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
   report_mockup.py          # 같은 데이터로 목업형 리포트(<pcap 이름>_report_mockup.html, ui/mockup/ 을 템플릿으로)
   suricata_alerts.py        # Suricata 경보 -> 시그니처 탐지(Manager 정규화 규칙의 PoC, run_pcap.sh -s)
-  suricata/                 # 테스트 룰·경보 고정본(killchain_story)·생성 스크립트·정규화 단위 테스트·run_pcap.sh -S 통합 테스트(e2e.sh, Docker)
+  suricata/                 # 테스트 룰·경보 고정본(killchain_story)·생성 스크립트·정규화 단위 테스트·run_pcap.sh -S 통합 테스트(e2e.sh, Docker)·S5 측정 요약(measure.py)
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
 schema/
   logs/                     # Manager 로 가는 로그의 JSON Schema(생성됨, docs/LOG_SCHEMA.md 와 함께)
