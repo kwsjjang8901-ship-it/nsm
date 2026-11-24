@@ -47,13 +47,13 @@ tests/
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
   measure_meta_export.sh    # 선별 전송·자산 식별 전송량·처리 시간 측정 (pcap 입력, 반복 실행)
-  run_pcap.sh               # pcap 1회 실행 결과 요약 + 통합 리포트(<pcap 이름>_report.html): 공격 스토리·탐지·킬체인·자산·선별 전송·전송량·예외·센서 상태
+  run_pcap.sh               # pcap 1회 실행 결과 요약 + 통합 리포트(<pcap 이름>_report.html): 공격 스토리·탐지·킬체인·자산·선별 전송·전송량·예외·센서 상태. -S 면 Suricata 도 함께
                             #   디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행하고 결과 표·index.html 을 만든다
                             #   -x 예외 파일, -u OUI 파일(IEEE·maclookup 형식), -g Recog XML 폴더(리포트 자산 보강)
   report_pcap.py            # run_pcap.sh 결과로 통합 리포트 생성(단독 실행 가능, 외부 라이브러리 없음)
   report_mockup.py          # 같은 데이터로 목업형 리포트(<pcap 이름>_report_mockup.html, ui/mockup/ 을 템플릿으로)
   suricata_alerts.py        # Suricata 경보 -> 시그니처 탐지(Manager 정규화 규칙의 PoC, run_pcap.sh -s)
-  suricata/                 # 테스트 룰·경보 고정본(killchain_story)·생성 스크립트·정규화 단위 테스트
+  suricata/                 # 테스트 룰·경보 고정본(killchain_story)·생성 스크립트·정규화 단위 테스트·run_pcap.sh -S 통합 테스트(e2e.sh, Docker)
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
 schema/
   logs/                     # Manager 로 가는 로그의 JSON Schema(생성됨, docs/LOG_SCHEMA.md 와 함께)

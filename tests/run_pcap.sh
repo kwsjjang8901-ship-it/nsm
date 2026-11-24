@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # pcap 하나를 운영과 같은 설정으로 한 번 돌려 탐지·자산 식별·메타데이터 선별 전송 결과를 한 화면에 요약한다.
 #
-#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더] [-s Suricata 경보 파일] [-k] <pcap | 디렉터리> ...
+#   사용: tests/run_pcap.sh [-o 출력 디렉터리] [-n 내부 대역] [-x 예외 파일] [-r claudtest2 경로] [-z "zeek 인자"] [-u OUI.csv] [-g Recog xml 폴더]
+#                            [-s Suricata 경보 파일 | -S -R 룰 파일|et [-y surica 경로]] [-k] <pcap | 디렉터리> ...
 #
 #     디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행한다(하위 디렉터리 포함 *.pcap·*.pcapng·*.cap).
 #       결과는 DIR/<파일 이름>/ 에 파일별로 남고(하위 디렉터리 파일은 경로를 _ 로 이어 붙인 이름),
@@ -20,6 +21,12 @@
 #     -s FILE   같은 pcap 을 Suricata 로 돌린 경보 파일(eve-alert.json 또는 suricata_alert envelope JSONL, 여러 번 가능).
 #               Manager 규칙(docs/SURICATA_INTEGRATION_DESIGN.md 3~5장)으로 시그니처 탐지를 만들어 목업형 리포트에 넣는다.
 #               pcap 하나일 때만 쓴다(여러 pcap 이면 무시). 만드는 법은 docs/REPORT_SPEC.md "Suricata 경보"
+#     -S        같은 pcap 을 Suricata 로도 돌려(Docker SURICATA_IMAGE, 기본 jasonish/suricata:8.0.6) 경보를 바로 리포트에 넣는다.
+#               여러 pcap 이면 파일마다. Suricata 가 실패해도 Zeek 결과·리포트는 그대로 만든다(장애 격리).
+#     -R FILE   -S 의 룰 파일(여러 번 가능). "-R et" 는 컨테이너 안에서 suricata-update 로 ET Open 을 받는다
+#               (rules.emergingthreats.net 접근 필요, ET_URL 로 다른 주소·로컬 tar.gz). -y 가 있으면 surica disable.conf 적용
+#     -y DIR    surica 저장소 경로. 주면 센서와 같은 설정(tools/render_config.py: 경보·통계 파일 분리, threshold.config,
+#               Community ID)으로 돌린다. 없으면 이미지 기본 설정 + HOME_NET + Community ID
 #     -k        Zeek 원본 로그를 모두 남긴다(conn·dns·http·ssl·files·weird 등, DIR/zeek/ 에 기본 이름으로).
 #               운영 형상은 원본을 끄므로 기본은 남기지 않는다. 탐지·선별 전송 결과는 같고 디스크만 더 쓴다.
 #
@@ -28,9 +35,10 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,28p' "$0"; exit 2; }
+usage() { sed -n '2,35p' "$0"; exit 2; }
 OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=(); SURI=()
-while getopts "o:n:x:r:z:u:g:s:kh" opt; do
+SURI_RUN=""; SURI_RULES=(); SURICA=""
+while getopts "o:n:x:r:z:u:g:s:SR:y:kh" opt; do
     case $opt in
         o) OUT=$OPTARG ;;
         n) NETS=$OPTARG; PASS+=(-n "$OPTARG") ;;
@@ -41,11 +49,21 @@ while getopts "o:n:x:r:z:u:g:s:kh" opt; do
         u) ENRICH+=(--oui "$(realpath "$OPTARG")"); PASS+=(-u "$(realpath "$OPTARG")") ;;
         g) ENRICH+=(--recog "$(realpath "$OPTARG")"); PASS+=(-g "$(realpath "$OPTARG")") ;;
         s) [ -f "$OPTARG" ] || { echo "Suricata 경보 파일 없음: $OPTARG" >&2; exit 2; }; SURI+=(--suricata-eve "$(realpath "$OPTARG")") ;;
+        S) SURI_RUN=1; PASS+=(-S) ;;
+        R) if [ "$OPTARG" = et ]; then SURI_RULES+=(et); PASS+=(-R et)
+           else [ -f "$OPTARG" ] || { echo "룰 파일 없음: $OPTARG" >&2; exit 2; }; SURI_RULES+=("$(realpath "$OPTARG")"); PASS+=(-R "$(realpath "$OPTARG")"); fi ;;
+        y) [ -f "$OPTARG/tools/render_config.py" ] || { echo "surica 저장소가 아닙니다(tools/render_config.py 없음): $OPTARG" >&2; exit 2; }
+           SURICA=$(realpath "$OPTARG"); PASS+=(-y "$SURICA") ;;
         *) usage ;;
     esac
 done
 shift $((OPTIND - 1))
 [ $# -ge 1 ] || usage
+if [ -n "$SURI_RUN" ]; then
+    [ ${#SURI_RULES[@]} -gt 0 ] || { echo "-S 는 룰이 필요합니다: -R <룰 파일> 또는 -R et" >&2; exit 2; }
+    [ ${#SURI[@]} -eq 0 ] || { echo "-s(경보 파일)와 -S(Suricata 실행)는 함께 쓰지 않습니다" >&2; exit 2; }
+    command -v docker > /dev/null || { echo "-S 는 docker 가 필요합니다" >&2; exit 2; }
+fi
 
 # 디렉터리 또는 여러 파일: 파일마다 이 스크립트를 다시 불러 따로 실행하고, 끝에 결과 표와 index.html 을 만든다.
 if [ $# -gt 1 ] || [ -d "$1" ]; then
@@ -136,7 +154,7 @@ if command -v zeek > /dev/null 2>&1; then
     [ "${major:-0}" -ge 8 ] && use_docker=0
 fi
 
-echo "[1/3] Zeek 실행: $PCAP"
+echo "[1/4] Zeek 실행: $PCAP"
 start=$(date +%s)
 # shellcheck disable=SC2086
 if [ "$use_docker" -eq 0 ]; then
@@ -251,20 +269,111 @@ if span >= 600:
     print(f"         하루 환산(단순 비례) 약 {unit}/일  ※ 캡처 구간이 짧으면 요약 로그 때문에 과대평가됨")
 PY
 
+# ---------------------------------------------------------------- Suricata (-S)
+SURICATA_IMAGE="${SURICATA_IMAGE:-jasonish/suricata:8.0.6}"
+echo
+if [ -n "$SURI_RUN" ]; then
+    echo "[2/4] Suricata 실행: $SURICATA_IMAGE${SURICA:+ (surica 센서 설정)}"
+    SDIR="$OUT/suricata"
+    rm -rf "$SDIR"; mkdir -p "$SDIR/rules" "$SDIR/cfg" "$SDIR/log"
+    : > "$SDIR/rules/suricata.rules"; : > "$SDIR/rules/local.rules"
+    sfail=""
+    for r in "${SURI_RULES[@]}"; do
+        if [ "$r" = et ]; then
+            # ET Open: 컨테이너 안 suricata-update. ET_URL 이 로컬 파일이면 그 파일을, 주소면 그 주소를 쓴다
+            uargs=(--data-dir /w/sud -o /w/rules/et --no-test --no-reload); umount=()
+            [ -n "$SURICA" ] && { umount+=(-v "$SURICA/suricata/update:/u:ro"); uargs+=(--disable-conf /u/disable.conf); }
+            if [ -n "${ET_URL:-}" ] && [ -f "$ET_URL" ]; then
+                umount+=(-v "$(dirname "$(realpath "$ET_URL")"):/et:ro"); uargs+=(--url "file:///et/$(basename "$ET_URL")")
+            elif [ -n "${ET_URL:-}" ]; then
+                uargs+=(--url "$ET_URL")
+            fi
+            penv=(); for v in HTTPS_PROXY HTTP_PROXY https_proxy http_proxy NO_PROXY no_proxy; do [ -n "${!v:-}" ] && penv+=(-e "$v"); done
+            mkdir -p "$SDIR/sud" "$SDIR/rules/et"
+            if docker run --rm --user "$(id -u):$(id -g)" ${penv[@]+"${penv[@]}"} -v "$SDIR:/w" ${umount[@]+"${umount[@]}"} \
+                    --entrypoint suricata-update "$SURICATA_IMAGE" "${uargs[@]}" > "$SDIR/suricata-update.log" 2>&1; then
+                cat "$SDIR/rules/et/suricata.rules" >> "$SDIR/rules/suricata.rules"
+            else
+                echo "      ET 룰 받기 실패($SDIR/suricata-update.log). rules.emergingthreats.net 접근이나 ET_URL 을 확인하세요." >&2
+                tail -3 "$SDIR/suricata-update.log" | sed 's/^/        /' >&2
+                sfail=1
+            fi
+        else
+            cat "$r" >> "$SDIR/rules/local.rules"
+        fi
+    done
+    nrules=$( { grep -hcE '^(alert|drop|pass|reject)' "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" || true; } | awk '{s+=$1} END {print s+0}')
+    # HOME_NET 은 Zeek 의 내부 판정과 같게: 사설 대역 + -n
+    HOME_NETS="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16${NETS:+,$NETS}"
+    sargs=()
+    if ! docker run --rm --entrypoint cat "$SURICATA_IMAGE" /etc/suricata/suricata.yaml > "$SDIR/cfg/base.yaml" 2> "$SDIR/image.log"; then
+        echo "      Suricata 이미지를 쓸 수 없습니다($SURICATA_IMAGE, $SDIR/image.log)" >&2; sfail=1
+    elif [ -n "$SURICA" ]; then
+        # 센서와 같은 설정: surica 렌더러(PyYAML 필요)로 배포본을 읽어 경보·통계 파일 분리·threshold·Community ID 반영
+        python3 - "$SDIR/cfg/sensor.json" "$NAME" "$HOME_NETS" <<'PY'
+import json, sys
+path, name, nets = sys.argv[1:4]
+json.dump({"sensor_id": name, "asset_nets": nets.split(","), "community_id_seed": 0, "suricata": {"enabled": True}},
+          open(path, "w"), indent=1)
+PY
+        if python3 "$SURICA/tools/render_config.py" -c "$SDIR/cfg/sensor.json" -o "$SDIR/cfg/r" --base "$SDIR/cfg/base.yaml" \
+                --rule-path /rules --threshold-file /cfg/r/suricata/threshold.config > "$SDIR/render.log" 2>&1; then
+            cp "$SURICA/suricata/threshold.config" "$SDIR/cfg/r/suricata/threshold.config"
+            sargs=(-c /cfg/r/suricata/suricata.yaml)
+        else
+            echo "      surica 설정 생성 실패($SDIR/render.log, PyYAML 필요)" >&2; sfail=1
+        fi
+    else
+        cat "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" > "$SDIR/rules/all.rules"
+        sargs=(-c /etc/suricata/suricata.yaml -S /rules/all.rules --set "vars.address-groups.HOME_NET=[$HOME_NETS]"
+               --set outputs.1.eve-log.community-id=true)
+    fi
+    sstart=$(date +%s)
+    if [ -z "$sfail" ] && docker run --rm --user "$(id -u):$(id -g)" -v "$SDIR/rules:/rules:ro" -v "$SDIR/cfg:/cfg:ro" \
+            -v "$(dirname "$PCAP"):/pcap:ro" -v "$SDIR/log:/out" --entrypoint suricata "$SURICATA_IMAGE" \
+            "${sargs[@]}" -r "/pcap/$(basename "$PCAP")" -k none -l /out > "$SDIR/run.log" 2>&1; then
+        # 경보 파일: 센서 설정이면 eve-alert.json, 기본 설정이면 eve.json 의 경보 줄. 센서와 같은 필드만 남기고 시각순
+        src="$SDIR/log/eve-alert.json"; [ -f "$src" ] || src="$SDIR/log/eve.json"
+        [ -f "$src" ] || : > "$src"
+        python3 "$ROOT/tests/suricata/slim.py" "$src" > "$SDIR/eve-alert.json"
+        SURI=(--suricata-eve "$SDIR/eve-alert.json")
+        nbad=$(grep -c "error parsing signature" "$SDIR/run.log" || true)
+        echo "      완료 ($(( $(date +%s) - sstart ))초), 룰 ${nrules}개${nbad:+$([ "$nbad" -gt 0 ] && echo ", 읽지 못한 룰 ${nbad}개($SDIR/run.log)")}"
+        if grep -q "no rules were loaded" "$SDIR/run.log"; then echo "      주의: 읽은 룰이 하나도 없습니다(룰 문법·파일을 확인하세요)." >&2; fi
+        # 화면 요약: 주소·이름 없이 단계별 경보 수만
+        python3 - "$ROOT/tests" "$SDIR/eve-alert.json" <<'PY'
+import collections, sys
+sys.path.insert(0, sys.argv[1])
+import suricata_alerts as sa
+al = sa.load([sys.argv[2]])
+ko = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and Control": "외부 연락(C2)", "Credential Access": "계정 탈취",
+      "Lateral Movement": "내부 확산", "Exfiltration": "정보 유출", "Impact": "피해", "": "단계 없음"}
+c = collections.Counter(sa.stage_of(a)[0] for a in al)
+print(f"      경보 {len(al):,}건, 시그니처 {len({a['alert'].get('signature_id') for a in al}):,}종"
+      + (": " + ", ".join(f"{ko[k]} {v:,}" for k, v in c.most_common()) if c else ""))
+PY
+    else
+        [ -n "$sfail" ] || { echo "      Suricata 실행 실패($SDIR/run.log)" >&2; { grep -iE "error|fatal" "$SDIR/run.log" || true; } | head -3 | sed 's/^/        /' >&2; }
+        echo "      Suricata 없이 계속합니다(Zeek 결과·리포트는 그대로)." >&2
+    fi
+else
+    echo "[2/4] Suricata: 건너뜀(-S -R <룰> 을 주면 같은 pcap 을 Suricata 로도 돌린다)"
+fi
+
 REPORT_ARGS=()
 if [ -n "$RESOLVER_DIR" ]; then
     echo
-    echo "[2/3] 자산 판정(claudtest2 리졸버)"
+    echo "[3/4] 자산 판정(claudtest2 리졸버)"
     [ -f "$ZDIR/asset_signal.log" ] || touch "$ZDIR/asset_signal.log"
     python3 "$RESOLVER_DIR/tools/asset_resolver.py" "$ZDIR/asset_signal.log" -o "$OUT/asset_report" -z "$ZDIR" -q
     echo "      자산 리포트: $OUT/asset_report/report.html (report.txt, assets.csv)"
     REPORT_ARGS=(--assets "$OUT/asset_report/assets.json" --asset-report asset_report/report.html)
 else
     echo
-    echo "[2/3] 자산 판정: 건너뜀(-r <claudtest2 경로> 를 주면 자산 단위로 묶는다)"
+    echo "[3/4] 자산 판정: 건너뜀(-r <claudtest2 경로> 를 주면 자산 단위로 묶는다)"
 fi
 echo
-echo "[3/3] 통합 리포트"
+echo "[4/4] 통합 리포트"
 REPORT="$OUT/${NAME}_report.html"
 python3 "$ROOT/tests/report_pcap.py" "$ZDIR" -o "$REPORT" --pcap "$(basename "$PCAP")" --elapsed "$elapsed" --nets "$NETS" ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} ${ENRICH[@]+"${ENRICH[@]}"} ${SURI[@]+"${SURI[@]}"} | sed 's/^/      /'
 echo
@@ -274,3 +383,4 @@ echo "  - $(basename "${REPORT%.html}_mockup.html")    목업형 리포트(같�
 echo "  - zeek/          Zeek 로그(nsm_detection·evidence·notice·asset_signal·nsm_exception 등)"
 echo "  - zeek/meta/     메타데이터 선별 전송 로그"
 if [ -n "$KEEP_RAW" ]; then echo "  - zeek/*.log     Zeek 원본 로그(-k: conn·dns·http·ssl 등)"; fi
+if [ -n "$SURI_RUN" ]; then echo "  - suricata/      Suricata 경보(eve-alert.json), 룰(rules/), 설정(cfg/), 원본 출력(log/), 실행 로그"; fi
