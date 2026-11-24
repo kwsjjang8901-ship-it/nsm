@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Zeek + Suricata 한 번에(tests/run_pcap.sh -S) 통합 테스트. Docker 가 필요해 CI(btest)에서는 돌지 않는다.
+# Zeek + Suricata 한 번에(tests/run_pcap.sh -S) 통합 테스트. Suricata(로컬 7 이상 또는 Docker)가 필요해 CI(btest)에서는 돌지 않는다.
+#   로컬 suricata 가 있으면 1~4 는 로컬로 돌고, Docker 도 있으면 5 에서 Docker 로 한 번 더 돈다.
 #   1. 기본 설정: 경보가 고정본(killchain_story.eve-alert.json)과 같은지(시그니처·출발지·대상별 건수), 목업형 리포트에 시그니처 7건
 #   2. surica 센서 설정(-y): 경보·통계 파일 분리, threshold 기본값으로 경보 수는 줄어도 시그니처 탐지 7건   (SURICA_ROOT 가 있을 때)
 #   3. ET 룰 받기(-R et): surica 표본(tests/rules/et_sample)을 ET_URL 로 받아 disable.conf 뒤 4개만             (SURICA_ROOT 가 있을 때)
-#   4. 장애 격리: 깨진 룰은 경고, 없는 이미지는 Suricata 없이 계속(종료 코드 0, 리포트는 Zeek 탐지만)
+#   4. 장애 격리: 깨진 룰은 경고, 없는 설정 파일(로컬)·없는 이미지(Docker)는 Suricata 없이 계속(종료 코드 0, 리포트는 Zeek 탐지만)
+#   5. 로컬과 Docker 가 모두 있으면 Docker(SURICATA_DOCKER=1)로도 1번과 같은 결과
 #
 # 사용법: [SURICA_ROOT=<surica 경로>] tests/suricata/e2e.sh
 set -uo pipefail
@@ -60,11 +62,36 @@ if run d -S -R "$TMP/bad.rules" && grep -q "읽지 못한 룰 1개" "$TMP/d.log"
 else
 	cat "$TMP/d.log"; bad "깨진 룰 처리"
 fi
-if SURICATA_IMAGE=local/no-such-suricata:0 run e -S -R "$RULES" && grep -q "Suricata 없이 계속" "$TMP/e.log" && [ "$(nsig e)" = 0 ] \
-	&& [ -s "$TMP/e/killchain_story_report_mockup.html" ]; then
-	ok "없는 이미지: Suricata 없이 리포트"
-else
-	cat "$TMP/e.log"; bad "없는 이미지 처리"
+if command -v suricata > /dev/null 2>&1; then
+	if SURICATA_CONF=/nonexistent/suricata.yaml run e -S -R "$RULES" && grep -q "Suricata 없이 계속" "$TMP/e.log" && [ "$(nsig e)" = 0 ] \
+		&& [ -s "$TMP/e/killchain_story_report_mockup.html" ]; then
+		ok "없는 설정 파일(로컬): Suricata 없이 리포트"
+	else
+		cat "$TMP/e.log"; bad "없는 설정 파일 처리"
+	fi
+fi
+if docker info > /dev/null 2>&1; then
+	if SURICATA_DOCKER=1 SURICATA_IMAGE=local/no-such-suricata:0 run f -S -R "$RULES" && grep -q "Suricata 없이 계속" "$TMP/f.log" \
+		&& [ "$(nsig f)" = 0 ] && [ -s "$TMP/f/killchain_story_report_mockup.html" ]; then
+		ok "없는 이미지(Docker): Suricata 없이 리포트"
+	else
+		cat "$TMP/f.log"; bad "없는 이미지 처리"
+	fi
+fi
+
+if command -v suricata > /dev/null 2>&1 && docker info > /dev/null 2>&1; then
+	echo "[5] Docker 로도(SURICATA_DOCKER=1)"
+	if SURICATA_DOCKER=1 run g -S -R "$RULES" && grep -q "jasonish/suricata\|SURICATA_IMAGE\|Suricata 실행: [a-z]*/" "$TMP/g.log"; then
+		same=$(python3 - "$TMP/g/suricata/eve-alert.json" "$ROOT/tests/suricata/killchain_story.eve-alert.json" <<'PY'
+import collections, json, sys
+f = lambda p: collections.Counter((r["alert"]["signature_id"], r["src_ip"], r["dest_ip"]) for r in map(json.loads, open(p)))
+print("yes" if f(sys.argv[1]) == f(sys.argv[2]) else "no")
+PY
+)
+		[ "$same" = yes ] && [ "$(nsig g)" = 7 ] && ok "Docker 결과도 고정본과 같고 시그니처 7건" || bad "Docker 결과가 다름"
+	else
+		cat "$TMP/g.log"; bad "SURICATA_DOCKER=1 실패"
+	fi
 fi
 
 echo

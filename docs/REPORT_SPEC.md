@@ -57,10 +57,12 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `-u FILE` | 없음 | OUI 목록 CSV(IEEE 원본 `oui.csv`·`mam.csv`·`oui36.csv` 또는 maclookup.app 내보내기, 여러 번 가능). 자산 표에 MAC 제조사. 한 줄도 못 읽은 파일은 화면 요약·리포트에 경고 |
 | `-g DIR` | 없음 | Recog 지문 xml 폴더(github.com/rapid7/recog 의 `xml/`). 자산 표에 제품·장비 종류 |
 | `-s FILE` | 없음 | 같은 pcap을 Suricata로 돌린 경보 파일(`eve-alert.json` 또는 `suricata_alert` envelope JSONL, 여러 번 가능). 목업형 리포트에 시그니처 탐지를 넣음(3.9절). pcap 하나일 때만 |
-| `-S` | 끔 | 같은 pcap을 Suricata로도 돌려 경보를 바로 리포트에 넣음(2.6절). 여러 pcap이면 파일마다. `-s`와 함께 쓰지 않음 |
+| `-S` | 끔 | 같은 pcap을 Suricata로도 돌려 경보를 바로 리포트에 넣음(2.6절). 로컬 Suricata(7 이상)가 있으면 로컬로, 없으면 Docker로. 여러 pcap이면 파일마다. `-s`와 함께 쓰지 않음 |
 | `-R FILE`, `-R et` | 없음(`-S`면 필요) | `-S`의 룰 파일(여러 번 가능). `et`는 컨테이너 안 `suricata-update`로 ET Open을 받음(rules.emergingthreats.net 접근 필요, `ET_URL`로 다른 주소나 로컬 tar.gz) |
 | `-y DIR` | 없음 | surica 저장소 경로. 주면 센서와 같은 설정으로 돌리고, `-R et`에 surica `disable.conf`(룰 범위 기본값)를 적용 |
-| `SURICATA_IMAGE` 환경 변수 | `jasonish/suricata:8.0.6` | `-S`의 Suricata 이미지 |
+| `SURICATA_IMAGE` 환경 변수 | `jasonish/suricata:8.0.6` | `-S`를 Docker로 돌릴 때의 이미지 |
+| `SURICATA_CONF` 환경 변수 | `/etc/suricata/suricata.yaml` | `-S`를 로컬로 돌릴 때 바탕으로 쓰는 설치본 설정 |
+| `SURICATA_DOCKER` 환경 변수 | 없음 | `1`이면 로컬 Suricata가 있어도 Docker로 |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
 
@@ -123,12 +125,13 @@ OUT/
 
 ### 2.6 Zeek + Suricata 한 번에(`-S`)
 
-같은 pcap을 Zeek(nsm_rules, 1단계)와 Suricata(Docker, 2단계)로 각각 돌리고, 경보를 `--suricata-eve`로 목업형 리포트에 넣습니다(3.9절).
+같은 pcap을 Zeek(nsm_rules, 1단계)와 Suricata(2단계)로 각각 돌리고, 경보를 `--suricata-eve`로 목업형 리포트에 넣습니다(3.9절).
+Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 있으면 로컬로 돌리고 없으면 Docker(`SURICATA_IMAGE`)로 돌립니다. Docker를 쓰지 않으려면 Zeek 8 이상과 Suricata 7 이상을 설치해 둡니다.
 
 | 항목 | 동작 |
 | --- | --- |
 | 룰 | `-R` 파일을 `suricata/rules/local.rules`에, `-R et`는 ET Open을 `suricata/rules/suricata.rules`에(`-y`면 surica `disable.conf` 적용) |
-| 설정 | `-y` 있음: surica `render_config.py`로 이미지의 배포본 설정을 읽어 센서와 같은 설정(경보·통계 파일 분리, `threshold.config` 기본값, Community ID seed 0)을 만듦(PyYAML 필요). `-y` 없음: 이미지 기본 설정에 `HOME_NET`과 Community ID만 바꿈 |
+| 설정 | 바탕 설정은 로컬이면 설치본(`SURICATA_CONF`, 기본 `/etc/suricata/suricata.yaml`), Docker면 이미지 기본 설정. `-y` 있음: surica `render_config.py`로 바탕 설정을 읽어 센서와 같은 설정(경보·통계 파일 분리, `threshold.config` 기본값, Community ID seed 0)을 만듦(PyYAML 필요). `-y` 없음: 바탕 설정에 이 실행의 룰만(`-S`), `HOME_NET`, eve-log의 Community ID를 바꿈. 설치본에 넣어 둔 룰 목록(`rule-files`)은 쓰지 않음 |
 | `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음) |
 | 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀 |
 | 화면 요약 | 경보 수, 시그니처 종류 수, 단계별 경보 수(주소·시그니처 이름은 출력하지 않음), 읽지 못한 룰 수 |
@@ -404,14 +407,15 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
 
-`run_pcap.sh -S`(2.6절)는 Docker로 Suricata를 돌려야 해서 CI 밖의 통합 테스트 `tests/suricata/e2e.sh`로 확인합니다(`SURICA_ROOT=<surica 경로>`를 주면 2·3번까지).
+`run_pcap.sh -S`(2.6절)는 Suricata(로컬 또는 Docker)가 있어야 해서 CI 밖의 통합 테스트 `tests/suricata/e2e.sh`로 확인합니다(`SURICA_ROOT=<surica 경로>`를 주면 2·3번까지, 로컬과 Docker가 모두 있으면 5번까지).
 
 | 번호 | 확인 내용 |
 | --- | --- |
 | 1 | 기본 설정: 경보가 고정본과 같음(시그니처·출발지·대상별 건수), 목업형 리포트에 시그니처 7건 |
 | 2 | surica 센서 설정(`-y`): 경보·통계 파일 분리, threshold로 경보 수가 줄어도 시그니처 탐지 7건 |
 | 3 | ET 룰 받기(`-R et`): surica 표본을 `ET_URL`로 받아 `disable.conf` 뒤 4개 |
-| 4 | 장애 격리: 깨진 룰은 경고 후 계속, 없는 이미지는 Suricata 없이 리포트(종료 코드 0) |
+| 4 | 장애 격리: 깨진 룰은 경고 후 계속, 없는 설정 파일(로컬)·없는 이미지(Docker)는 Suricata 없이 리포트(종료 코드 0) |
+| 5 | 로컬과 Docker가 모두 있으면 Docker(`SURICATA_DOCKER=1`)로도 고정본과 같은 결과 |
 
 ---
 
