@@ -1101,7 +1101,7 @@ function openDet(id){
   const ext=[e.dst,...v].find(x=>x&&!isInt(x)&&!x.includes('/'));
   const iocQ=[...new Set([ext,e.sni,e.host].filter(Boolean))].join('\n');
   const sg=e.sig,alsoEv=(e.also||[]).map(evById).filter(Boolean);
-  const sigBox=x=>`<dl class="kv"><dt>시그니처</dt><dd>${esc(x.sig.msg)}</dd><dt>SID · rev</dt><dd class="mono">${x.sid} · ${x.sig.rev}</dd><dt>분류</dt><dd>${esc(x.sig.cat)} · <span class="mono">${esc(x.sig.cls)}</span></dd><dt>위험도</dt><dd>Suricata 우선순위 ${x.sig.pri} → ${sev(SURI_SEV[x.sig.pri])}${x.roleUp?` → ${sev(x.sev)} <span class="note">목적지가 ${esc(A[x.dst].role)}라 한 단계 올림</span>`:''}</dd><dt>공격 단계</dt><dd>${esc(stageKo(x.stage))} <span class="note">정한 근거: ${BYKO[x.sig.by]}</span></dd>${x.cid?`<dt>Community ID</dt><dd class="mono">${esc(x.cid)}</dd>`:''}</dl>`;
+  const sigBox=x=>`<dl class="kv"><dt>시그니처</dt><dd>${esc(x.sig.msg)}</dd><dt>SID · rev</dt><dd class="mono">${x.sid} · ${x.sig.rev}</dd><dt>분류</dt><dd>${esc(x.sig.cat)} · <span class="mono">${esc(x.sig.cls)}</span></dd><dt>위험도</dt><dd>Suricata 우선순위 ${x.sig.pri} → ${sev(SURI_SEV[x.sig.pri])}${x.roleUp?` → ${sev(x.sigSev||x.sev)} <span class="note">목적지가 ${esc((A[x.dst]||{}).role||'DC·DB 서버')}라 한 단계 올림</span>`:''}</dd><dt>공격 단계</dt><dd>${esc(stageKo(x.stage))} <span class="note">정한 근거: ${BYKO[x.sig.by]}</span></dd>${x.cid?`<dt>Community ID</dt><dd class="mono">${esc(x.cid)}</dd>`:''}</dl>`;
   const stepN=st?(st.steps.find(x=>x[8]===e.id)||[])[0]:null;
   const body=`${st&&!st.single?`<div class="callout warn" style="margin-bottom:10px">이 탐지는 공격 스토리 <b>${esc(st.title)}</b>의 ${e.corr?'전체 흐름':stepN+'번째 단계'}입니다. <a data-go="story" data-id="${st.id}" data-n="${stepN||''}">공격 스토리 보기</a> · <a data-go="story" data-id="${st.id}" data-tab="resp">대응 보기</a></div>`:''}
    <div class="sec" style="margin-top:0">기본 정보</div>
@@ -1464,7 +1464,7 @@ const ruleOn=n=>{const p=(POLICY[curProfile]||{})[n];return !p||p.on};
 function attCover(){
   const c={},get=t=>c[t]=c[t]||{t,beh:[],off:[],sig:[],et:0,hit:0};
   RULES.forEach(r=>techs(r[4]).forEach(t=>get(t)[ruleOn(r[1])?'beh':'off'].push(r)));
-  if(!REPORT){Object.entries(SIGS).forEach(([k,g])=>{if(SIGCFG.sid[k].on)techs(g.tech).forEach(t=>get(t).sig.push(k))});Object.entries(SIG_ET_TECH).forEach(([t,n])=>{if(ATT[t])get(t).et=n})}
+  Object.entries(SIGS).forEach(([k,g])=>{if((SIGCFG.sid[k]||{on:true}).on)techs(g.tech).forEach(t=>get(t).sig.push(k))});if(!REPORT)Object.entries(SIG_ET_TECH).forEach(([t,n])=>{if(ATT[t])get(t).et=n});   // 리포트: 이 pcap 경보의 시그니처만
   nsmEv().filter(e=>!e.corr).forEach(e=>[...new Set([...techs(e.tech),...(e.also||[]).map(evById).filter(Boolean).flatMap(x=>techs(x.tech))])].forEach(t=>get(t).hit+=(e.occ||1)));
   return Object.values(c).filter(x=>ATT[x.t]&&(x.beh.length||x.sig.length||x.et||x.off.length)).sort((a,b)=>a.t.localeCompare(b.t,'en',{numeric:true}));
 }
@@ -1475,12 +1475,12 @@ function renderAttCov(){
   const all=attCover(),vis=attVisible(),on=all.filter(x=>attKind(x)!=='off'),k=t=>on.filter(x=>attKind(x)===t).length,tacN=new Set(on.flatMap(x=>tacOf(x.t))).size,hitN=on.filter(x=>x.hit).length;
   const sel=all.find(x=>x.t===ATTSEL);
   const mism=RULES.filter(r=>techs(r[4]).some(t=>stageOff(r[3],t)));
-  $('#admBody').innerHTML=`${kindBar()}<div class="callout">켜 둔 탐지 룰${REPORT?'':'과 시그니처'}가 덮는 <b>ATT&amp;CK 기법</b>입니다(Enterprise ${ATT_VER}). 칸은 기법, 열은 그 기법의 ATT&amp;CK 전술이고, 기법이 여러 전술에 속하면 각 열에 나옵니다. <b>공격 단계</b>(정찰 → 피해 7단계)는 공격 스토리를 잇기 위한 제품 분류라 전술과 다를 수 있습니다(아래 표). 실행·지속·방어 회피처럼 장비 안에서 일어나는 행위는 네트워크로 보기 어려워 엔드포인트(MDS)가 봅니다.</div>
+  $('#admBody').innerHTML=`${kindBar()}<div class="callout">켜 둔 탐지 룰${!(!REPORT||Object.keys(SIGS).length>0)?'':(REPORT?'과 이 pcap 의 시그니처 경보':'과 시그니처')}가 덮는 <b>ATT&amp;CK 기법</b>입니다(Enterprise ${ATT_VER}). 칸은 기법, 열은 그 기법의 ATT&amp;CK 전술이고, 기법이 여러 전술에 속하면 각 열에 나옵니다. <b>공격 단계</b>(정찰 → 피해 7단계)는 공격 스토리를 잇기 위한 제품 분류라 전술과 다를 수 있습니다(아래 표). 실행·지속·방어 회피처럼 장비 안에서 일어나는 행위는 네트워크로 보기 어려워 엔드포인트(MDS)가 봅니다.</div>
    <div class="grid g4" style="margin-bottom:12px">${[['덮는 기법',on.length+'개',REPORT?`행위 탐지 룰 ${RULES.length}개`:`행위만 ${k('beh')} · 시그니처만 ${k('sig')} · 둘 다 ${k('both')}`],['덮는 전술',tacN+' / 14','빈 열은 네트워크로 보기 어려운 전술'],[REPORT?'이번 분석에서 탐지된 기법':'오늘 탐지된 기법',hitN+'개','왼쪽 주황 줄'],['ATT&CK 버전','Enterprise '+ATT_VER,'Manager가 공식 데이터로 갱신']].map(x=>`<div class="panel kpi"><div class="k">${x[0]}</div><div class="v" style="font-size:20px">${x[1]}</div><div class="d">${x[2]}</div></div>`).join('')}</div>
    <div class="panel"><h3>ATT&amp;CK 매트릭스 <span class="r">칸을 누르면 아래에 룰·탐지</span></h3>
-    <div class="bar" style="padding:8px 10px;margin:0">${REPORT?'':`<div class="seg" id="attF">${[['all','전체'],['beh','행위 탐지'],['sig','시그니처']].map(f=>`<button data-f="${f[0]}" class="${ATTF===f[0]?'on':''}">${f[1]}</button>`).join('')}</div>`}
+    <div class="bar" style="padding:8px 10px;margin:0">${!(!REPORT||Object.keys(SIGS).length>0)?'':`<div class="seg" id="attF">${[['all','전체'],['beh','행위 탐지'],['sig','시그니처']].map(f=>`<button data-f="${f[0]}" class="${ATTF===f[0]?'on':''}">${f[1]}</button>`).join('')}</div>`}
      <label class="note"><input type="checkbox" id="attHit" ${ATTHIT?'checked':''}> ${REPORT?'탐지된':'오늘 탐지된'} 기법만 진하게</label>
-     <span class="attleg" style="margin-left:auto"><span><i style="background:#eaf1ff"></i>행위 탐지</span>${REPORT?'':'<span><i style="background:#e6f4f1"></i>시그니처</span><span><i style="background:#f1eafe"></i>둘 다</span>'}<span><i style="background:#fff;box-shadow:inset 3px 0 0 #e65100"></i>${REPORT?'탐지됨':'오늘 탐지됨'}</span></span>
+     <span class="attleg" style="margin-left:auto"><span><i style="background:#eaf1ff"></i>행위 탐지</span>${!(!REPORT||Object.keys(SIGS).length>0)?'':'<span><i style="background:#e6f4f1"></i>시그니처</span><span><i style="background:#f1eafe"></i>둘 다</span>'}<span><i style="background:#fff;box-shadow:inset 3px 0 0 #e65100"></i>${REPORT?'탐지됨':'오늘 탐지됨'}</span></span>
      <button class="btn" onclick="attLayerModal('cov')">Navigator 레이어로 내보내기</button></div>
     <div class="attw"><div class="attm">${TACTICS.map(tc=>{const cs=vis.filter(x=>tacOf(x.t).includes(tc[0]));return `<div><div class="th">${tc[2]}<span>${tc[1]}</span><span>${cs.length?'기법 '+cs.length+'개':'-'}</span></div>${cs.map(x=>`<div class="attc ${attKind(x)} ${x.hit?'hit':''} ${ATTHIT&&!x.hit?'fade':''} ${ATTSEL===x.t?'sel':''}" data-t="${x.t}" title="${esc(attName(x.t))}"><b>${x.t}</b><div class="nmx">${esc(attName(x.t))}</div><div class="ct"><span>${[x.beh.length?'룰 '+x.beh.length:'',x.sig.length||x.et?'시그니처':''].filter(Boolean).join(' · ')}</span><span>${x.hit?(REPORT?'':'오늘 ')+x.hit:''}</span></div></div>`).join('')||`<div class="note" style="padding:2px 4px">${['TA0042','TA0005'].includes(tc[0])?'네트워크로 보기 어려움':'없음'}</div>`}</div>`}).join('')}</div></div></div>
    <div id="attDet">${sel?attDetail(sel):''}</div>
@@ -1810,6 +1810,8 @@ function applyReport(D){
   ['#dSevF','#sSev','#fSev'].forEach(id=>{const el=$(id);if(el)el.innerHTML='<option value="">등급 전체</option>'+SEV.map(x=>`<option>${x}</option>`).join('')});
   EV.length=0;(D.ev||[]).forEach(e=>{const r=R[e.note];if(r){e.name=e.name||r.ko;e.stage=e.stage||r.stage;e.tech=e.tech||r.tech}e.sev=e.sev||(e.corr?'Suspicious':'Information');e.name=e.name||e.note;EV.push(e)});
   EV.sort((a,b)=>(b.ts||0)-(a.ts||0));META.length=0;
+  // 시그니처 정의: 이 pcap 의 Suricata 경보에서 만든 것(report_pcap.py --suricata-eve). 없으면 비움
+  Object.keys(SIGS).forEach(k=>delete SIGS[k]);Object.assign(SIGS,D.sigs||{});
   ASSETS.length=0;(D.assets||[]).forEach(a=>ASSETS.push(a));Object.keys(A).forEach(k=>{A[k]=undefined});ASSETS.forEach(a=>A[a.ip]=a);
   Object.keys(DEVX).forEach(k=>{DEVX[k]=undefined});Object.assign(DEVX,D.devx||{});
   Object.keys(PEERS).forEach(k=>{PEERS[k]=undefined});Object.assign(PEERS,D.peers||{});AGPOL.length=0;
@@ -1833,7 +1835,7 @@ function applyReport(D){
 // =============================================================== 초기화
 $('#dStageF').innerHTML='<option value="">공격 단계 전체</option>'+STAGES.map(s=>`<option value="${s}">${STAGE_KO[s]}</option>`).join('');
 $('#dTacF').innerHTML='<option value="">ATT&amp;CK 전술 전체</option>'+TACTICS.map(t=>`<option value="${t[0]}">${t[2]} (${t[1]})</option>`).join('');
-$('#dTypeF').innerHTML='<option value="">탐지 종류 전체</option><optgroup label="행위 탐지(Zeek)">'+RULES.map(r=>`<option value="${r[1]}">${r[2]}</option>`).join('')+'</optgroup>'+(REPORT?'':'<optgroup label="시그니처(Suricata)">'+SURI_NOTES.map(n=>`<option value="${n[0]}">${R[n[0]].ko}</option>`).join('')+'</optgroup>');
+$('#dTypeF').innerHTML='<option value="">탐지 종류 전체</option><optgroup label="행위 탐지(Zeek)">'+RULES.map(r=>`<option value="${r[1]}">${r[2]}</option>`).join('')+'</optgroup>'+(REPORT&&!EV.some(e=>e.eng==='Suricata')?'':'<optgroup label="시그니처(Suricata)">'+SURI_NOTES.map(n=>`<option value="${n[0]}">${R[n[0]].ko}</option>`).join('')+'</optgroup>');
 if(REPORT&&!EV.some(e=>e.eng==='Suricata'))$('#dEngF').style.display='none';
 ['#dSevF','#dStageF','#dTacF','#dTypeF','#dDispF','#dCorr','#dEngF'].forEach(s=>$(s).onchange=renderDet);$('#dq').oninput=renderDet;
 ['#fProd','#fSev'].forEach(s=>$(s).onchange=renderEvents);$('#fq').oninput=renderEvents;
