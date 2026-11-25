@@ -85,6 +85,14 @@ class TestNormalize(unittest.TestCase):
         g = self.run_n([alert(0, "10.0.0.5", "10.0.0.250", md=c2, cid="1:p", dest_port=3128)])[0]
         self.assertEqual((g["dst"], g["dst_name"], g["proxy"]), ("10.0.0.250", "c2.example:443", "10.0.0.250:3128"))
 
+    def test_no_ip_alert(self):
+        # IP 가 없는 경보(Suricata 8 디코더 이벤트 등)는 탐지로 만들지 않는다
+        a = alert(0, "1.1.1.1", "10.0.0.1")
+        for k in ("src_ip", "dest_ip", "src_port", "dest_port"):
+            a.pop(k)
+        self.assertEqual(self.run_n([a, alert(1, "1.1.1.1", "10.0.0.1")])[0]["occ"], 1)
+        self.assertEqual(len(self.run_n([a])), 0)
+
     def test_envelope_input(self):
         p = os.path.join(self.tmp, "suricata_alert.jsonl")
         with open(p, "w") as f:
