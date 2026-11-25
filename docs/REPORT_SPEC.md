@@ -143,7 +143,7 @@ Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 �
 
 pcap 모드에서 Suricata는 경보를 시간 순서대로 내지 않아, `-y`의 `threshold.config` 기본값(60초에 1건)이 실행마다 조금 다르게 거를 수 있습니다(surica DESIGN 10장). 리포트는 시각순으로 다시 정렬합니다. 검증은 `tests/suricata/e2e.sh`(7장).
 
-**측정 요약(S5):** `python3 tests/suricata/measure.py <출력 디렉터리> ...`는 여러 실행(일괄 모드 출력 포함)을 모아 Markdown 표로 출력합니다. 값은 pcap별 경보·시그니처 탐지·Zeek와 겹침(같은 연결 묶음)·경보 파일 크기, ET 카테고리별 경보·탐지·겹침, 단계별 경보, 겹친 Zeek 탐지 종류, 경보가 많은 SID입니다. 주소·호스트명·시그니처 문장은 출력하지 않아 그대로 공유할 수 있습니다.
+**측정 요약(S5):** `python3 tests/suricata/measure.py [--tz 시간] <출력 디렉터리> ...`는 여러 실행(일괄 모드 출력 포함)을 모아 Markdown 표로 출력합니다. 값은 pcap별 경보·시그니처 탐지·Zeek와 겹침(같은 연결 묶음)·경보 파일 크기, ET 카테고리별 경보·탐지·겹침, 룰 메타데이터(`signature_severity`·`confidence`)별 경보, **1차 선별 룰셋(Suricata 설계 6.3절) 적용 시뮬레이션**(남는 탐지와 6.1 기본으로는 켜지지만 빠지는 탐지·이유, 시각은 `--tz`), 단계별 경보, 겹친 Zeek 탐지 종류, 경보가 많은 SID입니다. 주소·호스트명·사내 룰 이름은 출력하지 않아 그대로 공유할 수 있습니다(ET Open·GPL·Suricata 기본 룰 이름은 공개 문구라 표시). 경보 파일에 룰 메타데이터가 있어 Suricata를 다시 돌리지 않고 다시 집계할 수 있고, 경보를 흘려 읽어 수백만 건도 처리합니다.
 
 ---
 
@@ -400,7 +400,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-proxy-target` | 프록시 경유 유출 탐지의 대상: CONNECT를 본 연결은 실제 목적지, 못 본 연결은 "목적지 확인 안 됨". 프록시는 관련 탐지 수·스토리 레인에서 중계 장비로 |
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
 | `rules/report-mockup` | 목업형 리포트: 등급은 센서 값(단독 Information, 상관 Suspicious), 템플릿 + 데이터 블록 하나, 시각순 id, 공격자별 가장 긴 상관 체인 1건, 스토리 단계와 이벤트 id 연결, 대상 없는 비콘의 목적지, 내부 주소, 프록시 경유(`via`·`host`, 프록시는 내부 목록에서 뺌), `--no-mockup` |
-| `rules/report-suricata` | Suricata 경보 고정본(3.9절): 단계(메타데이터·분류·단계 없음), 출발지·대상(응답 방향·`target`·C2·유출), 반복 묶기, 같은 연결·같은 단계의 Zeek 탐지와 한 탐지, 단계가 다르면 따로, 스토리 단계로 넣기, 시그니처 정의·센서 표시. 정규화 단위 테스트(`tests/suricata/test_normalize.py`: SID 지정 우선, 프록시 CONNECT, envelope 입력, 15분 간격) |
+| `rules/report-suricata` | Suricata 경보 고정본(3.9절): 단계(메타데이터·분류·단계 없음), 출발지·대상(응답 방향·`target`·C2·유출), 반복 묶기, 같은 연결·같은 단계의 Zeek 탐지와 한 탐지, 단계가 다르면 따로, 스토리 단계로 넣기, 시그니처 정의·센서 표시. 정규화 단위 테스트(`tests/suricata/test_normalize.py`: SID 지정 우선, 프록시 CONNECT, envelope 입력, 15분 간격). 측정 요약(`measure.py`): ET 형식 이름·메타데이터를 입힌 표본으로 선별 시뮬레이션(남는 1개, 메타데이터 없음·신뢰도 Medium·성능 Significant로 빠짐), 메타데이터별 표, 주소 미출력 |
 | `rules/report-enrich` | 탐지 정보 보강(3.3절): Kerberoasting(RC4·성공 수, 근거 연결 kerberos 행, 계정 맥락, 성공 흔적은 kerberos 로만), 랜섬웨어(이름 변경·공유), HTTP 비콘(User-Agent, 근거 연결 1행), 항목 이름은 요약기 고정 목록, 기존 리포트 HTML에는 기록 표 없음. 규칙 단위 테스트(`tests/test_detection_enrich.py`): 설정 표 = 룰 48개, 같은 연결 묶음, 웹 공격 성공 판단, 연결 상태·통신 중, DNS 응답으로 이름, DNS 계열 도메인 조회 |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
