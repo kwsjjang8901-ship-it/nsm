@@ -690,9 +690,35 @@ const META=[
  ['09:06:12','http','198.51.100.23','10.10.10.5','웹 접속 GET /item.php → 500'],
  ['08:40:00','ssh','10.10.10.50','10.10.10.40','SSH 접속 실패 3번(libssh2)'],
 ];
-const LOGKO={smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
+const LOGKO={http_ua_summary:'User-Agent 요약',rdp:'원격 데스크톱',smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
 const tmin=t=>+t.slice(0,2)*60+ +t.slice(3,5);
 function metaFor(e){if(e.meta)return e.meta;const t=tmin(e.t),v=e.victims||[e.dst];return META.filter(m=>m[2]===e.src&&v.includes(m[3])&&Math.abs(tmin(m[0])-t)<=10)}
+
+// ---- 탐지 정보 보강 화면(docs/DETECTION_ENRICH_SPEC.md). 룰과 무관한 공통 화면 하나:
+//   e.xf  = {ok:[hi|mid|no, 근거], live:[1|0, 문구], name:[도메인|null, 문구], acct:[계정, 장비 수, [IP]], facts:[[항목, 값, 로그]], series:[이름, [[시각, 값]], 단위], limits:[문구]}
+//   e.rec = {exact:[[시각, 로그, 내용, uid]], grouped:[…], nearby:[…]}  (없으면 예시 META 에서 uid 로 나눔)
+const OKC={hi:['bad','성공 흔적'],mid:['warn','일부 응답'],no:['ok','실패만']};
+// 목록·구성 탐지 표에 붙이는 짧은 칩(성공 흔적, 통신 중)
+const judgeChips=e=>{const x=e&&e.xf;if(!x)return '';return (x.ok&&x.ok[0]!=='no'?`<span class="chip ${OKC[x.ok[0]][0]}" title="${esc(x.ok[1])}">${OKC[x.ok[0]][1]}</span>`:'')+(x.live&&x.live[0]?`<span class="chip bad" title="${esc(x.live[1])}">통신 중</span>`:'')};
+function xfBox(e){const x=e.xf;if(!x)return '';const rows=[];
+  if(x.ok)rows.push([`<span class="chip ${OKC[x.ok[0]][0]}">${OKC[x.ok[0]][1]}</span>`,esc(x.ok[1])]);
+  if(x.live)rows.push([x.live[0]?'<span class="chip bad">지금도 통신 중</span>':'<span class="chip">멈춤</span>',esc(x.live[1])]);
+  if(x.name)rows.push([x.name[0]?'<span class="chip">목적지 이름</span>':'<span class="chip warn">이름 없음</span>',(x.name[0]?`<b>${esc(x.name[0])}</b> · `:'')+esc(x.name[1])]);
+  if(x.acct)rows.push(['<span class="chip">계정 맥락</span>',`<b>${esc(x.acct[0])}</b> 계정이 앞뒤 1시간에 로그인한 장비 ${x.acct[1]}대: ${x.acct[2].map(ip=>esc(nm(ip))).join(', ')}`]);
+  const sm=x.series?Math.max(...x.series[1].map(p=>p[1]),1):1;
+  return `${rows.length?`<div class="sec" style="margin-top:0">한눈에 보기 <span class="note" style="font-weight:400">통신 기록(메타데이터)으로 판단한 참고 정보</span></div>
+   <table class="t">${rows.map(r=>`<tr><td class="nw" style="width:130px">${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>`:''}
+   ${x.facts&&x.facts.length?`<div class="sec" ${rows.length?'':'style="margin-top:0"'}>핵심 사실 <span class="note" style="font-weight:400">매칭된 기록을 로그 종류별로 요약 · 옆은 출처 기록</span></div><dl class="kv">${x.facts.map(f=>`<dt>${esc(f[0])}</dt><dd>${esc(f[1])} <span class="chip">${LOGKO[f[2]]||f[2]}</span></dd>`).join('')}</dl>`:''}
+   ${x.series?`<div class="sec">${esc(x.series[0])} <span class="note" style="font-weight:400">연결 요약(30분 단위)</span></div>${x.series[1].map(p=>`<div class="hbar" style="grid-template-columns:60px 1fr 90px"><span class="note">${p[0]}</span><span class="b"><i style="width:${100*p[1]/sm}%;background:#5b8def"></i></span><span class="num">${p[1].toLocaleString()} ${x.series[2]}</span></div>`).join('')}`:''}
+   ${x.limits&&x.limits.length?`<div class="note" style="margin-top:6px">${x.limits.map(l=>'※ '+esc(l)).join('<br>')}</div>`:''}`}
+// 기록 표: 근거 연결(uid 일치, 정확) · 같은 연결 묶음(센서 중복 억제) · 같은 시간대(추정)
+function recBox(e,m){
+  const R3=e.rec||(()=>{const U=(e.xf&&e.xf.uids)||[],G=(e.xf&&e.xf.grouped)||[],ex=META.filter(r=>r[5]&&U.includes(r[5])),gr=META.filter(r=>r[5]&&G.includes(r[5])&&!ex.includes(r)),f=r=>[r[0],r[1],r[4],r[5]||''];
+    return {exact:ex.map(f),grouped:gr.map(f),nearby:m.filter(r=>!ex.includes(r)&&!gr.includes(r)).map(f)}})();
+  const tb=(L,uid)=>`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th>${uid?'<th>연결 ID</th>':''}</tr>${L.map(r=>`<tr><td class="nw">${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[2])}</td>${uid?`<td class="mono note">${esc(r[3])}</td>`:''}</tr>`).join('')}</table>`;
+  return `<div class="sec">근거 연결의 기록 <span class="note" style="font-weight:400">탐지 근거와 연결 ID(uid)가 같은 기록 · 정확히 일치</span></div>${R3.exact.length?tb(R3.exact,1):'<div class="note">근거 연결과 일치하는 기록이 없습니다. 요약 기록(연결 요약·DNS 요약)만 있는 탐지이거나, 내부끼리 웹 통신·예외 도메인처럼 기록을 보내지 않는 통신입니다.</div>'}
+   ${(R3.grouped||[]).length?`<div class="sec">같은 연결 묶음 <span class="note" style="font-weight:400">센서가 중복을 줄여 근거 연결의 기록이 없을 때, 같은 출발지·목적지의 앞선 기록</span></div>${tb(R3.grouped,1)}`:''}
+   <div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분 · 추정, 참고용</span></div>${(R3.nearby||[]).length?tb(R3.nearby,0):'<div class="note">같은 시간대 기록이 없습니다.</div>'}`}
 
 // =============================================================== 공격 스토리
 // steps: [번호, 탐지(note, src), 시각, 단계, 출발, 대상, 쉬운 문장, 확정 여부]
@@ -1082,7 +1108,7 @@ function renderDet(){
   const rows=nsmEv().filter(e=>(!s||e.sev===s)&&(!st||e.stage===st)&&(!ty||e.note===ty)&&(!en||(en==='both'?!!e.also:en==='Suricata'?e.eng==='Suricata'||!!e.also:e.eng!=='Suricata'))&&(!dp||(dp==='suppressed'?e.disp==='suppressed':e.disp!=='suppressed'))&&(!c||e.corr)&&(!tac||evTechs(e).some(t=>tacOf(t).includes(tac)))&&(!q||(JSON.stringify(e)+' '+evTechs(e).map(attName).join(' ')).toLowerCase().includes(q)));
   $('#detCount').textContent=`전체 ${rows.length}건`;
   $('#detTable').innerHTML=`<tr><th>이벤트 ID</th><th>위험도</th><th>탐지명</th><th>방식</th><th>공격 단계</th><th>출발지</th><th>목적지</th><th>포트</th><th>계정</th><th class="num">반복</th><th>처리</th><th>스토리</th><th>탐지 시각</th></tr>`+
-   rows.map(e=>{const st=storyOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}<span class="sub">${e.sid?`SID ${e.sid} · `:''}${e.corr?`ATT&amp;CK 기법 ${new Set(techs(e.tech)).size}개`:techs(e.tech).join(', ')||'ATT&amp;CK 매핑 없음'}</span></td><td class="nw">${e.corr?'<span class="chip">상관</span>':e.eng==='Suricata'?'<span class="chip sig">시그니처</span>':'<span class="chip">행위</span>'+(e.also?'<span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지">+시그니처</span>':'')}</td><td class="nw">${e.corr?'<span class="chip">7단계</span>':esc(stageKo(e.stage))}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${st&&!st.single?`<span class="chip warn">${st.id}</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
+   rows.map(e=>{const st=storyOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)} ${judgeChips(e)}<span class="sub">${e.sid?`SID ${e.sid} · `:''}${e.corr?`ATT&amp;CK 기법 ${new Set(techs(e.tech)).size}개`:techs(e.tech).join(', ')||'ATT&amp;CK 매핑 없음'}</span></td><td class="nw">${e.corr?'<span class="chip">상관</span>':e.eng==='Suricata'?'<span class="chip sig">시그니처</span>':'<span class="chip">행위</span>'+(e.also?'<span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지">+시그니처</span>':'')}</td><td class="nw">${e.corr?'<span class="chip">7단계</span>':esc(stageKo(e.stage))}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${st&&!st.single?`<span class="chip warn">${st.id}</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
 }
 // 탐지 상세의 ATT&CK 블록. 전술은 기법으로 찾는다(공격 단계에서 끌어오지 않음)
 function attBox(e,alsoEv){
@@ -1104,7 +1130,8 @@ function openDet(id){
   const sigBox=x=>`<dl class="kv"><dt>시그니처</dt><dd>${esc(x.sig.msg)}</dd><dt>SID · rev</dt><dd class="mono">${x.sid} · ${x.sig.rev}</dd><dt>분류</dt><dd>${esc(x.sig.cat)} · <span class="mono">${esc(x.sig.cls)}</span></dd><dt>위험도</dt><dd>Suricata 우선순위 ${x.sig.pri} → ${sev(SURI_SEV[x.sig.pri])}${x.roleUp?` → ${sev(x.sigSev||x.sev)} <span class="note">목적지가 ${esc((A[x.dst]||{}).role||'DC·DB 서버')}라 한 단계 올림</span>`:''}</dd><dt>공격 단계</dt><dd>${esc(stageKo(x.stage))} <span class="note">정한 근거: ${BYKO[x.sig.by]}</span></dd>${x.cid?`<dt>Community ID</dt><dd class="mono">${esc(x.cid)}</dd>`:''}</dl>`;
   const stepN=st?(st.steps.find(x=>x[8]===e.id)||[])[0]:null;
   const body=`${st&&!st.single?`<div class="callout warn" style="margin-bottom:10px">이 탐지는 공격 스토리 <b>${esc(st.title)}</b>의 ${e.corr?'전체 흐름':stepN+'번째 단계'}입니다. <a data-go="story" data-id="${st.id}" data-n="${stepN||''}">공격 스토리 보기</a> · <a data-go="story" data-id="${st.id}" data-tab="resp">대응 보기</a></div>`:''}
-   <div class="sec" style="margin-top:0">기본 정보</div>
+   ${xfBox(e)}
+   <div class="sec" style="${e.xf?'':'margin-top:0'}">기본 정보</div>
    <dl class="kv"><dt>탐지 시각</dt><dd>${e.y||'2026'}-${e.d||DAY} ${e.t}${e.sec||':00'}</dd><dt>위험도</dt><dd>${sev(e.sev)}</dd><dt>탐지명</dt><dd>${esc(e.name)}</dd><dt>출발지</dt><dd>${who(e.src)}</dd><dt>목적지</dt><dd>${e.via?`<span class="mono">${esc(e.host||'목적지 확인 안 됨')}</span><div class="note">프록시 <span class="mono">${esc(e.via)}</span>(${esc(nm(e.dst))})를 거친 통신입니다. 프록시는 중계 장비라 피해 장비로 보지 않습니다</div>`:v.map(who).join('<br>')}</dd><dt>포트</dt><dd>${esc(e.port)}${e.proto?` (${esc(e.proto)})`:''}</dd>${e.account?`<dt>사용된 계정</dt><dd>${esc(e.account)}</dd>`:''}${e.occ>1?`<dt>반복</dt><dd>같은 공격이 이어져 ${e.occ}번 탐지됨(알림은 1번)</dd>`:''}${e.disp==='suppressed'?`<dt>처리</dt><dd><span class="chip sup">알림 끔</span> 예외 "${e.exc}"에 해당해 알림을 보내지 않았습니다.</dd>`:''}<dt>센서</dt><dd>${esc(e.sensor)}</dd></dl>
    ${sg?`<div class="sec">시그니처 정보 <span class="chip sig">Suricata</span></div>${sigBox(e)}<div class="note">시그니처 탐지는 알려진 공격의 패턴(룰)과 일치한 통신입니다. 정상 프로그램이 같은 패턴을 쓰면 오탐이 될 수 있어, 같은 PC·서버의 행위 탐지와 함께 봅니다.</div>`:''}
    ${alsoEv.length?`<div class="sec">같은 연결의 시그니처 탐지 <span class="chip sig">Zeek + Suricata</span></div><div class="note" style="margin-bottom:6px">같은 연결에서 같은 단계로 Suricata 시그니처도 탐지해 한 탐지로 보여 줍니다. 알림은 먼저 온 쪽으로 한 번만 보냈습니다.</div>${alsoEv.map(sigBox).join('')}`:''}
@@ -1113,7 +1140,7 @@ function openDet(id){
    <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(stageKo).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · ${R[e.note].sig?`<a data-go="sigrule" data-sid="${e.sid}">시그니처 설정</a>`:`<a data-go="rule" data-n="${e.note}">기준 바꾸기</a>`}</dd>`:''}</dl>
    ${attBox(e,alsoEv)}
    <div class="sec">탐지한 근거</div><table class="t"><tr><th>항목</th><th>내용</th></tr>${(e.ev||[]).map(x=>`<tr><td class="nw">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join('')}</table>
-   ${e.corr?'':`<div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분, 참고용</span></div>${m.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th></tr>${m.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td></tr>`).join('')}</table>`:'<div class="note">같은 시간대 기록이 없습니다.</div>'}`}
+   ${e.corr?'':recBox(e,m)}
    <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl>${sg?`<div class="note">Suricata 경보(<span class="mono">suricata_alert</span>)를 Manager가 바꾼 공통 이벤트입니다. 센서 탐지 로그(<span class="mono">nsm_detection.log</span>)에는 없습니다.</div><pre class="json">${esc(JSON.stringify({event_uid:'NSM:'+e.sensor+':suri-'+e.id.replace('NSM-',''),product:'NSM',engine:'Suricata',rule:e.note,stage:e.stage||null,technique:techs(e.tech),severity_id:{Critical:5,High:4,Medium:3,Low:2}[e.sev],src_ip:e.src,dst_ip:e.dst,dst_port:e.port,proto:e.proto,community_id:e.cid,sig_id:e.sid,sig_rev:sg.rev,signature:sg.msg,sig_category:sg.cat,sig_classtype:sg.cls,sig_severity:sg.pri,stage_by:sg.by,role_up:!!e.roleUp,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`:`<pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,rule:e.note,techniques:techs(e.tech),category:e.corr?'Correlated':'Single',killchain_stages:steps.filter(Boolean),severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`}</details>`;
   const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress',sid:e.sid?String(e.sid):''};
   const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${e.sid?`<button class="btn" data-go="sigrule" data-sid="${e.sid}">이 시그니처 설정</button>`:''}${iocQ?`<button class="btn" data-go="retro" data-q="${esc(iocQ)}">이 외부 주소를 과거 기록에서 찾기</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비 정보</button>`:''}`;

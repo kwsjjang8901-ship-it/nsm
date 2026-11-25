@@ -24,6 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import asset_enrich  # noqa: E402  (같은 폴더의 자산 정보 보강 모듈)
+import detection_enrich  # noqa: E402  (탐지 정보 보강, docs/DETECTION_ENRICH_SPEC.md)
 
 MGR = ("nsm_detection", "evidence", "nsm_exception", "asset_signal", "nsm_sensor", "nsm_ioc", "asset_agent_policy")
 # 적재 결과(예외·IOC·정책 파일을 읽은 행)는 실제 시각이라 캡처 구간 계산에서 뺀다(reporter 와 같은 이유)
@@ -132,126 +133,6 @@ def meta_index(paths):
             if src and isinstance(t, (int, float)):
                 idx[src].append((t, k, r))
     return idx
-
-
-def _fmt_bytes(b):
-    b = b or 0
-    return f"{b/1e6:,.1f}MB" if b >= 1e6 else f"{b/1e3:,.1f}KB" if b >= 1e3 else f"{b}B"
-
-
-# 탐지 종류(진단 마지막 토큰)별로 맞출 선별 전송 로그와 Kerberos 서비스 접두사(소문자). 없는 종류는 흐름 요약만.
-ENRICH = {
-    "Scan": ({"scan"}, None),
-    "SqlInjection": ({"http", "flow_summary"}, None), "Webshell": ({"http", "flow_summary"}, None),
-    "NtlmSpray": ({"ntlm", "flow_summary"}, None), "NtlmCredentialLeak": ({"ntlm", "smb_mapping", "flow_summary"}, None),
-    "Kerberos": ({"kerberos", "flow_summary"}, ()), "Asrep": ({"kerberos", "flow_summary"}, ()),
-    "Kerberoasting": ({"kerberos", "flow_summary"}, ()),
-    "DcSync": ({"dce_rpc", "kerberos", "flow_summary"}, ("e3514235-4b06-11d1-ab04-00c04fc2dcd2/", "ldap/")),
-    "WinrmAccess": ({"ntlm", "kerberos", "flow_summary"}, ("http/", "wsman/")),
-    "DcomExec": ({"ntlm", "kerberos", "dce_rpc", "flow_summary"}, ("rpcss/", "host/")),
-    "SmbAccess": ({"ntlm", "kerberos", "smb_mapping", "smb_files", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
-    "RdpAccess": ({"ntlm", "kerberos", "rdp", "flow_summary"}, ("termsrv/",)),
-    "SshAccess": ({"ssh", "flow_summary"}, None),
-    "SmbRansomware": ({"ntlm", "kerberos", "smb_mapping", "smb_files", "flow_summary"}, ("cifs/",)),
-    "OutboundSmb": ({"ntlm", "smb_mapping", "flow_summary"}, None),
-    "HttpBeaconing": ({"http", "flow_summary"}, None), "EncryptedChannel": ({"ssl", "flow_summary"}, None),
-    "NonstandardPort": ({"ssl", "http", "flow_summary"}, None), "LongConnection": ({"ssl", "flow_summary"}, None),
-    "LargeTransfer": ({"ssl", "http", "flow_summary"}, None), "UnknownProtocol": ({"flow_summary"}, None), "VolumeAggregate": ({"ssl", "http", "flow_summary"}, None),
-    "WebUpload": ({"ssl", "http", "flow_summary"}, None),
-    "SshBruteforce": ({"ssh", "flow_summary"}, None), "FtpBruteforce": ({"flow_summary"}, None),
-    "Heartbleed": ({"ssl", "flow_summary"}, None),
-    "Xss": ({"http", "flow_summary"}, None), "HttpBruteforce": ({"http", "flow_summary"}, None),
-    "TlsBeaconing": ({"ssl", "flow_summary"}, None),
-    "RemoteService": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
-    "RemoteTask": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/", "rpcss/")),
-    "RemoteWmi": ({"ntlm", "kerberos", "dce_rpc", "flow_summary"}, ("rpcss/", "host/")),
-    "MachineAccountMisuse": ({"ntlm", "kerberos", "flow_summary"}, ()),
-    "AiServiceUpload": ({"ssl", "flow_summary"}, None), "AiApiFromServer": ({"ssl", "flow_summary"}, None), "IocMatch": ({"ssl", "http", "dns_summary", "flow_summary"}, None),
-    "AiServiceExploit": ({"http", "flow_summary"}, None),
-    "CoercedAuth": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
-    "RemoteRegistryDump": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
-    "Zerologon": ({"dce_rpc", "flow_summary"}, None),
-    "AdEnumeration": ({"ntlm", "kerberos", "smb_mapping", "dce_rpc", "flow_summary"}, ("cifs/", "host/")),
-    "DgaDomain": ({"dns"}, None), "DnsTunneling": ({"dns"}, None), "DnsTunnel": ({"dns"}, None),
-}
-
-
-def enrich(det, midx):
-    """탐지 한 건의 출발·대상·시간창으로 선별 전송 로그를 맞춰 '어떻게'를 추정한다(uid 가 아니라 추정 조인).
-    반환: [(항목, 내용, 로그)] 와 계정 목록."""
-    a = det["attacker"]["ip"] if det.get("attacker") else None
-    if not a or a not in midx:
-        return [], []
-    tail = str(det.get("diagnosis") or "").split(".")[-1]
-    use, kpre = next((v for k, v in ENRICH.items() if k in tail), ({"flow_summary"}, None))
-    t0 = (det.get("first") or det["ts"]) - 600
-    t1 = (det.get("last") or det["ts"]) + 600
-    vic = {v["ip"] for v in det["victims"]}
-    by = collections.defaultdict(list)
-    for t, k, r in midx[a]:
-        if (t0 - 1800 if k in ("flow_summary", "dns_summary") else t0) <= t <= t1:
-            by[k].append(r)
-    # 대상이 있으면 대상으로 간 행만. Kerberos 는 KDC 로 가므로 대상과 무관하게 서비스 접두사로 거른다.
-    to_v = lambda r: not vic or (r.get("id.resp_h") or r.get("resp_h")) in vic
-    out = []
-
-    def add(label, vals, log, n=4):
-        vals = [v for v in dict.fromkeys(vals) if v]
-        if vals:
-            more = f" 외 {len(vals) - n}" if len(vals) > n else ""
-            out.append((label, ", ".join(vals[:n]) + more, log))
-
-    nt = [f"{r.get('domainname') + chr(92) if r.get('domainname') else ''}{r.get('username')}"
-          for r in by["ntlm"] if to_v(r) and r.get("username")] if "ntlm" in use else []
-    kr = []
-    if "kerberos" in use:
-        for r in by["kerberos"]:
-            svc = str(r.get("service") or "").lower()
-            if kpre is None or not kpre or any(svc.startswith(x) for x in kpre):
-                kr.append(r)
-    kb = [str(r.get("client")).split("/")[0] for r in kr if r.get("client")]
-    add("NTLM 계정", nt, "ntlm")
-    if kpre == ():   # 자격증명 탐지: 요청한 계정·서비스 자체가 근거
-        add("Kerberos 계정", kb, "kerberos", 5)
-        add("요청 서비스", [r.get("service") for r in kr if r.get("request_type") == "TGS"], "kerberos", 3)
-    else:
-        add("Kerberos 티켓", [f"{str(r.get('client', '-')).split('/')[0]} → {r.get('service')}" for r in kr if r.get("service")], "kerberos", 3)
-    if "smb_mapping" in use:
-        add("SMB 공유", [r.get("path") for r in by["smb_mapping"] if to_v(r)], "smb_mapping")
-    if "smb_files" in use:
-        sf = [r for r in by["smb_files"] if to_v(r)]
-        if sf:
-            acts = collections.Counter(str(r.get("action", "")).replace("SMB::FILE_", "").lower() for r in sf)
-            add("SMB 파일", [", ".join(f"{k} {v}" for k, v in acts.most_common())] + [r.get("name") for r in sf], "smb_files", 5)
-    if "dce_rpc" in use:
-        add("원격 호출", [f"{r.get('endpoint')}::{r.get('operation')}" for r in by["dce_rpc"] if to_v(r)], "dce_rpc")
-    if "rdp" in use:
-        add("RDP", [r.get("cookie") for r in by["rdp"] if to_v(r)], "rdp")
-    if "ssh" in use:
-        add("SSH", [f"{r.get('client', '')} 인증 시도 {r.get('auth_attempts', '-')}" for r in by["ssh"] if to_v(r)], "ssh")
-    if "ssl" in use:
-        sl = [r for r in by["ssl"] if to_v(r)]
-        add("TLS", [f"SNI {r.get('server_name')}" if r.get("server_name") else "SNI 없음" for r in sl]
-            + [f"JA3 {r.get('ja3')}" for r in sl if r.get("ja3")], "ssl", 3)
-    if "http" in use:
-        add("HTTP", [f"{r.get('method', '')} {r.get('host') or '(Host 없음)'}{r.get('uri_path') or ''}" for r in by["http"] if to_v(r)], "http", 3)
-    if "dns" in use:
-        names = []
-        for r in by["dns_summary"]:
-            names += split_list(r.get("sample_names"))
-        add("DNS 질의 예", names, "dns_summary", 5)
-    if "scan" in use and by["flow_summary"]:
-        fl = by["flow_summary"]
-        out.append(("연결 범위", f"대상 host {len({r.get('resp_h') for r in fl})}개, 포트 {len({r.get('resp_p') for r in fl})}개"
-                    " (선별 전송은 경계·내부 관리 포트만 남음)", "flow_summary"))
-    if "flow_summary" in use:
-        fl = [r for r in by["flow_summary"] if vic and to_v(r)]
-        if fl:
-            ports = [f"{r.get('resp_p')}/{r.get('proto', '')}{'(' + ','.join(split_list(r['service'])) + ')' if r.get('service') else ''}" for r in fl]
-            add("연결", [f"{sum(r.get('conns', 0) for r in fl):,}회, 보냄 {_fmt_bytes(sum(r.get('orig_bytes', 0) for r in fl))}"
-                       f" / 받음 {_fmt_bytes(sum(r.get('resp_bytes', 0) for r in fl))}"] + ports, "flow_summary", 4)
-    rc = [str(r.get("cookie")) for r in by["rdp"] if to_v(r) and r.get("cookie")] if "rdp" in use else []
-    return out, list(dict.fromkeys(nt + kb + rc))
 
 
 def build_stories(detections, midx, label):
@@ -630,7 +511,8 @@ def story_coverage(detections, ev):
         r["facts"] += 1 if d.get("facts") else 0
         if any(v.get("ext") for v in d["victims"]):
             r["ext"] += 1
-            named = any(k in ("TLS", "HTTP") and "SNI 없음" not in v and "(Host 없음)" not in v for k, v, _ in d.get("how", []))
+            recs = [x for v in ((d.get("enrich") or {}).get("records") or {}).values() for x in v]
+            named = any(x["log"] in ("ssl", "http") and "SNI 없음" not in x["text"] and "(Host 없음)" not in x["text"] for x in recs)
             named = named or any(re.search(r"\b(host|sni|service|server_name)=(?!-)[A-Za-z0-9]", f) for f in d.get("facts", []))
             r["ext_named"] += 1 if named else 0
         n = note_of.get(tail)
@@ -723,7 +605,7 @@ def collect(z, assets_path, args):
     ev_by = collections.defaultdict(list)
     for e in ev:
         ev_by[e.get("evidence_id")].append({k: e.get(k) for k in ("ts", "note", "operation", "src", "dst", "account", "uid", "detail", "technique",
-                                                                     "dst_name", "proxy", "src_port", "dst_port", "proto", "community_id")})
+                                                                     "dst_name", "proxy", "src_port", "dst_port", "proto", "community_id", "window_s")})
 
     detections = []
     heads = {}
@@ -779,9 +661,13 @@ def collect(z, assets_path, args):
 
     # 공격 스토리: 단계별 추정 근거(선별 전송 로그 조인)와 공격자별 묶음
     midx = meta_index({k: meta.get(k) or logs.get(k) for k in STORY_META})
+    # 탐지 정보 보강(docs/DETECTION_ENRICH_SPEC.md): 조회 4개 · 로그별 요약 · 판단 4개. 룰마다 다른 점은 RULES 설정 표뿐
+    eidx = detection_enrich.Index.load({k: meta.get(k) or logs.get(k) for k in detection_enrich.LOGS})
     for d in detections:
         if d.get("category") != "Correlated":
-            d["how"], d["accounts"] = enrich(d, midx)
+            d["enrich"] = detection_enrich.enrich(d, eidx, detection_enrich.rule_of(d, DIAG_NOTE), internal)
+            d["how"] = [(f["label"], f["value"], f["log"]) for f in d["enrich"].get("facts", [])]
+            d["accounts"] = d["enrich"].get("accounts", [])
             # 근거 로그(탐지 ID 로 연결된 정확한 값): 행위·내용 예 2개, 계정
             facts = []
             for e in d["evidence"]:
@@ -1322,7 +1208,8 @@ def main():
     data = collect(args.zeek_dir, args.assets, args)
     # 기존 리포트 화면은 시그니처 탐지를 쓰지 않는다: 건수만 넣는다(경보 폭주 때 수십만 건을 HTML 에 쓰지 않게)
     sur = data.get("suricata")
-    page_data = dict(data, suricata={"files": sur["files"], "alerts": sur["alerts"], "events": len(sur["events"])}) if sur else data
+    page_data = dict(data, suricata={"files": sur["files"], "alerts": sur["alerts"], "events": len(sur["events"])}) if sur else dict(data)
+    page_data["detections"] = [{k: v for k, v in d.items() if k != "enrich"} for d in data["detections"]]
     blob = json.dumps(page_data, ensure_ascii=False, default=list).replace("</", "<\\/")
     del page_data
     with open(args.out, "w", encoding="utf-8") as f:

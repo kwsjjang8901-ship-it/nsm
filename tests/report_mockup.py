@@ -25,7 +25,7 @@ DETECTION_LOG = os.path.join(HERE, "..", "nsm_rules", "detections", "detection_l
 
 MAX_EV = 3000        # 탐지 행 상한(브라우저가 무거워지지 않게, 최근 것부터)
 MAX_ASSETS = 2000
-MAX_META = 12        # 탐지마다 붙이는 같은 시간대 통신 기록
+MAX_META = 12        # 탐지마다 붙이는 기록 표 한 종류의 행 수(정확 일치·같은 연결 묶음·같은 시간대)
 MAX_PEERS = 6
 SAME_CONN_WINDOW = 600      # 같은 연결 묶어 보이기: 같은 community_id·같은 단계·10분 안(설계 6.2)
 STORY_MARGIN = 2 * 3600     # 스토리 host 의 시그니처 탐지를 그 스토리에 넣는 시간 여유(스토리 기간 앞뒤)
@@ -67,6 +67,30 @@ def build(data, zeek_dir, tz=9.0):
     def md(ts):
         d = dt(ts)
         return d.strftime("%m-%d") if d else ""
+
+    def hms(ts):
+        d = dt(ts)
+        return d.strftime("%H:%M:%S") if d else "--:--:--"
+
+    def xf_of(en):
+        """detection_enrich.enrich() 결과(스펙 7장) -> 목업 탐지 상세의 보강 값(xf)과 기록 표(rec)."""
+        j = en.get("judge") or {}
+        xf = {"facts": [[f["label"], f["value"], f["log"]] for f in en.get("facts", [])], "limits": en.get("limits", [])}
+        if j.get("result"):
+            xf["ok"] = [j["result"]["level"], j["result"]["why"]]
+        if j.get("live"):
+            xf["live"] = [1 if j["live"]["on"] else 0, f"{md(j['live']['last_seen'])} {hm(j['live']['last_seen'])} 마지막으로 봄"]
+        if j.get("name"):
+            dom = j["name"]["domain"]
+            xf["name"] = [dom, "출발지가 탐지 전 1시간에 조회한 DNS 응답에 이 IP가 있음" if dom else "탐지 전 1시간 DNS 응답에 이 IP가 없음(IP로 바로 접속)"]
+        if j.get("account"):
+            xf["acct"] = [j["account"]["name"], j["account"]["n"], j["account"]["hosts"]]
+        se = en.get("series")
+        if se:
+            b = se["unit"] == "bytes"
+            xf["series"] = [se["label"], [[hm(t), round(v / 1e6, 1) if b else v] for t, v in se["points"]], "MB" if b else "번"]
+        rec = {k: [[hms(r["ts"]), r["log"], r["text"], r.get("uid") or ""] for r in v[:MAX_META]] for k, v in (en.get("records") or {}).items()}
+        return xf, rec
 
     internal = set()
 
@@ -135,7 +159,9 @@ def build(data, zeek_dir, tz=9.0):
             e["victims"] = vics or [e["dst"]]
         else:
             e["note"] = note or (d.get("diagnosis") or "").split(".")[-1]
-            e["meta"] = [[hm(ts), log, src, e["dst"], f"{label}: {text}"] for label, text, log in (d.get("how") or [])[:MAX_META]]
+            en = d.get("enrich") or {}
+            if en:
+                e["xf"], e["rec"] = xf_of(en)
             e["_cids"] = {x["community_id"] for x in evs if x.get("community_id")}
             e["_stage"] = str(d.get("stages") or "").strip()   # 단독 탐지의 킬체인 단계
         ev.append((i, e))
