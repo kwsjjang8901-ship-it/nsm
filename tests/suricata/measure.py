@@ -24,13 +24,7 @@ STAGE_KO = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and C
             "Lateral Movement": "내부 확산", "Exfiltration": "정보 유출", "Impact": "피해", "": "단계 없음"}
 
 
-def category(msg):
-    w = (msg or "").split()
-    if len(w) >= 2 and w[0] in ("ET", "GPL"):     # GPL = ET Open 에 들어 있는 옛 Snort GPL 룰(SID 21xxxxx)
-        return w[0] + " " + w[1]
-    if w and w[0] == "SURICATA":
-        return "SURICATA(기본 이벤트)"
-    return "사내·기타"
+category = sa.category
 
 
 def runs(paths):
@@ -43,12 +37,12 @@ def runs(paths):
     return out
 
 
-def mockup_ev(d):
+def mockup(d):
     f = next(iter(glob.glob(os.path.join(d, "*_report_mockup.html"))), None)
     if not f:
-        return []
+        return {}
     m = re.search(r'id="report-data">(\{.*?)</script>', open(f, encoding="utf-8").read(), re.S)
-    return json.loads(m.group(1).replace("<\\/", "</"))["ev"] if m else []
+    return json.loads(m.group(1).replace("<\\/", "</")) if m else {}
 
 
 def main(argv):
@@ -62,25 +56,37 @@ def main(argv):
     rows = []
     for d in dirs:
         eve = os.path.join(d, "suricata", "eve-alert.json")
-        al = sa.load([eve])
-        ev = mockup_ev(d)
+        al = sa.iter_alerts([eve])      # 한 줄씩(경보가 많아도 메모리에 모으지 않음)
+        mk = mockup(d)
+        ev = mk.get("ev") or []
+        st = mk.get("sigstats")      # 리포트가 전체 시그니처 탐지로 센 값(화면에는 일부만 있을 수 있음)
         by_id = {e["id"]: e for e in ev}
         sig = [e for e in ev if e.get("eng") == "Suricata"]
         merged = [e for e in sig if e.get("mergedInto")]
         zeek = [e for e in ev if not e.get("eng") and not e.get("corr")]
+        n_al = 0
         for a in al:
+            n_al += 1
             c = category(a["alert"].get("signature"))
             cat_alerts[c] += 1
             stage_alerts[sa.stage_of(a)[0]] += 1
             sid_alerts[a["alert"].get("signature_id")] += 1
-        for e in sig:
-            c = category(e.get("name"))
-            cat_events[c] += 1
-            if e.get("mergedInto"):
-                cat_merged[c] += 1
-                merged_with[by_id[e["mergedInto"]]["note"]] += 1
+        if st:
+            for c, (ne, nm) in st["by_cat"].items():
+                cat_events[c] += ne
+                cat_merged[c] += nm
+            merged_with.update(st["merged_with"])
+            n_ev, n_mg = st["events"], st["merged"]
+        else:
+            for e in sig:
+                c = category(e.get("name"))
+                cat_events[c] += 1
+                if e.get("mergedInto"):
+                    cat_merged[c] += 1
+                    merged_with[by_id[e["mergedInto"]]["note"]] += 1
+            n_ev, n_mg = len(sig), len(merged)
         b = os.path.getsize(eve)
-        r = {"pcap": os.path.basename(os.path.normpath(d)), "alerts": len(al), "events": len(sig), "merged": len(merged),
+        r = {"pcap": os.path.basename(os.path.normpath(d)), "alerts": n_al, "events": n_ev, "merged": n_mg,
              "zeek": len(zeek), "zeek_with_sig": sum(1 for e in zeek if e.get("also")), "bytes": b}
         rows.append(r)
         for k in ("alerts", "events", "merged", "zeek", "zeek_with_sig", "bytes"):

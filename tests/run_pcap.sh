@@ -401,21 +401,29 @@ YAML
         # 경보 파일(두 모드 모두 eve-alert.json): 센서와 같은 필드만 남기고 시각순
         src="$SDIR/log/eve-alert.json"
         [ -f "$src" ] || : > "$src"
-        python3 "$ROOT/tests/suricata/slim.py" "$src" > "$SDIR/eve-alert.json"
-        SURI=(--suricata-eve "$SDIR/eve-alert.json")
+        # 경보가 수백만 건이어도 메모리에 모으지 않게: 한 줄씩 정리하고 정렬은 sort(디스크 사용)에 맡긴다
+        if ( set -o pipefail; python3 "$ROOT/tests/suricata/slim.py" "$src" --keyed \
+                | LC_ALL=C sort -s -t "$(printf '\t')" -k1,1 -S 200M -T "$SDIR" | cut -f2- > "$SDIR/eve-alert.json" ); then
+            SURI=(--suricata-eve "$SDIR/eve-alert.json")
+        else
+            echo "      경보 파일 정리 실패($src, 메모리·디스크를 확인하세요). 리포트에는 넣지 않습니다." >&2
+        fi
         nbad=$(grep -c "error parsing signature" "$SDIR/run.log" || true)
         echo "      완료 ($(( $(date +%s) - sstart ))초), 룰 ${nrules}개${nbad:+$([ "$nbad" -gt 0 ] && echo ", 읽지 못한 룰 ${nbad}개($SDIR/run.log)")}"
         if grep -q "no rules were loaded" "$SDIR/run.log"; then echo "      주의: 읽은 룰이 하나도 없습니다(룰 문법·파일을 확인하세요)." >&2; fi
-        # 화면 요약: 주소·이름 없이 단계별 경보 수만
-        python3 - "$ROOT/tests" "$SDIR/eve-alert.json" <<'PY'
+        # 화면 요약: 주소·이름 없이 단계별 경보 수만(한 줄씩 셈)
+        [ ${#SURI[@]} -eq 0 ] || python3 - "$ROOT/tests" "$SDIR/eve-alert.json" <<'PY' || echo "      (경보 요약 실패)" >&2
 import collections, sys
 sys.path.insert(0, sys.argv[1])
 import suricata_alerts as sa
-al = sa.load([sys.argv[2]])
 ko = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and Control": "외부 연락(C2)", "Credential Access": "계정 탈취",
       "Lateral Movement": "내부 확산", "Exfiltration": "정보 유출", "Impact": "피해", "": "단계 없음"}
-c = collections.Counter(sa.stage_of(a)[0] for a in al)
-print(f"      경보 {len(al):,}건, 시그니처 {len({a['alert'].get('signature_id') for a in al}):,}종"
+c, sids, n = collections.Counter(), set(), 0
+for a in sa.iter_alerts([sys.argv[2]]):
+    n += 1
+    c[sa.stage_of(a)[0]] += 1
+    sids.add(a["alert"].get("signature_id"))
+print(f"      경보 {n:,}건, 시그니처 {len(sids):,}종"
       + (": " + ", ".join(f"{ko[k]} {v:,}" for k, v in c.most_common()) if c else ""))
 PY
     else

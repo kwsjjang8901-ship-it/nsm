@@ -920,9 +920,17 @@ def collect(z, assets_path, args):
     suricata = None
     if getattr(args, "suricata_eve", None):
         import suricata_alerts
-        alerts = suricata_alerts.load(args.suricata_eve)
-        suricata = {"files": [os.path.basename(p) for p in args.suricata_eve], "alerts": len(alerts),
-                    "events": suricata_alerts.normalize(alerts, z, internal)}
+        # 한 줄씩 흘려 읽는다(경보가 수백만 건이어도 메모리에 모으지 않음). 파일 하나면 이미 시각순(run_pcap.sh)
+        n = [0]
+
+        def counted(it):
+            for a in it:
+                n[0] += 1
+                yield a
+        paths = args.suricata_eve
+        src = suricata_alerts.iter_alerts(paths) if len(paths) == 1 else iter(suricata_alerts.load(paths))
+        events = suricata_alerts.normalize(counted(src), z, internal)
+        suricata = {"files": [os.path.basename(p) for p in paths], "alerts": n[0], "events": events}
 
     return {
         "pcap": args.pcap or "", "elapsed": args.elapsed, "tz": args.tz, "obs_common": OBS_COMMON, "span": span,
@@ -1312,7 +1320,11 @@ def main():
                          "Manager 규칙으로 시그니처 탐지를 만들어 목업형 리포트에 넣음")
     args = ap.parse_args()
     data = collect(args.zeek_dir, args.assets, args)
-    blob = json.dumps(data, ensure_ascii=False, default=list).replace("</", "<\\/")
+    # 기존 리포트 화면은 시그니처 탐지를 쓰지 않는다: 건수만 넣는다(경보 폭주 때 수십만 건을 HTML 에 쓰지 않게)
+    sur = data.get("suricata")
+    page_data = dict(data, suricata={"files": sur["files"], "alerts": sur["alerts"], "events": len(sur["events"])}) if sur else data
+    blob = json.dumps(page_data, ensure_ascii=False, default=list).replace("</", "<\\/")
+    del page_data
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(PAGE.replace("__DATA__", blob))
     print(f"통합 리포트: {args.out} (탐지 {len(data['detections'])}건, 자산 {len(data['assets'])}개, 공격 스토리 {len(data['stories'])}개)")
