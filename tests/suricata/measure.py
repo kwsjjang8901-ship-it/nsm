@@ -26,8 +26,8 @@ STAGE_KO = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and C
 
 def category(msg):
     w = (msg or "").split()
-    if len(w) >= 2 and w[0] == "ET":
-        return "ET " + w[1]
+    if len(w) >= 2 and w[0] in ("ET", "GPL"):     # GPL = ET Open 에 들어 있는 옛 Snort GPL 룰(SID 21xxxxx)
+        return w[0] + " " + w[1]
     if w and w[0] == "SURICATA":
         return "SURICATA(기본 이벤트)"
     return "사내·기타"
