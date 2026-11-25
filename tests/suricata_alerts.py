@@ -15,6 +15,7 @@ import json
 import os
 
 GROUP_GAP = 15 * 60        # 반복 묶기 간격(Manager 사건 묶기와 같음)
+MAX_CIDS = 20              # 한 탐지에 남길 연결 키(community_id) 수 상한. 같은 연결 묶음·연결 찾기에 쓰며, 경보 폭주 때 메모리를 묶는다
 
 STAGE_NOTE = {"Recon": "Suricata_Recon", "Initial Access": "Suricata_Initial_Access", "Command and Control": "Suricata_C2",
               "Credential Access": "Suricata_Credential", "Lateral Movement": "Suricata_Lateral",
@@ -57,6 +58,16 @@ SEVERITY = {1: "High", 2: "Medium", 3: "Low", 4: "Low"}
 META_CONN_LOGS = ("http", "ssl", "ssh", "rdp", "kerberos", "ntlm", "smb_mapping", "smb_files", "dce_rpc")
 
 
+def category(msg):
+    """시그니처 이름 앞부분 -> 카테고리(ET <카테고리>, GPL <카테고리>, SURICATA = 기본 이벤트 룰, 그 밖은 사내·기타)."""
+    w = (msg or "").split()
+    if len(w) >= 2 and w[0] in ("ET", "GPL"):     # GPL = ET Open 에 들어 있는 옛 Snort GPL 룰(SID 21xxxxx)
+        return w[0] + " " + w[1]
+    if w and w[0] == "SURICATA":
+        return "SURICATA(기본 이벤트)"
+    return "사내·기타"
+
+
 def parse_ts(s):
     """Suricata 시각 '2026-11-09T00:01:00.025000+0000' -> epoch 초."""
     if s.endswith("Z"):
@@ -67,8 +78,15 @@ def parse_ts(s):
 
 
 def load(paths):
-    """eve 경보 파일·envelope JSONL -> eve 경보 dict 목록(시각순)."""
-    out = []
+    """eve 경보 파일·envelope JSONL -> eve 경보 dict 목록(시각순). 작은 파일용(전부 메모리에)."""
+    return sorted(iter_alerts(paths), key=lambda e: e["_ts"])
+
+
+def iter_alerts(paths):
+    """eve 경보 파일·envelope JSONL 을 한 줄씩 읽어 경보 dict 를 낸다(정렬 안 함, 메모리를 쓰지 않음).
+
+    run_pcap.sh 가 만드는 eve-alert.json 은 이미 시각순이라 그대로 normalize() 에 넘긴다.
+    """
     for path in paths:
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -86,8 +104,7 @@ def load(paths):
                     ev["_ts"] = parse_ts(ev["timestamp"])
                 except (KeyError, ValueError):
                     continue
-                out.append(ev)
-    return sorted(out, key=lambda e: e["_ts"])
+                yield ev
 
 
 def _meta_list(md, key):
@@ -163,9 +180,10 @@ def _rows(path):
 
 
 def normalize(alerts, zeek_dir, internal, stage_map=None):
-    """eve 경보 목록 -> 시그니처 탐지 목록(반복 묶기 뒤, 시각순)."""
+    """eve 경보(목록이나 iter_alerts() 처럼 한 번 도는 것, 시각순) -> 시그니처 탐지 목록(반복 묶기 뒤, 시각순)."""
     conns = conn_index(zeek_dir)
     groups, open_ = [], {}
+    defs = {}      # SID -> 시그니처 정의(모든 탐지가 같은 객체를 가리킴: 경보가 많아도 정의는 한 번만)
     for al in alerts:
         a = al["alert"]
         if not al.get("src_ip") and not al.get("dest_ip"):
@@ -175,12 +193,20 @@ def normalize(alerts, zeek_dir, internal, stage_map=None):
         s, sp, d, dp = endpoints(al, stage, internal)
         key = (rule, s, d)
         g = open_.get(key)
+        sid = a.get("signature_id")
+        sdef = defs.get(sid)
+        if sdef is None:
+            # 시그니처별 정의(화면의 시그니처 정보): 같은 탐지로 묶인 다른 시그니처도 각자 단계 근거·분류를 가진다
+            tech = _meta_list(a.get("metadata"), "mitre_technique_id")
+            sdef = defs[sid] = {"rev": a.get("rev"), "msg": a.get("signature") or "", "cat": a.get("category") or "",
+                             "cls": cls or "-", "pri": int(a.get("severity") or 3), "stage": stage, "by": by,
+                             "tech": ",".join(tech), "_tech": tech}
         if g is None or al["_ts"] - g["last"] > GROUP_GAP:
-            pri = int(a.get("severity") or 3)
+            pri = sdef["pri"]
             g = {"ts": al["_ts"], "last": al["_ts"], "rule": rule, "stage": stage, "stage_by": by,
-                 "sid": a.get("signature_id"), "rev": a.get("rev"), "signature": a.get("signature") or "",
-                 "category": a.get("category") or "", "classtype": cls, "priority": pri, "sig_sev": SEVERITY.get(pri, "Low"),
-                 "technique": _meta_list(a.get("metadata"), "mitre_technique_id"),
+                 "sid": sid, "rev": sdef["rev"], "signature": sdef["msg"],
+                 "category": sdef["cat"], "classtype": cls, "priority": pri, "sig_sev": SEVERITY.get(pri, "Low"),
+                 "technique": sdef["_tech"],
                  "src": s, "src_port": sp, "dst": d, "dst_port": dp, "proto": (al.get("proto") or "").lower(),
                  "app_proto": al.get("app_proto") or "", "community_ids": [], "uid": "", "dst_name": "", "proxy": "",
                  "occ": 0, "signatures": {}, "defs": {}}
@@ -188,15 +214,13 @@ def normalize(alerts, zeek_dir, internal, stage_map=None):
             open_[key] = g
         g["last"] = al["_ts"]
         g["occ"] += 1
-        sg = g["signatures"].setdefault(a.get("signature_id"), [a.get("signature") or "", 0])
+        sg = g["signatures"].get(sid)
+        if sg is None:
+            sg = g["signatures"][sid] = [sdef["msg"], 0]
+            g["defs"][sid] = sdef
         sg[1] += 1
-        if a.get("signature_id") not in g["defs"]:
-            # 시그니처별 정의(화면의 시그니처 정보): 같은 탐지로 묶인 다른 시그니처도 각자 단계 근거·분류를 가진다
-            g["defs"][a.get("signature_id")] = {"rev": a.get("rev"), "msg": a.get("signature") or "", "cat": a.get("category") or "",
-                                                "cls": cls or "-", "pri": int(a.get("severity") or 3), "stage": stage, "by": by,
-                                                "tech": ",".join(_meta_list(a.get("metadata"), "mitre_technique_id"))}
         cid = al.get("community_id")
-        if cid and cid not in g["community_ids"]:
+        if cid and len(g["community_ids"]) < MAX_CIDS and cid not in g["community_ids"]:
             g["community_ids"].append(cid)
             c = conns.get(cid)
             if c:
@@ -207,6 +231,8 @@ def normalize(alerts, zeek_dir, internal, stage_map=None):
                     g["dst_name"] = c["connect"]
                 elif c["names"] and not g["dst_name"]:
                     g["dst_name"] = c["names"][0]
+    for d in defs.values():
+        d.pop("_tech", None)
     for g in groups:
         g["signatures"] = [[sid, v[0], v[1]] for sid, v in g["signatures"].items()]
         g["src_internal"], g["dst_internal"] = bool(g["src"] and internal(g["src"])), bool(g["dst"] and internal(g["dst"]))

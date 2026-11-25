@@ -136,10 +136,10 @@ Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 �
 | 룰 | `-R` 파일을 `suricata/rules/local.rules`에, `-R et`는 ET Open을 `suricata/rules/suricata.rules`에(`-y`면 surica `disable.conf` 적용) |
 | 설정 | 바탕 설정은 로컬이면 설치본(`SURICATA_CONF`, 기본 `/etc/suricata/suricata.yaml`), Docker면 이미지 기본 설정. `-y` 있음: surica `render_config.py`로 바탕 설정을 읽어 센서와 같은 설정(경보·통계 파일 분리, `threshold.config` 기본값, Community ID seed 0)을 만듦(PyYAML 필요). `-y` 없음: 바탕 설정에 이 실행의 룰만(`-S`), `HOME_NET`, eve-log의 Community ID를 바꿈. 설치본에 넣어 둔 룰 목록(`rule-files`)은 쓰지 않음 |
 | `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음). `SURICATA_HOME_NET=<CIDR,...>`를 주면 그 값만 씀. 공개 데이터셋처럼 외부 공격자가 사설 주소로 보일 때 필요(CIC-IDS2017: `192.168.10.0/24`, 공격은 방화벽 NAT `172.16.0.1`에서 들어옴). ET 룰은 대부분 `$EXTERNAL_NET -> $HOME_NET` 방향이라 이 값이 틀리면 웹 공격 경보가 거의 나오지 않음 |
-| 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀 |
+| 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀. 경보가 수백만 건이어도 메모리에 모으지 않게 `slim.py --keyed`로 한 줄씩 정리하고 정렬은 `sort`(디스크 임시 파일, 메모리 200MB)에 맡김. 같은 시각의 경보는 Suricata가 쓴 순서대로 |
 | 화면 요약 | 경보 수, 시그니처 종류 수, 단계별 경보 수(주소·시그니처 이름은 출력하지 않음), 읽지 못한 룰 수 |
 | 장애 격리 | 이미지가 없거나 설정 생성·실행이 실패하면 경고하고 Suricata 없이 리포트를 만듦(종료 코드 0). 깨진 룰은 Suricata가 건너뛰고, 화면에 읽지 못한 룰 수와 "읽은 룰이 하나도 없음"을 알림. 메모리 부족으로 강제 종료(종료 코드 137)되면 그렇게 알리고 VM 메모리나 `SURICATA_LOWMEM=1`을 안내 |
-| 메모리 | ET Open 전체 룰은 탐지 엔진만으로 수 GB(빌드·Hyperscan 여부에 따라 다름). CIC-IDS2017 목요일 + ET 전체를 Suricata 8.0.8로 돌린 VM에서 OOM으로 종료됨(2026-11-25). VM 메모리 8GB 이상 권장, 안 되면 `SURICATA_LOWMEM=1`. 실제 ET에서 얼마나 줄어드는지는 아직 측정하지 않음 |
+| 메모리 | ET Open 전체 룰은 탐지 엔진만으로 수 GB(빌드·Hyperscan 여부에 따라 다름). CIC-IDS2017 목요일 + ET 전체를 Suricata 8.0.8로 돌린 VM에서 OOM으로 종료됨(2026-11-25). VM 메모리 8GB 이상 권장, 안 되면 `SURICATA_LOWMEM=1`. 실제 ET에서 얼마나 줄어드는지는 아직 측정하지 않음. 경보 뒤처리는 흘려 읽음: 합성 경보 100만 건(505MB, 시그니처 탐지 33만 건)에서 경보 정리 12MB + `sort` 200MB, 리포트 0.9GB, `measure.py` 47MB(이 환경에서 잰 값) |
 
 pcap 모드에서 Suricata는 경보를 시간 순서대로 내지 않아, `-y`의 `threshold.config` 기본값(60초에 1건)이 실행마다 조금 다르게 거를 수 있습니다(surica DESIGN 10장). 리포트는 시각순으로 다시 정렬합니다. 검증은 `tests/suricata/e2e.sh`(7장).
 
@@ -280,7 +280,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | `signal_counts`, `signal_rows`, `signal_ips` | 자산 신호 종류별 건수, 행·IP 수 |
 | `meta`, `mgr`, `local`, `raw` | 선별 전송 로그별 바이트·행, Manager 전송 로그(탐지 요약·근거·예외·자산 신호), 센서 로컬, `-k` 원본 |
 | `sensor` | 최대 캡처 손실(%), NSM 외 notice, Zeek 경고 |
-| `suricata` | `--suricata-eve`를 줬을 때만: 파일 이름, 경보 수, 정규화한 시그니처 탐지(`events`, 3.9절) |
+| `suricata` | `--suricata-eve`를 줬을 때만: 파일 이름, 경보 수, 정규화한 시그니처 탐지(`events`, 3.9절). 기존 리포트 HTML에는 `events` 대신 건수만 넣음(화면에서 쓰지 않음) |
 
 JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있어도 페이지가 깨지지 않습니다. 화면에 쓰는 모든 값은 JS의 `esc()`로 이스케이프합니다.
 
@@ -307,13 +307,14 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 | 처리 | 규칙 |
 | --- | --- |
-| 입력 | 센서 경보 파일(`eve-alert.json`, Suricata eve 줄) 또는 전송 스트림(`suricata_alert` envelope JSONL). 경보만 읽고 시각순으로 정렬(pcap 모드 Suricata는 경보를 시각순으로 쓰지 않음) |
+| 입력 | 센서 경보 파일(`eve-alert.json`, Suricata eve 줄) 또는 전송 스트림(`suricata_alert` envelope JSONL). 경보만 읽음. 파일이 하나면 이미 시각순(`run_pcap.sh`가 정렬)이라 한 줄씩 흘려 읽고(`iter_alerts`), 여러 개면 모아서 시각순으로 정렬(`load`) |
 | 단계 | SID 지정 → 룰 메타데이터 `mitre_tactic_id` → 분류(eve `category` 설명을 classtype으로 바꿔 설계 4.2절 표) → 단계 없음(`Suricata_Other`) |
 | 출발지·대상 | 경보 `source`·`target`(룰 `target` 키워드) → C2·유출은 내부 쪽이 출발지 → 응답 방향(`to_client`)이면 뒤집음 |
 | 연결 찾기 | `community_id`로 연결 단위 선별 전송 로그(`meta/http`·`ssl` 등)와 원본 `conn.log`(있으면): `uid`, 목적지 이름(SNI·Host). http가 `CONNECT`면 대상은 프록시, 실제 목적지는 CONNECT 대상(`via`·`host`) |
-| 반복 묶기 | (탐지 종류, 출발지, 대상)이 15분 간격 안에 다시 나오면 한 탐지(`occ`). 묶인 시그니처는 근거 줄에 모두 |
+| 반복 묶기 | (탐지 종류, 출발지, 대상)이 15분 간격 안에 다시 나오면 한 탐지(`occ`). 묶인 시그니처는 근거 줄에 모두. 시그니처 정의는 SID마다 한 벌을 여러 탐지가 함께 씀. 연결 키(`community_ids`)는 한 탐지에 20개까지만 남김(같은 연결 묶기에 쓰는 앞쪽 연결) |
 | 위험도 | 리포트 등급은 다른 탐지와 같은 체계(`Information`). Suricata 우선순위 변환값(1 High, 2 Medium, 3·4 Low)과 목적지가 DC·DB 서버면 한 단계 올린 값은 상세의 시그니처 정보(`sigSev`·`roleUp`) |
 | 같은 연결 묶기 | 같은 `community_id`·같은 단계·10분 안의 Zeek 단독 탐지가 있으면 Zeek 탐지에 `also`, 시그니처 탐지에 `mergedInto`(목록에서는 Zeek 탐지 한 줄에 "+시그니처") |
+| 화면에 넣는 수 | 목업형 리포트의 탐지 목록은 3000건까지(`MAX_EV`). Zeek 탐지를 먼저 넣고 남는 자리에 시그니처 탐지를 Zeek 탐지와 묶인 것 → 우선순위 → 반복 수가 많은 것 → 이른 것 순으로. 잘리면 배너에 "시그니처 탐지 N건 중 M건 표시". 같은 연결 묶기·카테고리별 수는 자르기 전 전체로 세어 `sigstats`에 둠(`measure.py`가 씀) |
 | 공격 스토리 | 스토리에 나온 host가 출발지·대상인 시그니처 탐지(스토리 기간 앞뒤 2시간)는 그 스토리 단계로 넣음. 단계 없음·Low도 이미 시작된 스토리면 들어감. 시그니처만으로 새 스토리는 만들지 않음. 같은 연결로 묶인 것은 Zeek 단계에 이미 있음 |
 | 화면 | 시그니처 정의(`sigs`: SID별 메시지·분류·우선순위·단계·근거·기법), 장비 현황 Suricata 칸("경보 N건(pcap, 파일)"), ATT&CK 커버리지에 이 pcap 경보의 기법 |
 

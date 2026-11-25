@@ -150,21 +150,38 @@ def build(data, zeek_dir, tz=9.0):
     ev = [(i, e) for i, e in ev if not e.get("corr") or id(e) in keep]
     # ---- 시그니처 탐지(Suricata)
     sur = data.get("suricata") or {}
+    groups = sur.get("events") or []
+    # Zeek 탐지는 모두 남기고(많으면 최근 것), 시그니처 탐지는 남은 자리만큼
+    ev = sorted(ev, key=lambda x: x[1]["ts"] or 0)[-MAX_EV:]
+    # 같은 연결 묶음과 집계는 시그니처 탐지 전체로(화면에 다 넣지 못해도 숫자는 정확하게)
+    merge_to, sigstats = _same_conn_groups(groups, [e for _, e in ev])
+    budget = max(0, MAX_EV - len(ev))
+    order = sorted(range(len(groups)), key=lambda k: (k not in merge_to, groups[k]["priority"], -groups[k]["occ"], groups[k]["ts"]))
+    keep = set(order[:budget])
+    sigstats["shown"] = len(keep)
     sigdefs = {}
-    for k, g in enumerate(sur.get("events") or []):
-        e, sg = _sig_event(g, hm, md, dt, data.get("pcap") or "NSM")
-        ev.append((("sig", k), e))
+    for k, g in enumerate(groups):
         for sid, x in g["defs"].items():
             sigdefs.setdefault(str(sid), x)
+        if k not in keep:
+            continue
+        e, sg = _sig_event(g, hm, md, dt, data.get("pcap") or "NSM")
+        if k in merge_to:
+            e["_mergez"] = merge_to[k]
+        ev.append((("sig", k), e))
         for ip, inside in ((g["src"], g["src_internal"]), (g["dst"], g["dst_internal"])):
             if ip and inside:
                 internal.add(ip)
-    ev = sorted(ev, key=lambda x: x[1]["ts"] or 0)[-MAX_EV:]
+    ev = sorted(ev, key=lambda x: x[1]["ts"] or 0)
     for n, (i, e) in enumerate(ev, 1):
         e["id"] = f"NSM-{n:05d}"
         ev_id[i] = e["id"]
     ev = [e for _, e in ev]
-    _same_conn(ev)
+    for e in ev:
+        z = e.pop("_mergez", None)
+        if z is not None:
+            z.setdefault("also", []).append(e["id"])
+            e["mergedInto"] = z["id"]
 
     # ---- 공격 스토리
     note_of = {x["id"]: x.get("note", "") for x in ev}
@@ -318,11 +335,13 @@ def build(data, zeek_dir, tz=9.0):
     internal -= {v["ip"] for d in dets for v in d.get("victims") or [] if v.get("proxy")}
     start, end = data.get("start"), data.get("end")
     rng = f"{md(start)} {hm(start)} ~ {md(end)} {hm(end)}" if start else "캡처 구간 없음"
+    cut = f" · 시그니처 탐지 {sigstats['events']:,}건 중 {sigstats['shown']:,}건 표시" if sigstats["events"] > sigstats["shown"] else ""
     return {"title": f"NSM 리포트 · {data.get('pcap') or 'pcap'}", "banner": f"PoC 리포트(읽기 전용) · {data.get('pcap') or 'pcap'} · {rng} (UTC{tz:+g}) · "
-            f"탐지 {len(ev)}건 · 화면은 MDS Manager 목업과 같고, 대응·편집·배포 같은 Manager 기능은 빠져 있습니다",
+            f"탐지 {len(ev)}건{cut} · 화면은 MDS Manager 목업과 같고, 대응·편집·배포 같은 Manager 기능은 빠져 있습니다",
             "day": md(start or end), "span": f"캡처 {_dur(span)}", "internal": sorted(internal), "ev": ev, "stories": stories,
             "assets": assets, "devx": devx, "peers": peers, "exc": exc, "builtin": bool(bihits), "bihits": bihits,
-            "excver": "pcap 실행", "sensors": sensors, "sent": sent, "sigs": sigdefs}
+            "excver": "pcap 실행", "sensors": sensors, "sent": sent, "sigs": sigdefs,
+            **({"sigstats": sigstats} if sur else {})}
 
 
 STAGE_KO = {"Recon": "정찰", "Initial Access": "초기 침투", "Command and Control": "외부 연락(C2)", "Credential Access": "계정 탈취",
@@ -358,15 +377,35 @@ def _sig_event(g, hm, md, dt, sensor):
     return e, sg
 
 
-def _same_conn(ev):
-    """같은 연결(community_id)·같은 단계·10분 안의 Zeek 탐지와 시그니처 탐지를 한 탐지로(설계 6.2)."""
-    zeek = [e for e in ev if not e.get("eng") and not e.get("corr") and e.get("_cids")]
-    for s in (e for e in ev if e.get("eng") == "Suricata"):
-        for z in zeek:
-            if z["_stage"] == s["stage"] and z["_cids"] & s["_cids"] and abs((z["ts"] or 0) - (s["ts"] or 0)) <= SAME_CONN_WINDOW:
-                z.setdefault("also", []).append(s["id"])
-                s["mergedInto"] = z["id"]
+def _same_conn_groups(groups, zev):
+    """시그니처 탐지(그룹) 전체에 대해 같은 연결(community_id)·같은 단계·10분 안의 Zeek 단독 탐지를 찾는다(설계 6.2).
+
+    돌려줌: (그룹 번호 -> Zeek 탐지 행, 집계). 집계는 화면에 넣지 못한 시그니처 탐지까지 센 값(측정 요약용).
+    """
+    import suricata_alerts as sa
+    by_cid = collections.defaultdict(list)
+    for z in zev:
+        if not z.get("eng") and not z.get("corr"):
+            for c in z.get("_cids") or ():
+                by_cid[c].append(z)
+    merge_to, by_cat, merged_with = {}, collections.defaultdict(lambda: [0, 0]), collections.Counter()
+    for k, g in enumerate(groups):
+        cat = sa.category(g["signature"])
+        by_cat[cat][0] += 1
+        hit = None
+        for c in g["community_ids"]:
+            for z in by_cid.get(c, ()):
+                if z["_stage"] == g["stage"] and abs((z["ts"] or 0) - (g["ts"] or 0)) <= SAME_CONN_WINDOW:
+                    hit = z
+                    break
+            if hit:
                 break
+        if hit is not None:
+            merge_to[k] = hit
+            by_cat[cat][1] += 1
+            merged_with[hit["note"]] += 1
+    return merge_to, {"events": len(groups), "merged": len(merge_to), "shown": 0,
+                      "by_cat": {c: v for c, v in by_cat.items()}, "merged_with": dict(merged_with)}
 
 
 def _sig_into_stories(stories, ev, hm, md):
