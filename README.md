@@ -55,6 +55,7 @@ tests/
   suricata_alerts.py        # Suricata 경보 -> 시그니처 탐지(Manager 정규화 규칙의 PoC, run_pcap.sh -s)
   suricata/                 # 테스트 룰·경보 고정본(killchain_story)·생성 스크립트·정규화 단위 테스트·run_pcap.sh -S 통합 테스트(e2e.sh, Docker)·S5 측정 요약(measure.py)
   asset_enrich.py           # 리포트 자산 보강: OUI 제조사, Recog 지문, TCP SYN OS, 장비 유형 판정
+  detection_enrich.py       # 탐지 정보 보강(docs/DETECTION_ENRICH_SPEC.md 의 PoC): 메타데이터로 판단 4개·핵심 사실·기록 표. 단위 테스트 test_detection_enrich.py
 schema/
   logs/                     # Manager 로 가는 로그의 JSON Schema(생성됨, docs/LOG_SCHEMA.md 와 함께)
   fields.zeek               # Zeek 레코드 정의에서 필드·열거값을 뽑는 스크립트
@@ -69,6 +70,7 @@ docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
   DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종, 실제 공격 사례·위험도)
   REPORT_SPEC.md            # 통합 리포트(run_pcap.sh·report_pcap.py) 생성 구조와 스펙
+  DETECTION_ENRICH_SPEC.md  # 탐지 정보 보강(Manager): 메타데이터로 판단 4개·핵심 사실·기록 표, 룰별 코드 없는 구조
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)

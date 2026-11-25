@@ -179,29 +179,20 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 2 | 내부 판정 | 사설 대역 또는 `--nets` 안이면 내부. 대상이 외부면 `ext` 표시(C2·유출·비표준 포트의 연결 대상 서버) |
 | 3 | IP에 이름 붙이기 | 리졸버가 있으면 탐지 시각에 그 IP를 쓰던 자산(IP 점유 구간, 구간 밖이면 가장 가까운 구간)의 이름·역할·OS·대표 키. 없으면 자산 신호의 호스트명 > 머신 계정 > FQDN > DNS 이름을 참고값(`guess`)으로 |
 | 4 | 탐지 정리 | 탐지 요약을 시각순으로 읽고 근거를 `evidence_ids`로 붙임(탐지당 최대 200행). 같은 사건(`incident_id`)의 갱신 탐지(`occurrence` > 1)는 첫 탐지 한 행으로 합쳐 횟수·마지막 시각·근거를 더함. 상관 탐지는 같은 체인의 `revision`이 가장 큰 행만 씀. 근거에 프록시(`proxy` 필드, 옛 로그는 `detail`의 `via_proxy=주소:포트`)가 있고 대상이 그 주소면(유출 10·12·14, C2·AI 07·09·24·30·33의 프록시 경유 탐지) 대상에 `proxy`(중계 장비)를 달고 외부처럼 다룸: 실제 목적지는 근거의 `dst_name`(옛 로그는 `host=`, `targets`), 없으면 "목적지 확인 안 됨"(연결 시작 CONNECT를 캡처하지 못함). 프록시는 자산 표의 관련 탐지 수와 같은 인프라 키에서 뺌 |
-| 5 | 추정 근거(`enrich`) | 탐지마다 공격자·대상·시간창으로 선별 전송 로그를 맞춰 계정·공유·호출·SNI·바이트를 붙임(3.3절) |
+| 5 | 탐지 정보 보강(`detection_enrich`) | 탐지마다 근거 `uid`·출발지·대상·시간 범위로 선별 전송 로그를 맞춰 판단 4개·핵심 사실·추이·기록 표를 만듦(3.3절, [스펙](DETECTION_ENRICH_SPEC.md)) |
 | 6 | 공격 스토리(`build_stories`) | 공격자별로 확정 체인과 확산으로 이어진 탐지를 묶음(3.4절) |
 | 7 | 메타데이터 관측(`meta_observe`) | 같은 공격 인프라에 붙은 host, 확인이 필요한 내부 접속(3.5절) |
 | 8 | 근거 연결률(`story_coverage`) | 탐지 종류별로 근거 계정·추정 근거·추정 계정·외부 이름·근거 uid가 붙은 건수(빈틈 검토용, 숫자만) |
 | 9 | 자산 표 | 리졸버 모드 또는 신호 모드(3.6절) |
 | 10 | 전송량·센서 상태 | 로그별 바이트·행, Manager 전송·센서 로컬·원본(-k) 구분, 최대 캡처 손실, NSM 외 notice, stderr 경고(최대 20줄). 캡처 구간은 패킷 시각 로그로만 잡고, 실제 시각으로 쓰는 행(reporter, 예외·IOC·정책 파일 적재 행)은 뺌 |
 
-### 3.3 추정 근거(`enrich`)
+### 3.3 탐지 정보 보강(`detection_enrich.py`)
 
-탐지 로그의 근거(`evidence`)는 탐지 ID로 연결된 정확한 값입니다. 여기에 더해, **같은 출발지·대상·시간의 선별 전송 행**을 맞춰 "어떻게"를 보충합니다. uid가 아니라 출발·대상·시간으로 맞춘 **추정값**이므로 화면에 "추정"으로 표시합니다.
+탐지 로그의 근거(`evidence`)는 탐지 ID로 연결된 정확한 값입니다. 여기에 선별 전송 로그를 맞춰 탐지 상세의 한눈에 보기(성공 흔적·지금도 통신 중·목적지 이름·계정 맥락)·핵심 사실·30분별 추이·기록 표를 만듭니다. 규칙은 Manager 스펙 [DETECTION_ENRICH_SPEC.md](DETECTION_ENRICH_SPEC.md)이고, `tests/detection_enrich.py`가 그대로 구현합니다.
 
-- 시간창: 탐지 `first_seen − 10분` \~ `last_seen + 10분`. 흐름·DNS 요약은 주기 요약이라 앞쪽을 30분 더 넓힘.
-- 대상이 있으면 대상으로 간 행만 씁니다. Kerberos는 KDC로 가므로 대상 대신 서비스 이름 접두사로 거릅니다(예: 관리 공유 `cifs/`·`host/`, RDP `termsrv/`, WinRM `http/`·`wsman/`).
-- 탐지 종류별로 맞출 로그는 `ENRICH` 표에 있습니다(진단명 마지막 토큰 기준). 표에 없으면 흐름 요약만 씁니다.
-
-| 탐지 종류(예) | 맞추는 로그 | 화면 항목 |
-| --- | --- | --- |
-| 스캔 | 흐름 요약 | 연결 범위(대상 host·포트 수) |
-| 웹 공격·웹 로그인 | http, 흐름 | HTTP(메서드·Host·경로), 연결 |
-| NTLM·Kerberos 자격증명 | ntlm, kerberos, 흐름 | NTLM 계정, Kerberos 계정, 요청 서비스 |
-| 확산·원격 실행·AD 공격 | ntlm, kerberos, smb\_mapping, smb\_files, dce\_rpc, rdp, 흐름 | NTLM 계정, Kerberos 티켓(계정 → 서비스), SMB 공유·파일, 원격 호출, RDP |
-| C2·유출(TLS·HTTP) | ssl, http, 흐름 | TLS(SNI·JA3), HTTP, 연결(횟수·보냄/받음·포트·서비스) |
-| DGA·DNS 터널링·DNS 유출 | dns\_summary | DNS 질의 예 |
+- 룰별 코드 없이 조회 4개(근거 `uid` 정확 일치 · 센서 중복 억제를 메우는 같은 연결 묶음 · 연결 요약·DNS 요약 · 같은 시간대 추정) → 로그별 요약기 → 판단 4개. 룰마다 다른 점은 `RULES` 설정 표 한 줄(보여 줄 로그, Kerberos 서비스 접두사, 조회 방식, 시간 범위, 성공 판단).
+- 결과는 탐지 항목의 `enrich`(스펙 7장 형식)에 넣습니다. 기존 리포트는 핵심 사실을 `how`(항목, 값, 로그)로 써서 "추정"으로 표시하고, 기록 표는 HTML에 넣지 않습니다. 목업형 리포트는 탐지 상세에 그대로 그립니다(3.8절).
+- pcap 한 개 안에서 계산하므로 "지금도 통신 중"은 캡처 끝까지를 기준으로 합니다.
 
 ### 3.4 공격 스토리(`build_stories`)
 
@@ -271,7 +262,7 @@ python3 tests/report_pcap.py <zeek 로그 디렉터리> -o <출력 html> [--asse
 | 키 | 내용 |
 | --- | --- |
 | `pcap`, `elapsed`, `tz`, `span`, `start`, `end`, `generated` | 머리말: pcap 이름, 처리 시간, 시간대, 캡처 구간 |
-| `detections` | 탐지(단일·상관). 시각, ID, 진단명, 기법·단계(상관은 `->`로 이은 문자열), 공격자·대상(`ip`·`name`·`ext`·`roles`·`os`·`guess`), 근거, 사건 횟수(`occurrences`)·마지막 시각, 처리(`disposition`·`exception_id`), 추정 근거(`how`), 계정(`accounts`·`ev_accounts`), 근거 요약(`facts`), 한국어 이름(`ko`) |
+| `detections` | 탐지(단일·상관). 시각, ID, 진단명, 기법·단계(상관은 `->`로 이은 문자열), 공격자·대상(`ip`·`name`·`ext`·`roles`·`os`·`guess`), 근거, 사건 횟수(`occurrences`)·마지막 시각, 처리(`disposition`·`exception_id`), 탐지 정보 보강(`enrich`, 스펙 7장 형식)과 그 핵심 사실(`how`), 계정(`accounts`·`ev_accounts`), 근거 요약(`facts`), 한국어 이름(`ko`) |
 | `stories` | 스토리마다 시작 공격자(`seed`), 단계(탐지 번호), 확정 단계, 체인 ID, 레인, 같은 인프라(`infra`), 외부 대상 키(`ext_keys`), 확인이 필요한 내부 접속(`observed`), 평소 통신으로 뺀 수(`observed_skip`), 추정 첫 접속(`est_first`) |
 | `stage_order`, `coverage` | 단계 순서, 근거 연결률 |
 | `exceptions` | `nsm_exception.log` 행 그대로 |
@@ -292,7 +283,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 | 목업 데이터 | 만드는 방법 |
 | --- | --- |
-| 탐지(`ev`) | 탐지 요약 한 행 = 한 이벤트, 시각순 id `NSM-00001`…. notice 이름은 근거의 `note`(없으면 `detection_log.zeek`의 진단명 표). 등급은 센서 값(단독 `Information`, 상관 `Suspicious`), 탐지명·단계·기준은 목업 `RULES` 표. 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건. 대상이 없으면 근거의 목적지, 그것도 없으면 "(대상 여러 곳)". 프록시 경유는 `via`·`host`. 같은 시간대 통신 기록 = 추정 근거(3.3절). 최대 3,000건(최근 것) |
+| 탐지(`ev`) | 탐지 요약 한 행 = 한 이벤트, 시각순 id `NSM-00001`…. notice 이름은 근거의 `note`(없으면 `detection_log.zeek`의 진단명 표). 등급은 센서 값(단독 `Information`, 상관 `Suspicious`), 탐지명·단계·기준은 목업 `RULES` 표. 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건. 대상이 없으면 근거의 목적지, 그것도 없으면 "(대상 여러 곳)". 프록시 경유는 `via`·`host`. 탐지 정보 보강(3.3절)은 `xf`(판단·핵심 사실·추이·한계)와 `rec`(근거 연결·같은 연결 묶음·같은 시간대 기록, 종류마다 12행). 최대 3,000건(최근 것) |
 | 공격 스토리(`stories`) | 3.4·3.5절 스토리. 제목 = 시작 공격자 + 거친 단계, 단계 문장 = 출발 → 대상: 탐지 이름(근거 한 줄). 상태는 모두 "신규" |
 | 자산(`assets`·`devx`·`peers`) | 3.6절 자산 표(최대 2,000개). 식별 근거는 그 IP의 자산 신호 값, 처음·마지막 본 시각은 신호 시각, 주로 통신한 상대는 흐름 요약(탐지·스토리에 나온 host만, 6개) |
 | 예외(`exc`) | `nsm_exception.log`의 적재·거부·적중. 조건(주소·도메인)은 로그에 없어 비어 있음. 기본 예외 목록(`EX-pb-*`)은 따로 표시 |
@@ -380,10 +371,10 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 
 | 바뀌는 것 | `report_pcap.py`에서 고칠 곳 |
 | --- | --- |
-| 새 탐지 추가 | `NOTE_KO`(스토리 문장용 한국어 이름), `ENRICH`(맞출 선별 전송 로그와 Kerberos 서비스 접두사), `DIAG_NOTE`(진단명 ↔ notice 이름, 근거 연결률용) |
+| 새 탐지 추가 | `NOTE_KO`(스토리 문장용 한국어 이름), `detection_enrich.RULES`(보강 설정 한 줄, [스펙](DETECTION_ENRICH_SPEC.md) 6장 표도 함께), `DIAG_NOTE`(진단명 ↔ notice 이름, 근거 연결률용) |
 | 새 단계·단계 이름 변경 | `STAGES`, `PIVOT_STAGES`(대상이 다음 행위자가 되는 단계), `INFRA_STAGES`, JS의 `STK`(한국어 단계 이름) |
 | 탐지 로그 목록 필드 형식 | `split_list`(배열·쉼표 문자열 모두 읽음), `chain_text`(상관은 `->`, 단일은 `, `로 이어 화면에 표시) |
-| 선별 전송 로그 추가·필드 변경 | `STORY_META`, `enrich`의 필드 이름, `obs_sig`(확인이 필요한 내부 접속의 종류) |
+| 선별 전송 로그 추가·필드 변경 | `STORY_META`, `detection_enrich`의 요약기·판단(스펙 4·5장), `obs_sig`(확인이 필요한 내부 접속의 종류) |
 | 리포트 섹션 추가 | `collect()` 반환 JSON에 키 추가 → `PAGE`에 `<section>` 추가 → JS에서 그리기 |
 | Suricata 단계·분류 규칙 변경 | `suricata_alerts.py`의 `TACTIC_STAGE`·`CLASSTYPE_STAGE`(설계 4.2절과 같게), Suricata 버전을 올리면 `CLASSTYPE_DESC`(classification.config 설명) |
 
@@ -410,6 +401,7 @@ JSON은 `</`를 `<\/`로 바꿔 넣으므로, 로그 값에 `</script>`가 있�
 | `rules/report-asset-proxy-like` | 서로 다른 HTTP Server 값 3개 이상인 IP는 프록시·중계 추정, HTTP로 얻은 OS 안 씀(2개인 IP·단일 서버는 그대로) |
 | `rules/report-mockup` | 목업형 리포트: 등급은 센서 값(단독 Information, 상관 Suspicious), 템플릿 + 데이터 블록 하나, 시각순 id, 공격자별 가장 긴 상관 체인 1건, 스토리 단계와 이벤트 id 연결, 대상 없는 비콘의 목적지, 내부 주소, 프록시 경유(`via`·`host`, 프록시는 내부 목록에서 뺌), `--no-mockup` |
 | `rules/report-suricata` | Suricata 경보 고정본(3.9절): 단계(메타데이터·분류·단계 없음), 출발지·대상(응답 방향·`target`·C2·유출), 반복 묶기, 같은 연결·같은 단계의 Zeek 탐지와 한 탐지, 단계가 다르면 따로, 스토리 단계로 넣기, 시그니처 정의·센서 표시. 정규화 단위 테스트(`tests/suricata/test_normalize.py`: SID 지정 우선, 프록시 CONNECT, envelope 입력, 15분 간격) |
+| `rules/report-enrich` | 탐지 정보 보강(3.3절): Kerberoasting(RC4·성공 수, 근거 연결 kerberos 행, 계정 맥락, 성공 흔적은 kerberos 로만), 랜섬웨어(이름 변경·공유), HTTP 비콘(User-Agent, 근거 연결 1행), 항목 이름은 요약기 고정 목록, 기존 리포트 HTML에는 기록 표 없음. 규칙 단위 테스트(`tests/test_detection_enrich.py`): 설정 표 = 룰 48개, 같은 연결 묶음, 웹 공격 성공 판단, 연결 상태·통신 중, DNS 응답으로 이름, DNS 계열 도메인 조회 |
 | `rules/report-asset-enrich` | 테스트용 OUI CSV(IEEE·maclookup 형식, 열 이름이 다른 CSV는 경고)·Recog 형식 지문으로 제조사(MA-M 우선, 로컬·랜덤 MAC), 지문(SNMP·SSH·HTTP·인증서 순서 뒤집기), OS 칸 채우기. DB 없이 돌리면 TCP 계열만 |
 
 전체 테스트는 `tests/run_tests.sh`로 돌립니다(CI는 Zeek 9.0.1·8.0.9).
