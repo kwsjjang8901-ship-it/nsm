@@ -4,6 +4,42 @@
 # @TEST-EXEC: grep -q '그중 시그니처 7건' out.txt
 # @TEST-EXEC: python3 check.py kc_mockup.html
 # @TEST-EXEC: python3 $PKG/../tests/suricata/test_normalize.py 2> unit.txt || { cat unit.txt; exit 1; }
+# S5 측정 요약(measure.py): 테스트 룰에 ET 형식 이름·메타데이터를 입혀 1차 선별 룰셋(설계 6.3절) 시뮬레이션을 확인
+# @TEST-EXEC: mkdir -p m/suricata && cp *.log m/ && cp -r meta m/ && python3 mkeve.py $PKG/../tests/suricata/killchain_story.eve-alert.json m/suricata/eve-alert.json
+# @TEST-EXEC: python3 $PKG/../tests/report_pcap.py m -o m/kc_report.html --pcap kc --suricata-eve m/suricata/eve-alert.json > /dev/null
+# @TEST-EXEC: python3 $PKG/../tests/suricata/measure.py --tz 9 m > measure.md && python3 checkm.py measure.md
+
+# @TEST-START-FILE mkeve.py
+import json, sys
+M = {9910001: ("ET WEB_SERVER Possible SQL Injection UNION SELECT", {"signature_severity": ["Major"], "confidence": ["High"]}),
+     9910002: ("GPL EXPLOIT web server answered", {}),
+     9910003: ("ET MALWARE Beacon to update-check", {"signature_severity": ["Major"], "confidence": ["Medium"]}),
+     9910004: ("ET POLICY SMB between internal hosts", {"signature_severity": ["Informational"]}),
+     9910005: ("SURICATA Kerberos request", {}),
+     9910006: ("ET MALWARE Large outbound data", {"signature_severity": ["Critical"], "confidence": ["High"], "performance_impact": ["Significant"]})}
+with open(sys.argv[2], "w") as out:
+    for line in open(sys.argv[1]):
+        e = json.loads(line)
+        a = e["alert"]
+        name, md = M[a["signature_id"]]
+        a["signature"], a["metadata"] = name, dict(a.get("metadata") or {}, **md)
+        out.write(json.dumps(e) + "\n")
+# @TEST-END-FILE
+
+# @TEST-START-FILE checkm.py
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+# 선별에 남는 것: Major·High 인 ET WEB_SERVER 1개(Zeek SQL_Injection 과 같은 연결)
+assert "남는 경보 1건" in t and "SID 1개" in t and "Zeek 에 없는 새 탐지 0건" in t, t
+assert re.search(r"\| 9910001 \| ET WEB_SERVER [^|]+\| 초기 침투 \| Major·High \| 1 \| SQL_Injection \|", t), t
+# 6.1 기본으로는 켜지지만 빠지는 것과 이유
+for sid, why in ((9910002, "메타데이터 없음"), (9910003, "신뢰도 Medium"), (9910006, "성능 Significant")):
+    assert re.search(rf"\| {sid} \|.*\| {why} \|", t), (sid, why)
+# 메타데이터별 표, 시간대 표시, 공개 이름(ET·GPL·SURICATA)
+assert "| Major | Medium | 14 | 1 |" in t and "시각(UTC+9)" in t and "SURICATA Kerberos request" in t
+# 주소는 출력하지 않는다
+assert not re.search(r"\b(10|172|192)\.\d+\.\d+\.\d+\b", t), "주소가 출력됨"
+# @TEST-END-FILE
 
 # @TEST-START-FILE check.py
 import json, re, sys
