@@ -200,7 +200,7 @@ pre.diff span{display:block}pre.diff .a{color:#1b7f3b;background:#e9f7ee}pre.dif
 </style>
 </head>
 <body>
-<div class="sys">MDS Manager · 웹 UI 목업 v5 1차 범위 (공격 스토리·과거 기록 검색·자산 상세는 하반기, AI는 자체 LLM 서버) · 화면의 데이터는 모두 예시입니다</div>
+<div class="sys">MDS Manager · 웹 UI 목업 v5 1차 범위 (공격 스토리·과거 기록 검색·자산 상세·시그니처 룰 설정은 하반기, AI는 자체 LLM 서버) · 화면의 데이터는 모두 예시입니다</div>
 <div class="top">
   <div class="logo"><i></i>MDS Manager</div>
   <nav class="nav" id="nav">
@@ -241,7 +241,7 @@ pre.diff span{display:block}pre.diff .a{color:#1b7f3b;background:#e9f7ee}pre.dif
   </div>
   <div class="grid g2" style="margin-top:12px" id="sigRow">
     <div class="panel"><h3>탐지 방식 <span class="r">행위 탐지(Zeek)·시그니처(Suricata)</span></h3><div class="pbody" id="engbox"></div></div>
-    <div class="panel"><h3>많이 나온 시그니처 <span class="r">상위 5개 · 누르면 시그니처 설정</span></h3><div class="pbody" id="sigtop"></div></div>
+    <div class="panel"><h3>많이 나온 시그니처 <span class="r">상위 5개 · 누르면 시그니처 정보</span></h3><div class="pbody" id="sigtop"></div></div>
   </div>
   <div class="grid g2" style="margin-top:12px">
     <div class="panel"><h3>탐지가 많은 PC·서버 <span class="r">상위 10대</span></h3><div class="tw"><table class="t" id="topAssets"></table></div></div>
@@ -449,15 +449,14 @@ SURI_NOTES.forEach(([n,st])=>R[n]={file:'S',note:n,ko:'시그니처 · '+stageKo
 const SURI_SEV={1:'High',2:'Medium',3:'Low',4:'Low'};let ROLE_UP=true;
 const BYKO={mitre:'룰 메타데이터(mitre_tactic_id)',classtype:'분류(classtype)',sid_map:'사내 지정(SID 단계 표)'};
 // 예시 시그니처: SID·이름은 화면 설명용 예시입니다(실제 룰 번호와 다를 수 있음). cat=ET 카테고리, cls=classtype, pri=우선순위
+// 1차: 확실한 악성만 고른 선별 룰셋(SIG_SET). 스캔 도구 지문·정책·정보성·사내 룰은 넣지 않는다(설정 화면은 하반기)
 const SIGS={
  2026001:{rev:4,msg:'ET WEB_SERVER Possible SQL Injection (UNION SELECT) in URI',cat:'web_server',cls:'web-application-attack',pri:1,stage:'Initial Access',by:'classtype',tech:'T1190'},
  2026002:{rev:2,msg:'ET MALWARE Observed Cobalt Strike Default TLS Certificate',cat:'malware',cls:'command-and-control',pri:1,stage:'Command and Control',by:'mitre',tech:'T1071.001'},
  2026003:{rev:3,msg:'ET EXPLOIT Ivanti Connect Secure Authentication Bypass (CVE-2023-46805)',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Initial Access',by:'mitre',tech:'T1190'},
  2026004:{rev:2,msg:'ET EXPLOIT Ivanti Connect Secure Command Injection (CVE-2024-21887)',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Initial Access',by:'mitre',tech:'T1190'},
  2026005:{rev:1,msg:'ET MALWARE Possible Sliver C2 HTTP Beacon',cat:'malware',cls:'trojan-activity',pri:1,stage:'Command and Control',by:'mitre',tech:'T1071.001'},
- 2026006:{rev:5,msg:'ET SCAN Nmap Scripting Engine User-Agent Detected',cat:'scan',cls:'attempted-recon',pri:3,stage:'Recon',by:'classtype',tech:'T1595.002'},
  2026007:{rev:6,msg:'ET EXPLOIT Possible ETERNALBLUE MS17-010 Exploit Attempt',cat:'exploit',cls:'attempted-admin',pri:1,stage:'Lateral Movement',by:'sid_map',tech:'T1210'},
- 9000001:{rev:1,msg:'[사내] 승인 안 된 원격 제어 도구 접속(AnyDesk)',cat:'사내 룰',cls:'policy-violation',pri:2,stage:'',by:'classtype',tech:''},
 };
 const engTag=e=>!e?'':e.eng==='Suricata'?' <span class="chip sig">시그니처</span>':e.also?' <span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지했습니다">+시그니처</span>':'';
 // 쉬운 설명 · 확인할 것
@@ -621,11 +620,6 @@ suri('10:12',2026003,'203.0.113.70','10.10.0.5',{proto:'tcp',port:443,occ:2,cid:
 suri('10:20',2026005,'10.10.0.5','203.0.113.71',{proto:'tcp',port:80,occ:5,host:'cdn-static.example',cid:'1:Vb6nM2cX8zA4sD1fG7hJ3kL5qWe=',ev:[['시그니처','ET MALWARE Possible Sliver C2 HTTP Beacon (SID 2026005 rev 1)'],['분류','malware · trojan-activity · 우선순위 1'],['반복','30분 동안 5번(같은 사건)']]});
 nsm('10:29','AD_Enumeration','10.10.0.5','10.10.10.10',{proto:'tcp',port:445,victims:['10.10.10.10','10.10.10.11','10.10.10.20','10.10.10.30','10.10.10.31','10.10.10.32','10.10.10.40','10.10.10.5','10.10.10.8','10.10.10.80'],ev:[['AD 정보 수집','5분 동안 10대에 로그온 사용자·관리자 그룹 조회(srvsvc NetSessionEnum, samr)']]});
 suri('09:15',2026001,'10.10.0.50','10.10.10.5',{proto:'tcp',port:80,disp:'suppressed',exc:'X-scan-web-sig',cid:'1:Rt5yU1iO7pA3sD9fG2hJ6kL4zXc=',ev:[['시그니처','ET WEB_SERVER Possible SQL Injection (UNION SELECT) in URI (SID 2026001 rev 4)'],['예외','웹 취약점 점검 장비라 알림만 끔(X-scan-web-sig, 시그니처 조건)']]});
-suri('08:22',2026006,'10.10.10.50','10.10.10.40',{proto:'tcp',port:8080,cid:'1:Ws2eD8rF4tG6yH1uJ9iK3oL7pMn=',ev:[['시그니처','ET SCAN Nmap Scripting Engine User-Agent Detected (SID 2026006 rev 5)'],['분류','scan · attempted-recon · 우선순위 3(Low)']]});
-suri('09:48',9000001,'10.10.10.8','203.0.113.33',{proto:'tcp',port:443,cid:'1:Ex9rT3yU5iO1pA7sD2fG8hJ4kLz=',ev:[['시그니처','[사내] 승인 안 된 원격 제어 도구 접속(AnyDesk) (SID 9000001 rev 1)'],['분류','사내 룰 · policy-violation · 우선순위 2, 공격 단계 없음']]});
-(function(){let x=11;const rnd=()=>(x=(x*1103515245+12345)%2147483648)/2147483648;
- for(let i=0;i<9;i++){const sid=rnd()<0.6?2026006:9000001,h=7+Math.floor(rnd()*4),m=Math.floor(rnd()*60);
-  suri(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),sid,['10.10.10.8','10.10.10.31','10.10.10.80'][Math.floor(rnd()*3)],sid===2026006?'10.10.10.'+(10+Math.floor(rnd()*30)):'203.0.113.'+(30+Math.floor(rnd()*9)),{proto:'tcp',port:sid===2026006?80:443,ev:[['-','평시 시그니처 예시']]})}})();
 (function(){let x=7;const rnd=()=>(x=(x*1103515245+12345)%2147483648)/2147483648;
  const kinds=[['Port_Scan',4],['Host_Scan',3],['Nonstandard_Port',5],['HTTP_Beaconing',4],['TLS_Beaconing',3],['SSH_Bruteforce',2],['Long_Connection',2],['Encrypted_C2',1],['NTLM_Spray',1]];
  const pool=[];kinds.forEach(k=>{for(let i=0;i<k[1];i++)pool.push(k[0])});
@@ -677,6 +671,21 @@ const META=[
 const LOGKO={http_ua_summary:'User-Agent 요약',rdp:'원격 데스크톱',smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
 const tmin=t=>+t.slice(0,2)*60+ +t.slice(3,5);
 function metaFor(e){if(e.meta)return e.meta;const t=tmin(e.t),v=e.victims||[e.dst];return META.filter(m=>m[2]===e.src&&v.includes(m[3])&&Math.abs(tmin(m[0])-t)<=10)}
+
+// =============================================================== 시그니처: 선별 룰셋(1차, 고객 설정 없음)
+// 제품이 고른 룰셋을 탐지 엔진 업데이트로만 배포한다. 고객은 켜고 끄지 않고, 오탐은 NSM 예외(시그니처 축)로 처리한다.
+const SIG_SET={ver:'SIG-2026.11.18 선별',base:'ET Open 2026.11.17',rules:4180,
+ crit:[['카테고리','malware, exploit, exploit_kit, web_server, web_specific_apps, current_events, phishing, coinminer, worm, attack_response, shellcode'],
+       ['룰 메타데이터','signature_severity Major·Critical 이고 confidence High (메타데이터가 없는 룰은 넣지 않음)'],
+       ['뺀 것','정책·정보성·hunting·스캔·DNS·IP 평판·TLS 지문(JA3)·Suricata 기본 이벤트, 행위 탐지와 겹치는 룰(Heartbleed 등), 성능 경고가 있는 룰'],
+       ['위험도','Suricata 우선순위 1 High · 2 Medium · 3·4 Low, 목적지가 DC·DB 서버면 한 단계 올림(고정)'],
+       ['공격 단계','룰 메타데이터 mitre_tactic_id → 분류(classtype) 순(고정)']]};
+function sigInfo(sid){const g=SIGS[sid];if(!g)return;const n=EV.filter(e=>e.eng==='Suricata'&&String(e.sid)===String(sid)).reduce((a,e)=>a+(e.occ||1),0);
+  openModal('시그니처 정보',`<dl class="kv"><dt>시그니처</dt><dd>${esc(g.msg)}</dd><dt>SID · rev</dt><dd class="mono">${sid} · ${g.rev}</dd><dt>분류</dt><dd>${esc(g.cat)} · <span class="mono">${esc(g.cls)}</span></dd>
+   <dt>위험도</dt><dd>Suricata 우선순위 ${g.pri} → ${sev(SURI_SEV[g.pri])}</dd><dt>공격 단계</dt><dd>${esc(stageKo(g.stage))} <span class="note">정한 근거: ${BYKO[g.by]}</span></dd><dt>오늘 탐지</dt><dd>${n}건</dd>
+   <dt>룰셋</dt><dd>${SIG_SET.ver} <span class="note">(${SIG_SET.base}에서 확실한 악성 ${SIG_SET.rules.toLocaleString()}개)</span></dd></dl>
+   <div class="callout" style="margin-top:10px">시그니처 룰은 제품이 고른 <b>선별 룰셋</b>으로 제공되어 따로 설정하지 않습니다. 룰셋은 관리 › 탐지 엔진 업데이트로 바뀝니다. 특정 장비·서버에서 오탐이면 <b>NSM 예외</b>에 시그니처(SID)로 등록하세요. 룰 켜고 끄기·단계 지정·위험도 변환 화면은 하반기에 추가됩니다.</div>`,
+   `<button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="closeModal();show('admin');adm('exc')">NSM 예외로</button>`)}
 
 // =============================================================== 탐지 정보 보강(메타데이터, 1차 범위)
 // docs/DETECTION_ENRICH_SPEC.md 의 공통 규칙(조회 4 · 로그별 요약기 · 판단 4)으로 Manager가 만드는 값의 예시.
@@ -851,7 +860,7 @@ document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(!
   if(k==='asset'){closeDrawer();show('nsm');nsmTab('assets');ACARD='';$('#aRole').value='';$('#aDet').checked=false;$('#aq').value=g.dataset.ip;renderAssets()}   // 자산 상세는 하반기: 목록에서 그 IP 로 거름
   if(k==='det-ip'){closeDrawer();show('nsm');nsmTab('det');$('#dq').value=g.dataset.ip;renderDet()}
   if(k==='det'){openDet(g.dataset.id)}
-  if(k==='sigrule'){closeDrawer();if(typeof closeModal==='function')closeModal();show('admin');RKIND='sig';SIGQ=g.dataset.sid||'';adm('rules')}
+  if(k==='sigrule'){sigInfo(g.dataset.sid)}   // 1차: 시그니처 룰 설정 화면 없음(선별 룰셋 정보만)
   if(k==='rule'){closeDrawer();if(typeof closeModal==='function')closeModal();show('admin');adm('rules');openRule(g.dataset.n)}
   if(k==='exc-new'){closeDrawer();excForm(null,JSON.parse(g.dataset.pre))}
 });
@@ -945,13 +954,13 @@ function openDet(id){
    ${alsoEv.length?`<div class="sec">같은 연결의 시그니처 탐지 <span class="chip sig">Zeek + Suricata</span></div><div class="note" style="margin-bottom:6px">같은 연결에서 같은 단계로 Suricata 시그니처도 탐지해 한 탐지로 보여 줍니다. 알림은 먼저 온 쪽으로 한 번만 보냈습니다.</div>${alsoEv.map(sigBox).join('')}`:''}
    <div class="sec">어떤 공격인가</div>
    ${sg?`<div>${esc(sg.msg)}: ${sg.stage?esc(STAGE_KO[sg.stage])+' 단계의 알려진 공격 패턴입니다.':'공격 단계가 정해지지 않은 정책 위반 경보입니다. 여러 단계 공격(킬체인 상관)에는 들어가지 않습니다.'}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${sg.stage==='Initial Access'?'대상 서버의 해당 취약점 패치 여부와 이후 같은 서버의 외부 연락·확산 탐지를 확인합니다.':sg.stage==='Command and Control'?'출발지 장비의 프로그램과 같은 목적지에 접속한 다른 장비를 확인합니다.':sg.stage==='Lateral Movement'?'대상 장비의 패치 여부와 출발지 장비의 감염 여부를 확인합니다.':'출발지 장비가 점검 도구인지, 승인된 사용인지 확인합니다.'}</div>`:g?`<div>${esc(g[0])}</div><div class="sec" style="font-weight:600">확인할 것</div><div>${esc(g[1])}</div>`:`<div>${e.corr?'여러 탐지가 공격 순서대로 이어졌습니다.':esc(R[e.note]?R[e.note].cond:'')}</div>`}
-   <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(stageKo).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · ${R[e.note].sig?`<a data-go="sigrule" data-sid="${e.sid}">시그니처 설정</a>`:`<a data-go="rule" data-n="${e.note}">기준 바꾸기</a>`}</dd>`:''}</dl>
+   <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(stageKo).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · ${R[e.note].sig?`<a data-go="sigrule" data-sid="${e.sid}">선별 룰셋(설정 없음)</a>`:`<a data-go="rule" data-n="${e.note}">기준 바꾸기</a>`}</dd>`:''}</dl>
    ${attBox(e,alsoEv)}
    <div class="sec">탐지한 근거</div><table class="t"><tr><th>항목</th><th>내용</th></tr>${(e.ev||[]).map(x=>`<tr><td class="nw">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join('')}</table>${aiTerms(e)}
    ${recBox(e,m)}
    <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl>${sg?`<div class="note">Suricata 경보(<span class="mono">suricata_alert</span>)를 Manager가 바꾼 공통 이벤트입니다. 센서 탐지 로그(<span class="mono">nsm_detection.log</span>)에는 없습니다.</div><pre class="json">${esc(JSON.stringify({event_uid:'NSM:'+e.sensor+':suri-'+e.id.replace('NSM-',''),product:'NSM',engine:'Suricata',rule:e.note,stage:e.stage||null,technique:techs(e.tech),severity_id:{Critical:5,High:4,Medium:3,Low:2}[e.sev],src_ip:e.src,dst_ip:e.dst,dst_port:e.port,proto:e.proto,community_id:e.cid,sig_id:e.sid,sig_rev:sg.rev,signature:sg.msg,sig_category:sg.cat,sig_classtype:sg.cls,sig_severity:sg.pri,stage_by:sg.by,role_up:!!e.roleUp,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`:`<pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,rule:e.note,techniques:techs(e.tech),category:e.corr?'Correlated':'Single',killchain_stages:steps.filter(Boolean),severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`}</details>`;
   const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress',sid:e.sid?String(e.sid):''};
-  const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${e.sid?`<button class="btn" data-go="sigrule" data-sid="${e.sid}">이 시그니처 설정</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비(자산 목록)</button>`:''}`;
+  const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${e.sid?`<button class="btn" data-go="sigrule" data-sid="${e.sid}">시그니처 정보</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비(자산 목록)</button>`:''}`;
   openDrawer(e.name,sev(e.sev)+' '+prod('NSM')+(e.eng==='Suricata'?' <span class="chip sig">시그니처</span>':e.also?' <span class="chip sig">행위 + 시그니처</span>':''),body,foot);
   aiFill(e);
 }
@@ -1196,14 +1205,14 @@ function polFile(){
 
 // ---------------------------------------------------------------- NSM 룰 정책
 const RSEL=new Set();
-let RKIND='beh',SIGQ='';   // 룰 정책 탭(행위 탐지 룰·시그니처 룰), 시그니처 검색어
-const kindBar=()=>`<div class="bar"><div class="seg" id="rKind"><button data-k="beh" class="${RKIND==='beh'?'on':''}">행위 탐지 룰(Zeek) ${RULES.length}개</button>${REPORT?'':`<button data-k="sig" class="${RKIND==='sig'?'on':''}">시그니처 룰(Suricata)</button>`}<button data-k="att" class="${RKIND==='att'?'on':''}">ATT&amp;CK 커버리지</button></div><span class="pill pnew">${REPORT?'':'시그니처 룰 · '}ATT&amp;CK 커버리지 신규</span></div>`;
+let RKIND='beh';   // 룰 정책 탭(행위 탐지 룰·ATT&CK 커버리지). 시그니처 룰 탭은 하반기
+const kindBar=()=>`<div class="bar"><div class="seg" id="rKind"><button data-k="beh" class="${RKIND==='beh'?'on':''}">행위 탐지 룰(Zeek) ${RULES.length}개</button><button data-k="att" class="${RKIND==='att'?'on':''}">ATT&amp;CK 커버리지</button></div><span class="pill pnew">ATT&amp;CK 커버리지 신규</span><span class="note" style="margin-left:auto">시그니처 룰(Suricata)은 <a onclick="sigSetInfo()">선별 룰셋 ${SIG_SET.rules.toLocaleString()}개</a>로 제공되어 설정 없음 · 설정 화면은 하반기</span></div>`;
+function sigSetInfo(){openModal('시그니처 선별 룰셋',`<div class="note" style="margin-bottom:8px">${SIG_SET.ver} · ${SIG_SET.base}에서 확실한 악성 ${SIG_SET.rules.toLocaleString()}개. 탐지 엔진 업데이트로 바뀌고 고객 설정은 없습니다.</div><dl class="kv">${SIG_SET.crit.map(c=>`<dt>${c[0]}</dt><dd>${esc(c[1])}</dd>`).join('')}</dl><div class="callout" style="margin-top:10px">오탐은 NSM 예외에 시그니처(SID) 축으로 등록합니다. 카테고리·개별 룰 켜고 끄기, 단계 지정, 위험도 변환은 하반기 "시그니처 룰" 탭에서 제공합니다.</div>`,`<button class="btn pri" onclick="closeModal()">닫기</button>`)}
 function bindKind(){const k=$('#rKind');if(k)k.onclick=e=>{const b=e.target.closest('button');if(b){RKIND=b.dataset.k;renderRules()}}}
 function ruleChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||p.sev!==d.sev||JSON.stringify(p.params)!==JSON.stringify(d.params)}
 function sensorChanged(n){const p=POLICY[curProfile][n],d=p.deployed;return p.on!==d.on||JSON.stringify(p.params)!==JSON.stringify(d.params)}
 const custom=n=>Object.keys(POLICY[curProfile][n].params).length>0;
 function renderRules(){
-  if(RKIND==='sig'&&!REPORT){renderSigRules();return}
   if(RKIND==='att'){renderAttCov();return}
   $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 룰 정책';
   const nchg=RULES.filter(r=>ruleChanged(r[1])).length;
@@ -1239,7 +1248,7 @@ function drawRules(){
 // ---------------------------------------------------------------- ATT&CK 커버리지
 let ATTSEL='',ATTF='all',ATTHIT=false;
 // 사용 중인 ET 룰 중 mitre_technique_id가 붙은 룰 수(예시). 실제는 센서가 올린 룰 세트 메타데이터에서 셈
-const SIG_ET_TECH={'T1190':2140,'T1071.001':1820,'T1210':96,'T1595.002':58,'T1071':410,'T1048':37,'T1486':22};
+const SIG_ET_TECH={'T1190':1240,'T1071.001':1310,'T1210':64,'T1071':290,'T1048':21,'T1486':14};   // 선별 룰셋의 기법별 룰 수(예시)
 // 공격 단계를 기법의 전술과 다르게 둔 이유
 const STAGE_WHY={Port_Scan:'공격 전 정보 수집이라 킬체인 상관의 첫 단계로 묶음. ATT&CK는 침투 후 내부 탐색(Discovery)으로 봄',Host_Scan:'포트 스캔과 같음',AD_Enumeration:'포트 스캔과 같음',
  Webshell_Access:'웹 공격 직후 서버를 장악한 시점이라 초기 침투로 묶음. ATT&CK는 지속(Persistence) 수단으로 봄',
@@ -1249,7 +1258,7 @@ const ruleOn=n=>{const p=(POLICY[curProfile]||{})[n];return !p||p.on};
 function attCover(){
   const c={},get=t=>c[t]=c[t]||{t,beh:[],off:[],sig:[],et:0,hit:0};
   RULES.forEach(r=>techs(r[4]).forEach(t=>get(t)[ruleOn(r[1])?'beh':'off'].push(r)));
-  Object.entries(SIGS).forEach(([k,g])=>{if((SIGCFG.sid[k]||{on:true}).on)techs(g.tech).forEach(t=>get(t).sig.push(k))});if(!REPORT)Object.entries(SIG_ET_TECH).forEach(([t,n])=>{if(ATT[t])get(t).et=n});   // 리포트: 이 pcap 경보의 시그니처만
+  Object.entries(SIGS).forEach(([k,g])=>techs(g.tech).forEach(t=>get(t).sig.push(k)));if(!REPORT)Object.entries(SIG_ET_TECH).forEach(([t,n])=>{if(ATT[t])get(t).et=n});   // 리포트: 이 pcap 경보의 시그니처만
   nsmEv().filter(e=>!e.corr).forEach(e=>[...new Set([...techs(e.tech),...(e.also||[]).map(evById).filter(Boolean).flatMap(x=>techs(x.tech))])].forEach(t=>get(t).hit+=(e.occ||1)));
   return Object.values(c).filter(x=>ATT[x.t]&&(x.beh.length||x.sig.length||x.et||x.off.length)).sort((a,b)=>a.t.localeCompare(b.t,'en',{numeric:true}));
 }
@@ -1299,65 +1308,6 @@ function attLayerModal(kind,id){
 
 // ---------------------------------------------------------------- 시그니처 룰(Suricata)
 // ET 카테고리 기본값은 설계 6.1절 제안(CIC-IDS2017 측정 후 확정). 룰 수는 예시
-const SIGCATS=[
- ['exploit','알려진 취약점 공격','on','알려진 공격 서명. 행위 탐지에 없는 정보',2911],
- ['web_server, web_specific_apps','웹 서버·웹 애플리케이션 공격','on','웹 공격 서명. SQL Injection·XSS·웹쉘 행위 탐지와 같은 연결이면 한 탐지로 보여 줌',7820],
- ['malware, current_events','악성코드 통신·최근 유행 공격','on','외부 연락(C2) 서명',14630],
- ['phishing, coinminer, worm, attack_response, shellcode','피싱·채굴·웜·공격 응답','on','',3210],
- ['sql, smb, netbios, rpc','프로토콜 취약점 공격','on','',1460],
- ['scada','산업 제어 장비','off','고객망에 OT 장비가 있을 때만 켬',350],
- ['scan','스캔 도구','part','도구 지문 룰만 켬. 횟수로 보는 룰은 포트·호스트 스캔·비밀번호 대입 행위 탐지와 겹쳐 끔',410],
- ['dns','DNS','off','DNS 터널링·DGA 행위 탐지와 겹침',880],
- ['policy, info, hunting, user_agents 등','정책·정보성','off','정보성 경보가 대부분. AI 서비스·비표준 포트·자체 서명 인증서 행위 탐지와 겹침',9120],
- ['ciarmy, compromised, drop, dshield, tor, botcc','IP 평판·C2 IP 목록','off','IOC는 IOC 일치 탐지로 한 곳에서 관리',6900],
- ['ja3','TLS 지문','off','TLS 지문은 범위에서 뺌(2026-11 결정)',2100],
- ['adware_pup, dos','광고·PUP·DoS','off','PUP는 MDS가 봄. DoS는 미러 구간에서 의미가 작음(고객 요청 시 켬)',600],
- ['SURICATA 기본 이벤트','디코더·스트림·앱 계층 이상(Suricata 기본 룰)','off','미러 구간의 패킷 누락으로 계속 울림. 같은 이상은 Zeek가 봄. 조사할 때만 켬',370],
- ['사내 룰','고객·사내에서 만든 룰','on','',12],
-];
-const SIGCFG={cat:Object.fromEntries(SIGCATS.map(c=>[c[0],c[2]])),sid:Object.fromEntries(Object.keys(SIGS).map(k=>[k,{on:true,stage:''}])),sev:Object.assign({},SURI_SEV),roleUp:ROLE_UP};
-let SIGDEP=JSON.parse(JSON.stringify(SIGCFG)),SIGVER='SIG-2026.11.17-r2';
-SIGCFG.sid[2026007].stage='Lateral Movement';SIGDEP.sid[2026007].stage='Lateral Movement';   // 사내 SID 단계 표 예시
-const CATKO={on:'사용',off:'사용 안 함',part:'일부 사용'};
-function sigChanges(){const L=[];
-  SIGCATS.forEach(c=>{if(SIGCFG.cat[c[0]]!==SIGDEP.cat[c[0]])L.push(['룰 사용',`카테고리 <b>${esc(c[0])}</b>: ${CATKO[SIGDEP.cat[c[0]]]} → ${CATKO[SIGCFG.cat[c[0]]]}`])});
-  Object.keys(SIGS).forEach(k=>{const a=SIGCFG.sid[k],b=SIGDEP.sid[k];if(a.on!==b.on)L.push(['룰 사용',`SID <b>${k}</b> ${esc(SIGS[k].msg)}: ${a.on?'사용':'사용 안 함'}`]);if(a.stage!==b.stage)L.push(['단계 지정',`SID <b>${k}</b>: ${b.stage?stageKo(b.stage):'자동'} → ${a.stage?stageKo(a.stage):'자동'}`])});
-  [1,2,3,4].forEach(i=>{if(SIGCFG.sev[i]!==SIGDEP.sev[i])L.push(['위험도 변환',`우선순위 ${i}: ${SIGDEP.sev[i]} → ${SIGCFG.sev[i]}`])});
-  if(SIGCFG.roleUp!==SIGDEP.roleUp)L.push(['위험도 변환',`목적지 역할로 올리기: ${SIGCFG.roleUp?'켬':'끔'}`]);return L}
-function renderSigRules(){
-  $('#admCrumb').textContent='관리 › 탐지/대응 › NSM 룰 정책 › 시그니처 룰';
-  const sigEv=EV.filter(e=>e.eng==='Suricata'),onRules=SIGCATS.filter(c=>SIGCFG.cat[c[0]]!=='off').reduce((a,c)=>a+(SIGCFG.cat[c[0]]==='part'?Math.round(c[4]*.3):c[4]),0),chg=sigChanges();
-  $('#admBody').innerHTML=`${kindBar()}<div class="callout">시그니처 룰은 <b>Suricata</b>가 알려진 공격의 패턴(ET Open + 사내 룰)을 찾는 룰입니다. 시그니처 탐지도 공격 단계별로 나뉘어 행위 탐지와 같은 예외·반복 묶기에 들어갑니다. 룰을 끄고 켜면 센서의 Suricata가 룰만 다시 읽어 바로 적용합니다(재시작 없음, 행위 탐지는 멈추지 않음). 경보는 Zeek를 거치지 않고 Manager로 바로 오고, 단계·위험도·ATT&amp;CK는 Manager가 정하므로 그 설정은 센서 배포 없이 바로 적용됩니다. 특정 PC·서버에서만 빼려면 룰을 끄지 말고 <a onclick="adm('exc')">NSM 예외</a>에 시그니처(SID) 조건으로 등록하세요.</div>
-   <div class="grid g4" style="margin-bottom:12px">${[['룰 세트','ET Open 2026.11.17','사내 룰 12개 포함'],['사용 중인 룰',onRules.toLocaleString()+'개',`카테고리 ${SIGCATS.filter(c=>SIGCFG.cat[c[0]]!=='off').length}/${SIGCATS.length}`],['오늘 시그니처 탐지',sigEv.length+'건',`그중 행위 탐지와 같은 연결 ${sigEv.filter(e=>e.mergedInto).length}건`],['현재 버전',SIGVER,'본사 센서 그룹']].map(k=>`<div class="panel kpi"><div class="k">${k[0]}</div><div class="v" style="font-size:20px">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('')}</div>
-   <div class="panel tw"><h3>카테고리 <span class="r">기본값은 행위 탐지와 겹치지 않게 정함 · 공개 데이터 측정 후 확정</span></h3><table class="t" id="sigCat"></table></div>
-   <div class="panel tw" style="margin-top:12px"><h3>시그니처 개별 설정 <span class="r">끄기·단계 지정 · 오늘 탐지된 시그니처</span></h3><div class="bar" style="padding:6px 10px;margin:0"><input class="inp" id="sq" placeholder="SID·이름·분류" style="width:240px" value="${esc(SIGQ)}"><span class="note">단계는 보통 자동으로 정합니다(룰 메타데이터 → 분류). 틀리면 SID별로 지정합니다.</span></div><table class="t" id="sigTable"></table></div>
-   <div class="grid g2" style="margin-top:12px">
-    <div class="panel"><h3>위험도 변환 <span class="r">Suricata 우선순위 → 화면 위험도</span></h3><div class="pbody"><table class="t"><tr><th>Suricata 우선순위</th><th>화면 위험도</th></tr>${[1,2,3,4].map(i=>`<tr><td>${i}${i===1?' (가장 높음)':''}</td><td><select class="sel ssev" data-p="${i}">${['High','Medium','Low'].map(v=>`<option ${SIGCFG.sev[i]===v?'selected':''}>${v}</option>`).join('')}</select></td></tr>`).join('')}</table>
-     <label class="note" style="display:block;margin-top:8px"><input type="checkbox" id="sRole" ${SIGCFG.roleUp?'checked':''}> 목적지가 DC·DB 서버면 한 단계 올림(Critical은 이 경우에만)</label><div class="note">시그니처 탐지는 센서의 킬체인 상관(여러 단계 공격)에 들어가지 않습니다. 하반기 공격 스토리에서 이어 붙입니다.</div></div></div>
-    <div class="panel"><h3>행위 탐지와 겹쳐 꺼 둔 것</h3><div class="pbody tw"><table class="t"><tr><th>꺼 둔 시그니처</th><th>대신 보는 행위 탐지</th></tr>
-     <tr><td>scan(횟수 기반)</td><td>포트 스캔, 호스트 스캔, SSH·FTP 비밀번호 대입</td></tr><tr><td>dns</td><td>DNS 터널링, DGA 도메인</td></tr><tr><td>Heartbleed 룰</td><td>Heartbleed</td></tr><tr><td>IP 평판 목록</td><td>IOC 일치</td></tr><tr><td>policy(AI·비표준 포트·인증서)</td><td>AI 서비스 업로드, 비표준 포트, 암호화 C2</td></tr></table></div></div>
-   </div>
-   <div class="pending ${chg.length?'':'hidden'}"><b>아직 배포 안 한 변경 ${chg.length}건</b><span style="margin-left:auto"></span><button class="btn" id="sDiscard">변경 취소</button><button class="btn pri" id="sDeploy">배포</button></div>`;
-  bindKind();drawSig();
-  $('#sq').oninput=()=>{SIGQ=$('#sq').value;drawSig()};
-  $$('.ssev').forEach(x=>x.onchange=()=>{SIGCFG.sev[x.dataset.p]=x.value;renderSigRules()});
-  $('#sRole').onchange=e=>{SIGCFG.roleUp=e.target.checked;renderSigRules()};
-  $('#sDiscard').onclick=()=>{Object.assign(SIGCFG,JSON.parse(JSON.stringify(SIGDEP)));renderSigRules();toast('배포 안 한 변경을 취소했습니다')};
-  $('#sDeploy').onclick=()=>{const L=sigChanges(),k=t=>L.filter(x=>x[0]===t).length;
-   openModal('시그니처 룰 배포',`<div class="kv"><dt>대상</dt><dd>본사 센서 그룹(Suricata 사용 센서 1대, 사용 안 함 1대는 건너뜀)</dd><dt>새 버전</dt><dd class="mono">SIG-2026.11.18-r1</dd></div><div class="sec">바뀌는 내용</div>${L.map(x=>`<div>· <span class="chip">${x[0]}</span> ${x[1]}</div>`).join('')}<div class="sec">센서에서 일어나는 일</div><table class="t"><tr><th>변경</th><th>적용 방법</th><th>분석 중단</th></tr><tr><td>룰 사용(${k('룰 사용')}건)</td><td>센서에서 룰 파일을 다시 만들고(suricata-update) Suricata가 룰만 다시 읽음</td><td>없음</td></tr><tr><td>단계 지정(${k('단계 지정')}건)</td><td>Manager에서 바로 적용(새 경보부터)</td><td>-</td></tr><tr><td>위험도 변환(${k('위험도 변환')}건)</td><td>Manager에서 바로 적용(새 탐지부터)</td><td>-</td></tr></table><div class="note" style="margin-top:6px">룰을 다시 읽다가 실패하면 센서가 이전 룰로 계속 돌고 배포 결과에 실패로 남습니다.</div>`,
-    `<button class="btn" onclick="closeModal()">취소</button><button class="btn pri" id="sGo">배포</button>`);
-   $('#sGo').onclick=()=>{SIGDEP=JSON.parse(JSON.stringify(SIGCFG));SIGVER='SIG-2026.11.18-r1';closeModal();renderSigRules();toast('시그니처 룰을 배포했습니다(Suricata 룰 다시 읽기 완료, 재시작 없음)')}};
-}
-function drawSig(){
-  $('#sigCat').innerHTML=`<tr><th>사용</th><th>카테고리</th><th>내용</th><th class="num">룰 수</th><th>기본값 이유</th></tr>`+SIGCATS.map(c=>{const v=SIGCFG.cat[c[0]],ch=v!==SIGDEP.cat[c[0]];return `<tr class="${ch?'chg':''} ${v==='off'?'dim':''}"><td class="nw"><span class="toggle ${v!=='off'?'on':''}" data-cat="${esc(c[0])}"></span>${v==='part'?' <span class="chip">일부</span>':''}</td><td class="mono">${esc(c[0])}</td><td>${esc(c[1])}</td><td class="num">${c[4].toLocaleString()}</td><td class="note">${esc(c[3])}</td></tr>`}).join('');
-  $$('#sigCat [data-cat]').forEach(t=>t.onclick=()=>{const k=t.dataset.cat;SIGCFG.cat[k]=SIGCFG.cat[k]==='off'?'on':'off';renderSigRules()});
-  const q=SIGQ.toLowerCase(),n=sid=>EV.filter(e=>e.eng==='Suricata'&&String(e.sid)===String(sid)).reduce((a,e)=>a+(e.occ||1),0);
-  const rows=Object.keys(SIGS).filter(k=>!q||(k+' '+SIGS[k].msg+' '+SIGS[k].cat+' '+SIGS[k].cls).toLowerCase().includes(q));
-  $('#sigTable').innerHTML=`<tr><th>사용</th><th>SID</th><th>시그니처</th><th>분류</th><th>위험도</th><th>공격 단계</th><th class="num">오늘</th><th class="num">예외</th></tr>`+rows.map(k=>{const g=SIGS[k],c=SIGCFG.sid[k],d=SIGDEP.sid[k],ch=c.on!==d.on||c.stage!==d.stage,ex=EXC.filter(e=>e.sid&&e.sid.split(',').map(x=>x.trim()).includes(k)).length;
-   return `<tr class="${ch?'chg':''} ${c.on?'':'dim'}"><td><span class="toggle ${c.on?'on':''}" data-sid="${k}"></span></td><td class="mono">${k}</td><td>${esc(g.msg)}<span class="sub">rev ${g.rev}${g.tech?' · '+g.tech:''}</span></td><td class="nw">${esc(g.cat)}<span class="sub">${esc(g.cls)}</span></td><td class="nw">우선순위 ${g.pri} → ${sev(SIGCFG.sev[g.pri])}</td><td><select class="sel sstage" data-sid="${k}" style="padding:1px 4px"><option value="">자동: ${g.by==='sid_map'?'초기 침투':stageKo(g.stage)} (${g.by==='mitre'?'메타데이터':'분류'})</option>${STAGES.map(st=>`<option value="${st}" ${c.stage===st?'selected':''}>${STAGE_KO[st]}</option>`).join('')}</select></td><td class="num">${n(k)?`<a onclick="show('nsm');nsmTab('det');$('#dq').value='${k}';renderDet()">${n(k)}</a>`:''}</td><td class="num">${ex?`<a onclick="adm('exc');$('#xq').value='${k}';drawExc()">${ex}개</a>`:''}</td></tr>`}).join('')+(rows.length?'':'<tr><td colspan="8" class="muted" style="text-align:center;padding:16px">찾는 시그니처가 없습니다. 오늘 탐지되지 않은 시그니처는 SID로 직접 찾습니다(목업 예시는 탐지된 것만)</td></tr>');
-  $$('#sigTable [data-sid].toggle').forEach(t=>t.onclick=()=>{const c=SIGCFG.sid[t.dataset.sid];c.on=!c.on;renderSigRules()});
-  $$('#sigTable .sstage').forEach(x=>x.onchange=()=>{SIGCFG.sid[x.dataset.sid].stage=x.value;renderSigRules()});
-}
 function bulkBar(){$('#rBulk').classList.toggle('hidden',!RSEL.size);$('#rBulkN').textContent=`${RSEL.size}개 선택`}
 function openRule(n){
   const r=R[n],p=POLICY[curProfile][n],ps=PARAMS[n]||[],g=GUIDE[n];
@@ -1533,7 +1483,7 @@ function deployExc(){const nv='EXC-v'+(+EXCVER.slice(5)+1),act=EXC.filter(e=>exc
 // ---------------------------------------------------------------- NSM 탐지 엔진 업데이트
 const TGTS=[
  {k:'eng',name:'네트워크 행위 룰',desc:'네트워크 행위 탐지 48종, 장비 식별, 통신 기록 기준',latest:'2026.11.24-r1',apply:'적용 시 분석이 몇 초 멈춤'},
- {k:'sig',name:'시그니처 룰',desc:'Suricata 시그니처',latest:'2026.11.18',apply:'바로 적용'},
+ {k:'sig',name:'시그니처 룰(선별)',desc:'확실한 악성만 고른 Suricata 룰셋(약 4,180개). 고객 설정 없이 이 업데이트로만 바뀜',latest:'2026.11.18',apply:'바로 적용'},
  {k:'ioc',name:'IOC 정보',desc:'악성 IP·도메인·URL 목록(142개)',latest:'2026.11.15',apply:'바로 적용'},
 ];
 const WZ={step:0,pkg:0,tg:{eng:true,sig:true,ioc:true},target:{'본사 센서':true,'지사 센서':false},canary:true,when:'now'};
