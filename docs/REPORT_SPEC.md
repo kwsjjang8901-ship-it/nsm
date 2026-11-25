@@ -64,6 +64,8 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `SURICATA_CONF` 환경 변수 | `/etc/suricata/suricata.yaml` | `-S`를 로컬로 돌릴 때 바탕으로 쓰는 설치본 설정 |
 | `SURICATA_DOCKER` 환경 변수 | 없음 | `1`이면 로컬 Suricata가 있어도 Docker로 |
 | `SURICATA_HOME_NET` 환경 변수 | 없음(사설 대역 + `-n`) | `-S`의 Suricata `HOME_NET`을 이 값만으로(2.6절) |
+| `SURICATA_LOWMEM` 환경 변수 | 없음 | `1`이면 메모리 절약: `--runmode single --set detect.profile=low --set detect.sgh-mpm-context=single`(느려짐) |
+| `SURICATA_ARGS` 환경 변수 | 없음 | Suricata에 더 넘길 인자(공백으로 나눔, 예: `"--set detect.profile=medium"`) |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
 
@@ -136,7 +138,8 @@ Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 �
 | `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음). `SURICATA_HOME_NET=<CIDR,...>`를 주면 그 값만 씀. 공개 데이터셋처럼 외부 공격자가 사설 주소로 보일 때 필요(CIC-IDS2017: `192.168.10.0/24`, 공격은 방화벽 NAT `172.16.0.1`에서 들어옴). ET 룰은 대부분 `$EXTERNAL_NET -> $HOME_NET` 방향이라 이 값이 틀리면 웹 공격 경보가 거의 나오지 않음 |
 | 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀 |
 | 화면 요약 | 경보 수, 시그니처 종류 수, 단계별 경보 수(주소·시그니처 이름은 출력하지 않음), 읽지 못한 룰 수 |
-| 장애 격리 | 이미지가 없거나 설정 생성·실행이 실패하면 경고하고 Suricata 없이 리포트를 만듦(종료 코드 0). 깨진 룰은 Suricata가 건너뛰고, 화면에 읽지 못한 룰 수와 "읽은 룰이 하나도 없음"을 알림 |
+| 장애 격리 | 이미지가 없거나 설정 생성·실행이 실패하면 경고하고 Suricata 없이 리포트를 만듦(종료 코드 0). 깨진 룰은 Suricata가 건너뛰고, 화면에 읽지 못한 룰 수와 "읽은 룰이 하나도 없음"을 알림. 메모리 부족으로 강제 종료(종료 코드 137)되면 그렇게 알리고 VM 메모리나 `SURICATA_LOWMEM=1`을 안내 |
+| 메모리 | ET Open 전체 룰은 탐지 엔진만으로 수 GB(빌드·Hyperscan 여부에 따라 다름). CIC-IDS2017 목요일 + ET 전체를 Suricata 8.0.8로 돌린 VM에서 OOM으로 종료됨(2026-11-25). VM 메모리 8GB 이상 권장, 안 되면 `SURICATA_LOWMEM=1`. 실제 ET에서 얼마나 줄어드는지는 아직 측정하지 않음 |
 
 pcap 모드에서 Suricata는 경보를 시간 순서대로 내지 않아, `-y`의 `threshold.config` 기본값(60초에 1건)이 실행마다 조금 다르게 거를 수 있습니다(surica DESIGN 10장). 리포트는 시각순으로 다시 정렬합니다. 검증은 `tests/suricata/e2e.sh`(7장).
 

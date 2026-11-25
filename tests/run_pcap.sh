@@ -25,6 +25,7 @@
 #               (설정 SURICATA_CONF, 기본 /etc/suricata/suricata.yaml), 없으면 Docker(SURICATA_IMAGE, 기본 jasonish/suricata:8.0.6).
 #               SURICATA_DOCKER=1 이면 Docker. 여러 pcap 이면 파일마다. Suricata 가 실패해도 Zeek 결과·리포트는 그대로 만든다.
 #               HOME_NET 은 사설 대역 + -n. SURICATA_HOME_NET=<CIDR,...> 를 주면 그 값만(예: CIC-IDS2017 은 192.168.10.0/24).
+#               메모리가 작으면 SURICATA_LOWMEM=1(탐지 엔진 작게 + 스레드 하나), 그 밖의 인자는 SURICATA_ARGS="...".
 #     -R FILE   -S 의 룰 파일(여러 번 가능). "-R et" 는 suricata-update(로컬 또는 컨테이너)로 ET Open 을 받는다
 #               (rules.emergingthreats.net 접근 필요, ET_URL 로 다른 주소·로컬 tar.gz). -y 가 있으면 surica disable.conf 적용
 #     -y DIR    surica 저장소 경로. 주면 센서와 같은 설정(tools/render_config.py: 경보·통계 파일 분리, threshold.config,
@@ -37,7 +38,7 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,37p' "$0"; exit 2; }
+usage() { sed -n '2,38p' "$0"; exit 2; }
 OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=(); SURI=()
 SURI_RUN=""; SURI_RULES=(); SURICA=""
 while getopts "o:n:x:r:z:u:g:s:SR:y:kh" opt; do
@@ -388,8 +389,15 @@ outputs:
 YAML
         sargs=(-c "$BASECONF" --include "$CFGP/outputs.yaml" -S "$RULEP/all.rules" --set "vars.address-groups.HOME_NET=[$HOME_NETS]")
     fi
-    sstart=$(date +%s)
-    if [ -z "$sfail" ] && suri "${sargs[@]}" -r "$PCAPP" -k none -l "$LOGP" > "$SDIR/run.log" 2>&1; then
+    # 메모리 절약(SURICATA_LOWMEM=1): 탐지 엔진을 작게(detect.profile low, 룰 그룹 패턴 문맥 하나) + 스레드 하나.
+    # ET 전체 룰이면 탐지 엔진만 수 GB 라 VM 메모리가 작으면 OOM 으로 죽는다. 느려지는 대신 메모리가 크게 준다
+    xargs_=()
+    [ "${SURICATA_LOWMEM:-}" = 1 ] && xargs_+=(--runmode single --set detect.profile=low --set detect.sgh-mpm-context=single)
+    # shellcheck disable=SC2206
+    [ -n "${SURICATA_ARGS:-}" ] && xargs_+=(${SURICATA_ARGS})   # 그 밖의 Suricata 인자(공백으로 나눔)
+    [ ${#xargs_[@]} -eq 0 ] || echo "      추가 인자: ${xargs_[*]}"
+    sstart=$(date +%s); src_rc=0
+    if [ -z "$sfail" ] && { suri "${sargs[@]}" ${xargs_[@]+"${xargs_[@]}"} -r "$PCAPP" -k none -l "$LOGP" > "$SDIR/run.log" 2>&1 || { src_rc=$?; false; }; }; then
         # 경보 파일(두 모드 모두 eve-alert.json): 센서와 같은 필드만 남기고 시각순
         src="$SDIR/log/eve-alert.json"
         [ -f "$src" ] || : > "$src"
@@ -411,7 +419,12 @@ print(f"      경보 {len(al):,}건, 시그니처 {len({a['alert'].get('signatur
       + (": " + ", ".join(f"{ko[k]} {v:,}" for k, v in c.most_common()) if c else ""))
 PY
     else
-        [ -n "$sfail" ] || { echo "      Suricata 실행 실패($SDIR/run.log)" >&2; { grep -iE "error|fatal" "$SDIR/run.log" || true; } | head -3 | sed 's/^/        /' >&2; }
+        if [ -z "$sfail" ] && [ "$src_rc" -eq 137 ]; then
+            echo "      Suricata 가 메모리 부족으로 강제 종료됐습니다(OOM, 종료 코드 137)." >&2
+            echo "      VM 메모리를 늘리거나(ET 전체 룰이면 8GB 이상) SURICATA_LOWMEM=1 로 다시 실행하세요." >&2
+        elif [ -z "$sfail" ]; then
+            echo "      Suricata 실행 실패(종료 코드 $src_rc, $SDIR/run.log)" >&2; { grep -iE "error|fatal" "$SDIR/run.log" || true; } | head -3 | sed 's/^/        /' >&2
+        fi
         echo "      Suricata 없이 계속합니다(Zeek 결과·리포트는 그대로)." >&2
     fi
 else
