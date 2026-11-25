@@ -168,6 +168,8 @@ def normalize(alerts, zeek_dir, internal, stage_map=None):
     groups, open_ = [], {}
     for al in alerts:
         a = al["alert"]
+        if not al.get("src_ip") and not al.get("dest_ip"):
+            continue                    # IP 가 없는 경보(디코더 이벤트 등): 출발지·대상이 없어 탐지로 만들지 않음
         stage, by, cls = stage_of(al, stage_map)
         rule = STAGE_NOTE[stage]
         s, sp, d, dp = endpoints(al, stage, internal)

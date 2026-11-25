@@ -11,13 +11,19 @@ KEYS = ("timestamp", "flow_id", "in_iface", "event_type", "src_ip", "src_port", 
 ALERT = ("action", "gid", "signature_id", "rev", "signature", "category", "severity", "source", "target", "metadata")
 
 out = []
-for line in open(sys.argv[1], encoding="utf-8"):
-    ev = json.loads(line)
-    if ev.get("event_type") != "alert":
+for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+    if '"alert"' not in line:          # 큰 eve 파일에서 경보가 아닌 줄은 풀지 않는다
+        continue
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if ev.get("event_type") != "alert" or "alert" not in ev:
         continue
     r = {k: ev[k] for k in KEYS if k in ev}
     r["alert"] = {k: ev["alert"][k] for k in ALERT if k in ev["alert"]}
     out.append(r)
-out.sort(key=lambda r: (r["timestamp"], r["alert"]["signature_id"], r["src_ip"], r.get("src_port", 0)))
+# IP 가 없는 경보(Suricata 8 의 일부 디코더·이상 이벤트)도 남긴다. 정렬 키는 없는 값을 빈 값으로
+out.sort(key=lambda r: (r.get("timestamp", ""), r["alert"].get("signature_id") or 0, r.get("src_ip", ""), r.get("src_port") or 0))
 for r in out:
     print(json.dumps(r, ensure_ascii=False))

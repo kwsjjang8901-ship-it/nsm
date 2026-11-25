@@ -209,8 +209,10 @@ raw = {k: p for k, p in logs.items() if k not in MGR and k not in SENSOR_LOCAL}
 
 # 캡처 구간: 로그에 남은 ts 의 처음·끝
 # (예외 적재 행처럼 패킷 처리 전에 쓴 행은 ts 가 0 이라 빼고, reporter 는 pcap 을 읽기 전 행에 실제 시계 시각이 찍혀 뺀다)
-ts = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k != "reporter" and k not in raw for r in rows(p)
-      if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9]
+# (예외 로그는 적중 행만: 적재·오류·파일 행은 실제 시계 시각. nsm_ioc·asset_agent_policy 도 실제 시계 — report_pcap.py WALLCLOCK_LOGS)
+WALL = ("reporter", "nsm_ioc", "asset_agent_policy")
+ts = [r["ts"] for k, p in list(logs.items()) + list(meta.items()) if k not in WALL and k not in raw for r in rows(p)
+      if isinstance(r.get("ts"), (int, float)) and r["ts"] > 1e9 and (k != "nsm_exception" or r.get("kind") == "hits")]
 span = (max(ts) - min(ts)) if len(ts) >= 2 else 0
 print(f"캡처 구간 약 {span/60:.1f}분, 처리 {elapsed}초")
 print()
@@ -357,21 +359,36 @@ PY
             echo "      surica 설정 생성 실패($SDIR/render.log, PyYAML 필요)" >&2; sfail=1
         fi
     else
-        # 설치본(또는 이미지) 기본 설정 + 이 실행의 룰만(-S) + HOME_NET + eve-log 의 Community ID
+        # 설치본(또는 이미지) 기본 설정 + 이 실행의 룰만(-S) + HOME_NET. 출력은 경보 파일 하나로 바꾼다(--include 는 최상위
+        # outputs 를 통째로 바꿈): 설치본이 켜 둔 프로토콜 로그(http·dns·flow 등)·fast.log 를 쓰지 않아 큰 pcap 에서도 빠르다
         cat "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" > "$SDIR/rules/all.rules"
-        eidx=$(suri -c "$BASECONF" --dump-config 2> /dev/null | sed -nE 's/^outputs\.([0-9]+)\.eve-log = .*/\1/p' | head -1 || true)
-        sargs=(-c "$BASECONF" -S "$RULEP/all.rules" --set "vars.address-groups.HOME_NET=[$HOME_NETS]")
-        if [ -n "$eidx" ]; then sargs+=(--set "outputs.$eidx.eve-log.enabled=yes" --set "outputs.$eidx.eve-log.community-id=true")
-        else echo "      주의: 설정에 eve-log 출력이 없어 경보를 얻지 못할 수 있습니다($BASECONF)." >&2; fi
+        cat > "$SDIR/cfg/outputs.yaml" <<'YAML'
+%YAML 1.1
+---
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve-alert.json
+      community-id: yes
+      community-id-seed: 0
+      types:
+        - alert:
+            payload: no
+            packet: no
+            metadata:
+              app-layer: no
+              flow: no
+              rule:
+                metadata: yes
+                raw: no
+YAML
+        sargs=(-c "$BASECONF" --include "$CFGP/outputs.yaml" -S "$RULEP/all.rules" --set "vars.address-groups.HOME_NET=[$HOME_NETS]")
     fi
     sstart=$(date +%s)
     if [ -z "$sfail" ] && suri "${sargs[@]}" -r "$PCAPP" -k none -l "$LOGP" > "$SDIR/run.log" 2>&1; then
-        # 경보 파일: 센서 설정이면 eve-alert.json, 기본 설정이면 eve 출력 파일의 경보 줄. 센서와 같은 필드만 남기고 시각순
+        # 경보 파일(두 모드 모두 eve-alert.json): 센서와 같은 필드만 남기고 시각순
         src="$SDIR/log/eve-alert.json"
-        if [ ! -f "$src" ]; then
-            efile=$(suri -c "$BASECONF" --dump-config 2> /dev/null | sed -nE "s/^outputs\.${eidx:-1}\.eve-log\.filename = (.*)/\1/p" | head -1 || true)
-            src="$SDIR/log/$(basename "${efile:-eve.json}")"
-        fi
         [ -f "$src" ] || : > "$src"
         python3 "$ROOT/tests/suricata/slim.py" "$src" > "$SDIR/eve-alert.json"
         SURI=(--suricata-eve "$SDIR/eve-alert.json")
