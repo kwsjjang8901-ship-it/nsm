@@ -63,6 +63,7 @@ tests/run_pcap.sh [-o 출력] [-n 내부 대역] [-x 예외 파일] [-r claudtes
 | `SURICATA_IMAGE` 환경 변수 | `jasonish/suricata:8.0.6` | `-S`를 Docker로 돌릴 때의 이미지 |
 | `SURICATA_CONF` 환경 변수 | `/etc/suricata/suricata.yaml` | `-S`를 로컬로 돌릴 때 바탕으로 쓰는 설치본 설정 |
 | `SURICATA_DOCKER` 환경 변수 | 없음 | `1`이면 로컬 Suricata가 있어도 Docker로 |
+| `SURICATA_HOME_NET` 환경 변수 | 없음(사설 대역 + `-n`) | `-S`의 Suricata `HOME_NET`을 이 값만으로(2.6절) |
 | `-k` | 끔 | Zeek 원본 로그(conn·dns·http·ssl·files·weird 등)를 모두 남김(`NSM::keep_all_log_streams = T`). 탐지·선별 결과는 같고 디스크만 더 씀 |
 | `ZEEK_IMAGE` 환경 변수 | `zeek/zeek:9.0.1` | 로컬 zeek가 없거나 8 미만일 때 쓰는 Docker 이미지 |
 
@@ -132,7 +133,7 @@ Zeek와 같은 방식으로, 로컬 Suricata(7 이상)와 `suricata-update`가 �
 | --- | --- |
 | 룰 | `-R` 파일을 `suricata/rules/local.rules`에, `-R et`는 ET Open을 `suricata/rules/suricata.rules`에(`-y`면 surica `disable.conf` 적용) |
 | 설정 | 바탕 설정은 로컬이면 설치본(`SURICATA_CONF`, 기본 `/etc/suricata/suricata.yaml`), Docker면 이미지 기본 설정. `-y` 있음: surica `render_config.py`로 바탕 설정을 읽어 센서와 같은 설정(경보·통계 파일 분리, `threshold.config` 기본값, Community ID seed 0)을 만듦(PyYAML 필요). `-y` 없음: 바탕 설정에 이 실행의 룰만(`-S`), `HOME_NET`, eve-log의 Community ID를 바꿈. 설치본에 넣어 둔 룰 목록(`rule-files`)은 쓰지 않음 |
-| `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음) |
+| `HOME_NET` | 사설 대역 + `-n`(Zeek의 내부 판정과 같음). `SURICATA_HOME_NET=<CIDR,...>`를 주면 그 값만 씀. 공개 데이터셋처럼 외부 공격자가 사설 주소로 보일 때 필요(CIC-IDS2017: `192.168.10.0/24`, 공격은 방화벽 NAT `172.16.0.1`에서 들어옴). ET 룰은 대부분 `$EXTERNAL_NET -> $HOME_NET` 방향이라 이 값이 틀리면 웹 공격 경보가 거의 나오지 않음 |
 | 실행 | `suricata -r <pcap> -k none`(Zeek `-C`와 같은 뜻). 경보는 센서 경보 파일과 같은 필드만 남기고 시각순으로 `suricata/eve-alert.json`에 씀 |
 | 화면 요약 | 경보 수, 시그니처 종류 수, 단계별 경보 수(주소·시그니처 이름은 출력하지 않음), 읽지 못한 룰 수 |
 | 장애 격리 | 이미지가 없거나 설정 생성·실행이 실패하면 경고하고 Suricata 없이 리포트를 만듦(종료 코드 0). 깨진 룰은 Suricata가 건너뛰고, 화면에 읽지 못한 룰 수와 "읽은 룰이 하나도 없음"을 알림 |

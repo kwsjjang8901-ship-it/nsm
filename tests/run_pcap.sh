@@ -24,6 +24,7 @@
 #     -S        같은 pcap 을 Suricata 로도 돌려 경보를 바로 리포트에 넣는다. 로컬 suricata(7 이상)가 있으면 로컬로
 #               (설정 SURICATA_CONF, 기본 /etc/suricata/suricata.yaml), 없으면 Docker(SURICATA_IMAGE, 기본 jasonish/suricata:8.0.6).
 #               SURICATA_DOCKER=1 이면 Docker. 여러 pcap 이면 파일마다. Suricata 가 실패해도 Zeek 결과·리포트는 그대로 만든다.
+#               HOME_NET 은 사설 대역 + -n. SURICATA_HOME_NET=<CIDR,...> 를 주면 그 값만(예: CIC-IDS2017 은 192.168.10.0/24).
 #     -R FILE   -S 의 룰 파일(여러 번 가능). "-R et" 는 suricata-update(로컬 또는 컨테이너)로 ET Open 을 받는다
 #               (rules.emergingthreats.net 접근 필요, ET_URL 로 다른 주소·로컬 tar.gz). -y 가 있으면 surica disable.conf 적용
 #     -y DIR    surica 저장소 경로. 주면 센서와 같은 설정(tools/render_config.py: 경보·통계 파일 분리, threshold.config,
@@ -36,7 +37,7 @@
 #   로컬 zeek(8.x 이상)가 없으면 Docker(ZEEK_IMAGE, 기본 zeek/zeek:9.0.1)로 실행한다.
 set -euo pipefail
 
-usage() { sed -n '2,36p' "$0"; exit 2; }
+usage() { sed -n '2,37p' "$0"; exit 2; }
 OUT=""; NETS=""; EXC=""; RESOLVER_DIR=""; ZARGS=""; KEEP_RAW=""; PASS=(); ENRICH=(); SURI=()
 SURI_RUN=""; SURI_RULES=(); SURICA=""
 while getopts "o:n:x:r:z:u:g:s:SR:y:kh" opt; do
@@ -335,8 +336,10 @@ if [ -n "$SURI_RUN" ]; then
         fi
     done
     nrules=$( { grep -hcE '^(alert|drop|pass|reject)' "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" || true; } | awk '{s+=$1} END {print s+0}')
-    # HOME_NET 은 Zeek 의 내부 판정과 같게: 사설 대역 + -n
-    HOME_NETS="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16${NETS:+,$NETS}"
+    # HOME_NET 은 Zeek 의 내부 판정과 같게: 사설 대역 + -n. SURICATA_HOME_NET 을 주면 그 값만 쓴다
+    # (공개 데이터셋처럼 외부 공격자가 사설 주소로 보일 때. 예: CIC-IDS2017 은 192.168.10.0/24 만 내부, 172.16.0.1 은 공격 쪽 NAT)
+    HOME_NETS="${SURICATA_HOME_NET:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16${NETS:+,$NETS}}"
+    [ -z "${SURICATA_HOME_NET:-}" ] || echo "      HOME_NET: $HOME_NETS (SURICATA_HOME_NET)"
     sargs=()
     if [ -n "$SURI_LOCAL" ] && [ ! -r "$SURICATA_CONF" ]; then
         echo "      Suricata 설정을 읽을 수 없습니다($SURICATA_CONF, SURICATA_CONF 로 지정)" >&2; sfail=1
