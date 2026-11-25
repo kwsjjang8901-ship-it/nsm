@@ -197,7 +197,7 @@ Manager가 정하므로 바꾸면 새 경보부터 바로 적용되고, 필요�
 
 | 하고 싶은 것 | 어디서 | 방법 |
 | --- | --- | --- |
-| 이 시그니처를 아예 안 씀 | Suricata | 룰 정책 화면 → `suricata-update` disable → `reload-rules`(재시작 없음, surica DESIGN 3.2) |
+| 이 시그니처를 아예 안 씀 | Suricata | 룰 정책 화면 → `suricata-update` disable → `reload-rules`(재시작 없음, surica DESIGN 3.2). **1차에는 화면이 없고** 선별 룰셋(6.3)에서 빼는 것은 제품 업데이트로만, 고객은 Manager 예외(drop)로 |
 | 특정 host·서버에서만 이 시그니처 예외 | **Manager 예외** | "NSM 예외" 화면에서 등록. 축: 출발지·목적지·포트·서비스·도메인·**시그니처(SID)**. drop·suppress·만료·사유·적중 수는 행위 탐지 예외와 같은 규칙 |
 | 경보 폭주 억제 | Suricata + Manager | `threshold.config`(3.1) + Manager 사건 묶기(3.4) |
 
@@ -256,6 +256,21 @@ surica 설계의 예시 `disable: [re:heartbleed]`(DESIGN 3.1절)는 Zeek `TLS_H
 
 이 표는 surica `suricata/update/disable.conf`에 들어 있습니다(surica #2). surica 통합 테스트가 ET 파일 이름을 흉내 낸 표본으로 켜지는 룰을 확인하고, 실제 ET Open 파일 이름·룰 수는 S5에서 확인합니다.
 
+### 6.3 1차 선별 룰셋 (2026-11-25 결정)
+
+1차에는 고객이 시그니처 룰을 고르지 않습니다. 제품이 **확실한 악성만 고른 룰셋**을 만들어 탐지 엔진 업데이트("시그니처 룰(선별)")로 배포합니다. 6.1절 표는 하반기 "시그니처 룰" 탭의 기본값으로 남깁니다.
+
+| 기준 | 내용 |
+| --- | --- |
+| 카테고리 | malware, exploit, exploit_kit, web_server, web_specific_apps, current_events, phishing, coinminer, worm, attack_response, shellcode |
+| 룰 메타데이터 | `signature_severity`가 Major·Critical이고 `confidence`가 High. 메타데이터가 없는 룰은 넣지 않음 |
+| 뺌 | 6.1절에서 끈 카테고리 전부(정책·정보성·hunting·스캔·DNS·IP 평판·JA3·Suricata 기본 이벤트), 행위 탐지와 겹치는 룰(예: Heartbleed), `performance_impact` 경고가 있는 룰 |
+| 고정값 | 위험도 변환(4.3)과 단계 정하기(4.2)는 고정. 사내 룰은 넣지 않음 |
+| 고객이 하는 일 | 오탐은 NSM 예외의 시그니처(SID) 축으로 처리(4.4). 룰 끄기는 없음 |
+
+- **만드는 곳:** surica `suricata/update/`에 선별 조건(`enable.conf`·`disable.conf`·`modify.conf`, 메타데이터 조건)을 두고 `suricata-update`로 만듭니다. 결과 룰 목록(SID·rev)을 버전과 함께 패키지에 넣습니다.
+- **기준 확정:** S5 측정(CIC-IDS2017)에서 이 기준으로 남는 룰의 경보 수·Zeek 탐지와의 겹침·오탐을 보고 확정합니다. `measure.py`에 메타데이터(`signature_severity`·`confidence`)별 집계를 더하면 선별 기준별 경보 수를 바로 볼 수 있습니다.
+
 ### 6.2 같은 연결에 둘 다 나온 경우 (Manager 표시)
 
 룰 범위를 줄여도 웹 공격처럼 겹치는 곳이 남습니다(Zeek `SQL_Injection`·`Cross_Site_Scripting`·`Webshell_Access`와 ET web_server·web_specific_apps). 경보의 `community_id`와 Zeek 근거의 `community_id`로 같은 연결을 찾습니다.
@@ -307,11 +322,12 @@ S5를 먼저 시작하면 룰 범위와 경보량을 일찍 알 수 있습니다
 | 예외 | Manager가 적용, 화면은 NSM 예외 하나, 센서 예외 파일 형식은 그대로(4.4) | 2026-11-24 |
 | 위험도 변환 | 4.3절 표. Critical은 자산 역할로만 | 2026-11-24 |
 | Low 경보 | 스토리 시작점만 아님, 목록에는 보임 | 2026-11-24 |
+| 1차 룰 범위 | **확실한 악성만 고른 선별 룰셋**을 탐지 엔진 업데이트로 배포하고 고객 설정은 두지 않음(6.3). 룰 정책의 시그니처 룰 탭(6.1 카테고리 켜고 끄기, 개별 룰, 단계 지정, 위험도 변환)은 하반기. 오탐은 NSM 예외의 SID 축(4.4) | 2026-11-25 |
 
 남은 것:
 
 | 항목 | 정하는 때 |
 | --- | --- |
-| ET 카테고리 기본값(6.1) | S5 측정 뒤 |
+| ET 카테고리 기본값(6.1), 1차 선별 룰셋 기준·룰 수(6.3) | S5 측정 뒤 |
 | `threshold.config` 기본값, `suri_join_wait` | S5 측정 뒤 |
 | Manager의 원본 경보 보관 기간 | Manager 저장 설계(통합 상관 설계 9장)와 함께 |
