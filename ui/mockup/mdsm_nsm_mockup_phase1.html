@@ -637,23 +637,73 @@ const nsmEv=()=>EV.filter(e=>e.prod==='NSM'&&!e.mergedInto);
 const evOf=(note,src)=>EV.find(e=>e.note===note&&e.src===src&&e.ev&&e.ev[0][0]!=='-');
 
 // 통신 기록(선별 메타데이터) — 같은 시간대 통신
+// [시각, 로그, 출발, 대상, 내용, uid]. uid 는 행 단위 로그만 있음(요약 로그 flow_summary·dns_summary 는 없음)
 const META=[
- ['10:26:03','smb_files','10.10.10.32','10.10.10.30','파일 이름 변경 report.docx → report.docx.lockd'],
- ['10:25:40','smb_mapping','10.10.10.32','10.10.10.30','공유 폴더 연결 \\\\FS-01\\share'],
- ['10:18:22','flow_summary','10.10.10.31','203.0.113.77','443 포트 3번 연결, 보냄 193.1MB'],
- ['10:17:58','ssl','10.10.10.31','203.0.113.77','HTTPS 접속 files.transfer-host.example'],
- ['10:09:11','dce_rpc','10.10.10.5','10.10.10.32','원격 호출 svcctl::CreateServiceW'],
- ['10:07:30','ntlm','10.10.10.5','10.10.10.31','Windows 로그인 CORP\\svc_sql'],
- ['09:58:02','kerberos','10.10.10.5','10.10.10.10','티켓 요청 svc_web → MSSQLSvc/db01 (RC4)'],
- ['09:30:00','flow_summary','10.10.10.5','203.0.113.40','443 포트 31번 연결, 보냄 66KB'],
- ['09:25:12','ssl','10.10.10.5','203.0.113.40','HTTPS 접속 update-check.example'],
- ['09:11:40','http','198.51.100.23','10.10.10.5','웹 접속 GET /uploads/shell.php → 200'],
- ['09:06:12','http','198.51.100.23','10.10.10.5','웹 접속 GET /item.php → 500'],
- ['08:40:00','ssh','10.10.10.50','10.10.10.40','SSH 접속 실패 3번(libssh2)'],
+ ['10:26:03','smb_files','10.10.10.32','10.10.10.30','파일 이름 변경 report.docx → report.docx.lockd','CrN8a2'],
+ ['10:25:40','smb_mapping','10.10.10.32','10.10.10.30','공유 폴더 연결 \\\\FS-01\\share','CrN8a2'],
+ ['10:24:10','ntlm','10.10.10.32','10.10.10.30','Windows 로그인 CORP\\svc_sql (성공)','CrN8a2'],
+ ['10:18:22','flow_summary','10.10.10.31','203.0.113.77','443 포트 3번 연결, 보냄 193.1MB',''],
+ ['10:17:58','ssl','10.10.10.31','203.0.113.77','HTTPS 접속 files.transfer-host.example (TLS 1.3, 핸드셰이크 완료)','CxF3k1'],
+ ['10:09:20','dce_rpc','10.10.10.5','10.10.10.32','원격 호출 svcctl::StartServiceW','CsV7q2'],
+ ['10:09:11','dce_rpc','10.10.10.5','10.10.10.32','원격 호출 svcctl::CreateServiceW','CsV7q2'],
+ ['10:09:05','smb_files','10.10.10.5','10.10.10.32','파일 쓰기 \\\\10.10.10.32\\ADMIN$\\PSEXESVC.exe','CsV7q2'],
+ ['10:07:31','smb_mapping','10.10.10.5','10.10.10.31','공유 폴더 연결 \\\\10.10.10.31\\ADMIN$','CsM4p9'],
+ ['10:07:30','ntlm','10.10.10.5','10.10.10.31','Windows 로그인 CORP\\svc_sql (성공)','CsM4p9'],
+ ['09:58:02','kerberos','10.10.10.5','10.10.10.10','티켓 요청 svc_web → MSSQLSvc/db01 (RC4, 성공)','CkR2w5'],
+ ['09:30:00','flow_summary','10.10.10.5','203.0.113.40','443 포트 31번 연결, 보냄 66KB',''],
+ ['09:25:12','ssl','10.10.10.5','203.0.113.40','HTTPS 접속 update-check.example (TLS 1.2, JA3 6734f374…)','CtB9m3'],
+ ['09:11:40','http','198.51.100.23','10.10.10.5','웹 접속 GET /uploads/shell.php → 200 (1.2KB)','CwS5h7'],
+ ['09:09:02','http','198.51.100.23','10.10.10.5','웹 접속 POST /upload.php → 200','CwU1x4'],
+ ['09:06:40','http','198.51.100.23','10.10.10.5','웹 접속 GET /item.php → 200 (48KB)','CsQ3j8'],
+ ['09:06:12','http','198.51.100.23','10.10.10.5','웹 접속 GET /item.php → 500','CsQ3j8'],
+ ['09:02:30','flow_summary','198.51.100.23','10.10.10.5','31개 포트 41번 연결, 응답 SF:3 · S0:27 · REJ:11',''],
+ ['10:41:05','ssl','10.10.10.40','203.0.113.120','HTTPS 접속 (SNI 없음, TLS 1.2, 핸드셰이크 완료)','CeC8v2'],
+ ['10:40:00','flow_summary','10.10.10.40','203.0.113.120','443 포트 6번 연결, 보냄 41KB',''],
+ ['08:44:10','ssh','10.10.10.50','10.10.10.40','SSH 접속 실패 5번(libssh2)','CsH6t1'],
+ ['08:40:00','ssh','10.10.10.50','10.10.10.40','SSH 접속 실패 3번(libssh2)','CsH2r7'],
 ];
-const LOGKO={smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
+const LOGKO={http_ua_summary:'User-Agent 요약',rdp:'원격 데스크톱',smb_files:'파일 공유(파일)',smb_mapping:'파일 공유(연결)',flow_summary:'연결 요약',ssl:'HTTPS 접속',dce_rpc:'원격 호출',ntlm:'Windows 로그인',kerberos:'도메인 로그인',http:'웹 접속',ssh:'SSH 접속',dns_summary:'DNS 조회'};
 const tmin=t=>+t.slice(0,2)*60+ +t.slice(3,5);
 function metaFor(e){if(e.meta)return e.meta;const t=tmin(e.t),v=e.victims||[e.dst];return META.filter(m=>m[2]===e.src&&v.includes(m[3])&&Math.abs(tmin(m[0])-t)<=10)}
+
+// =============================================================== 탐지 정보 보강(메타데이터, 1차 범위)
+// Manager가 탐지 하나마다 시간 범위를 정해 선별 전송 로그를 조회해 만든다(예시 값). 센서 변경 없음.
+//   ok: 성공 흔적(hi 성공 흔적 · mid 일부 응답 · no 실패만) — http 상태 코드, ssh auth_success, kerberos·ntlm success, ssl established, flow_summary states
+//   live: 탐지 뒤에도 같은 출발지→목적지 통신이 이어지는지(flow_summary·행 단위 로그의 마지막 시각)
+//   name: IP만 있는 목적지에 이름 붙이기(출발지가 탐지 전 1시간에 조회한 dns_summary answers 에 그 IP)
+//   acct: 탐지 계정이 앞뒤 1시간에 로그인한 장비(kerberos·ntlm)
+//   facts: 탐지 종류별 핵심 사실 [항목, 값, 로그]   series: 30분별 추이(flow_summary)   uids: 근거 연결 uid(evidence.uid)
+//   처음 본 대상·목적지 보급도·평소 통신 여부는 긴 기간 조회가 필요해 소급검색 색인과 함께 하반기
+const XF={
+ 'Port_Scan|198.51.100.23':{facts:[['두드린 포트','31개(22, 80, 443, 8080 …), 41번 연결','flow_summary'],['응답한 포트','80, 443, 22: 연결 성립(SF)','flow_summary'],['응답 없음·거부','28개(S0 27번, REJ 11번)','flow_summary']],ok:['mid','열린 포트 3개가 응답함'],live:[0,'09:04 이후 스캔 없음']},
+ 'SQL_Injection|198.51.100.23':{facts:[['요청 경로','/item.php (15번)','http'],['상태 코드 순서','500 × 12 → 200 × 3','http'],['가장 큰 응답','48KB (같은 경로 평소 약 6KB)','http']],ok:['hi','오류(500) 뒤 정상 응답(200)과 큰 응답: 데이터가 나갔을 수 있음'],live:[0,'09:08 이후 같은 경로 요청 없음'],uids:['CsQ3j8']},
+ 'Webshell_Access|198.51.100.23':{facts:[['요청 경로','/uploads/shell.php (9번)','http'],['앞선 업로드','09:09 POST /upload.php → 200','http'],['응답','모두 200, 0.4~1.2KB','http']],ok:['hi','웹쉘 요청이 모두 200으로 응답함'],live:[1,'10:40 마지막 요청'],uids:['CwS5h7','CwU1x4']},
+ 'TLS_Beaconing|10.10.10.5':{facts:[['접속 도메인','update-check.example','ssl'],['TLS','1.2, 핸드셰이크 완료','ssl'],['JA3','6734f37431670b3ab4292b8f60f29984','ssl'],['연결','매번 약 2.1KB 보내고 0.4KB 받음','flow_summary']],ok:['hi','TLS 연결이 매번 성립함'],live:[1,'10:50 마지막 연결, 지금도 60초 간격'],series:['30분별 연결 수',[['09:00',31],['09:30',30],['10:00',30],['10:30',29]],'번'],uids:['CtB9m3']},
+ 'Kerberoasting|10.10.10.5':{facts:[['요청한 서비스(SPN)','MSSQLSvc/db01, HTTP/web02, CIFS/fs01 외 3개','kerberos'],['티켓 암호','RC4 6/6 (도메인 기본은 AES)','kerberos'],['결과','6건 모두 성공(티켓 발급)','kerberos']],ok:['hi','티켓 6개가 모두 발급됨: 밖에서 암호를 풀 수 있음'],acct:['svc_web',1,['10.10.10.5']],uids:['CkR2w5']},
+ 'SMB_Admin_Share|10.10.10.5':{facts:[['사용 계정','CORP\\svc_sql (NTLM)','ntlm'],['들어간 공유','\\\\PC-31\\ADMIN$, \\\\PC-32\\C$','smb_mapping'],['쓴 파일','PSEXESVC.exe (PC-32)','smb_files']],ok:['hi','로그인 성공 후 공유 연결됨'],acct:['CORP\\svc_sql',3,['10.10.10.5','10.10.10.31','10.10.10.32']],uids:['CsM4p9']},
+ 'Remote_Service_Creation|10.10.10.5':{facts:[['원격 호출','svcctl::CreateServiceW → StartServiceW','dce_rpc'],['서비스 이름','PSEXESVC','dce_rpc'],['올린 파일','\\\\PC-32\\ADMIN$\\PSEXESVC.exe','smb_files']],ok:['hi','서비스 생성 뒤 시작 호출까지 이어짐'],acct:['CORP\\svc_sql',3,['10.10.10.5','10.10.10.31','10.10.10.32']],uids:['CsV7q2']},
+ 'Exfil_Large_Transfer|10.10.10.31':{facts:[['접속 도메인','files.transfer-host.example','ssl'],['TLS','1.3, 핸드셰이크 완료','ssl'],['보낸 양','193.1MB (받은 양 0.3MB)','flow_summary']],ok:['hi','전송이 끝까지 완료됨(연결 정상 종료)'],live:[0,'10:24 이후 없음'],series:['30분별 보낸 양',[['09:30',0.1],['10:00',193.1],['10:30',0]],'MB'],uids:['CxF3k1']},
+ 'SMB_Ransomware|10.10.10.32':{facts:[['대상 공유','\\\\FS-01\\share','smb_mapping'],['이름 바뀐 파일','212개, 예: report.docx → report.docx.lockd','smb_files'],['사용 계정','CORP\\svc_sql','ntlm']],ok:['hi','파일 이름 변경이 실제로 이뤄짐'],live:[1,'10:31까지 이름 변경 계속'],acct:['CORP\\svc_sql',3,['10.10.10.5','10.10.10.31','10.10.10.32']],uids:['CrN8a2']},
+ 'SSH_Bruteforce|10.10.10.50':{facts:[['시도','25번(5분), 4번 반복','ssh'],['클라이언트','SSH-2.0-libssh2_1.10.0','ssh'],['결과','모두 실패','ssh']],ok:['no','로그인 성공 흔적 없음'],live:[0,'08:59 이후 없음'],uids:['CsH2r7','CsH6t1']},
+ 'Nonstandard_Port|10.10.10.8':{facts:[['접속 도메인','portal.partner.example','ssl'],['TLS','1.2, 핸드셰이크 완료','ssl']],name:['portal.partner.example','PC-08이 09:29에 조회한 DNS 응답에 이 IP가 있음'],ok:['hi','연결 성립'],live:[1,'10:48 마지막 연결']},
+ 'Encrypted_C2|10.10.10.40':{facts:[['SNI','없음','ssl'],['TLS','1.2, 핸드셰이크 완료','ssl'],['JA3','e7d705a3286e19ea42f587b344ee6865','ssl'],['연결','30분 동안 6번, 보냄 41KB','flow_summary']],name:[null,'탐지 전 1시간 DNS 응답에 이 IP가 없음(IP로 바로 접속)'],ok:['hi','암호화 연결이 성립함'],live:[1,'10:49 마지막 연결'],uids:['CeC8v2']},
+ 'DNS_Tunneling|10.10.10.80':{facts:[['질의 이름 예','a9f3k2q7….tun.example-c2.net','dns_summary'],['고유 이름','86개 / 1시간','dns_summary'],['결과','NOERROR 71 · NXDOMAIN 15','dns_summary'],['응답','TXT(IP 아님)','dns_summary']],ok:['hi','대부분 정상 응답: 상대 서버가 받아 주고 있음'],live:[1,'10:44 질의 계속']},
+ 'HTTP_Beaconing|10.10.10.80':{facts:[['접속 도메인','ad-refresh.example','http'],['프로그램(User-Agent)','AdRefresh/2.1 (하루 요청 288번, Host 1개)','http_ua_summary'],['경로','/ping → 204','http']],ok:['mid','응답 204(내용 없음)'],live:[1,'10:50 마지막 요청']},
+};
+Object.entries(XF).forEach(([k,v])=>{const [n,src]=k.split('|'),e=evOf(n,src);if(e)e.xf=v});
+const OKC={hi:['bad','성공 흔적'],mid:['warn','일부 응답'],no:['ok','실패만']};
+// 목록·구성 탐지 표에 붙이는 짧은 칩(성공 흔적, 지금도 통신 중)
+const judgeChips=e=>{const x=e&&e.xf;if(!x)return '';return (x.ok&&x.ok[0]!=='no'?`<span class="chip ${OKC[x.ok[0]][0]}" title="${esc(x.ok[1])}">${OKC[x.ok[0]][1]}</span>`:'')+(x.live&&x.live[0]?`<span class="chip bad" title="${esc(x.live[1])}">통신 중</span>`:'')};
+function xfBox(e){const x=e.xf;if(!x)return '';const rows=[];
+  if(x.ok)rows.push([`<span class="chip ${OKC[x.ok[0]][0]}">${OKC[x.ok[0]][1]}</span>`,esc(x.ok[1])]);
+  if(x.live)rows.push([x.live[0]?'<span class="chip bad">지금도 통신 중</span>':'<span class="chip">멈춤</span>',esc(x.live[1])]);
+  if(x.name)rows.push([x.name[0]?'<span class="chip">목적지 이름</span>':'<span class="chip warn">이름 없음</span>',(x.name[0]?`<b>${esc(x.name[0])}</b> · `:'')+esc(x.name[1])]);
+  if(x.acct)rows.push(['<span class="chip">계정 맥락</span>',`<b>${esc(x.acct[0])}</b> 계정이 앞뒤 1시간에 로그인한 장비 ${x.acct[1]}대: ${x.acct[2].map(ip=>esc(nm(ip))).join(', ')}`]);
+  const sm=x.series?Math.max(...x.series[1].map(p=>p[1]),1):1;
+  return `<div class="sec" style="margin-top:0">한눈에 보기 <span class="note" style="font-weight:400">통신 기록(메타데이터)으로 판단한 참고 정보</span></div>
+   <table class="t">${rows.map(r=>`<tr><td class="nw" style="width:130px">${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
+   ${x.facts?`<div class="sec">핵심 사실 <span class="note" style="font-weight:400">탐지 종류마다 볼 값 · 옆은 출처 기록</span></div><dl class="kv">${x.facts.map(f=>`<dt>${esc(f[0])}</dt><dd>${esc(f[1])} <span class="chip">${LOGKO[f[2]]||f[2]}</span></dd>`).join('')}</dl>`:''}
+   ${x.series?`<div class="sec">${esc(x.series[0])} <span class="note" style="font-weight:400">연결 요약(30분 단위)</span></div>${x.series[1].map(p=>`<div class="hbar" style="grid-template-columns:60px 1fr 90px"><span class="note">${p[0]}</span><span class="b"><i style="width:${100*p[1]/sm}%;background:#5b8def"></i></span><span class="num">${p[1].toLocaleString()} ${x.series[2]}</span></div>`).join('')}`:''}`}
 
 // =============================================================== 여러 단계로 이어진 공격(센서 킬체인 상관)
 // 1차 범위: Manager는 공격 스토리를 따로 묶지 않고, 센서의 상관 탐지(nsm_detection.log category=Correlated)를 그대로 보여 준다.
@@ -755,7 +805,7 @@ function renderDet(){
   const rows=nsmEv().filter(e=>(!s||e.sev===s)&&(!st||e.stage===st)&&(!ty||e.note===ty)&&(!en||(en==='both'?!!e.also:en==='Suricata'?e.eng==='Suricata'||!!e.also:e.eng!=='Suricata'))&&(!dp||(dp==='suppressed'?e.disp==='suppressed':e.disp!=='suppressed'))&&(!c||e.corr)&&(!tac||evTechs(e).some(t=>tacOf(t).includes(tac)))&&(!q||(JSON.stringify(e)+' '+evTechs(e).map(attName).join(' ')).toLowerCase().includes(q)));
   $('#detCount').textContent=`전체 ${rows.length}건`;
   $('#detTable').innerHTML=`<tr><th>이벤트 ID</th><th>위험도</th><th>탐지명</th><th>방식</th><th>공격 단계</th><th>출발지</th><th>목적지</th><th>포트</th><th>계정</th><th class="num">반복</th><th>처리</th><th>여러 단계 공격</th><th>탐지 시각</th></tr>`+
-   rows.map(e=>{const cc=e.corr?null:corrOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)}<span class="sub">${e.sid?`SID ${e.sid} · `:''}${e.corr?`ATT&amp;CK 기법 ${new Set(techs(e.tech)).size}개`:techs(e.tech).join(', ')||'ATT&amp;CK 매핑 없음'}</span></td><td class="nw">${e.corr?'<span class="chip">상관</span>':e.eng==='Suricata'?'<span class="chip sig">시그니처</span>':'<span class="chip">행위</span>'+(e.also?'<span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지">+시그니처</span>':'')}</td><td class="nw">${e.corr?`<span class="chip">${reachedOf(e).length}단계</span>`:esc(stageKo(e.stage))}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${cc?`<a class="chip warn" data-go="det" data-id="${cc.id}" title="${esc(cc.name)}">${(cc.members||[]).indexOf(e.id)+1}번째 단계</a>`:e.corr?`<span class="note">구성 탐지 ${(e.members||[]).length}건</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
+   rows.map(e=>{const cc=e.corr?null:corrOf(e.id);return `<tr class="click ${e.disp==='suppressed'?'dim':''}" data-go="det" data-id="${e.id}"><td class="mono nw">${e.id}</td><td>${sev(e.sev)}</td><td>${esc(e.name)} ${judgeChips(e)}<span class="sub">${e.sid?`SID ${e.sid} · `:''}${e.corr?`ATT&amp;CK 기법 ${new Set(techs(e.tech)).size}개`:techs(e.tech).join(', ')||'ATT&amp;CK 매핑 없음'}</span></td><td class="nw">${e.corr?'<span class="chip">상관</span>':e.eng==='Suricata'?'<span class="chip sig">시그니처</span>':'<span class="chip">행위</span>'+(e.also?'<span class="chip sig" title="같은 연결에서 Suricata 시그니처도 탐지">+시그니처</span>':'')}</td><td class="nw">${e.corr?`<span class="chip">${reachedOf(e).length}단계</span>`:esc(stageKo(e.stage))}</td><td>${who(e.src)}</td><td>${dstCell(e)}</td><td>${esc(e.port)}</td><td>${esc(e.account||'')}</td><td class="num">${e.occ>1?e.occ+'번':''}</td><td>${e.disp==='suppressed'?`<span class="chip sup">알림 끔</span>`:'<span class="chip">알림</span>'}</td><td>${cc?`<a class="chip warn" data-go="det" data-id="${cc.id}" title="${esc(cc.name)}">${(cc.members||[]).indexOf(e.id)+1}번째 단계</a>`:e.corr?`<span class="note">구성 탐지 ${(e.members||[]).length}건</span>`:''}</td><td class="nw">${e.d||DAY} ${e.t}</td></tr>`}).join('');
 }
 // 탐지 상세의 ATT&CK 블록. 전술은 기법으로 찾는다(공격 단계에서 끌어오지 않음)
 function attBox(e,alsoEv){
@@ -776,7 +826,8 @@ function openDet(id){
   const sigBox=x=>`<dl class="kv"><dt>시그니처</dt><dd>${esc(x.sig.msg)}</dd><dt>SID · rev</dt><dd class="mono">${x.sid} · ${x.sig.rev}</dd><dt>분류</dt><dd>${esc(x.sig.cat)} · <span class="mono">${esc(x.sig.cls)}</span></dd><dt>위험도</dt><dd>Suricata 우선순위 ${x.sig.pri} → ${sev(SURI_SEV[x.sig.pri])}${x.roleUp?` → ${sev(x.sigSev||x.sev)} <span class="note">목적지가 ${esc((A[x.dst]||{}).role||'DC·DB 서버')}라 한 단계 올림</span>`:''}</dd><dt>공격 단계</dt><dd>${esc(stageKo(x.stage))} <span class="note">정한 근거: ${BYKO[x.sig.by]}</span></dd>${x.cid?`<dt>Community ID</dt><dd class="mono">${esc(x.cid)}</dd>`:''}</dl>`;
   const stepN=cc?cc.members.indexOf(e.id)+1:null;
   const body=`${cc?`<div class="callout warn" style="margin-bottom:10px">이 탐지는 <b>${esc(cc.name)}</b>(시작 공격자 ${esc(nm(cc.src))})의 ${stepN}번째 단계입니다. <a data-go="det" data-id="${cc.id}">여러 단계 공격 보기</a></div>`:''}
-   <div class="sec" style="margin-top:0">기본 정보</div>
+   ${xfBox(e)}
+   <div class="sec" style="${e.xf?'':'margin-top:0'}">기본 정보</div>
    <dl class="kv"><dt>탐지 시각</dt><dd>${e.y||'2026'}-${e.d||DAY} ${e.t}${e.sec||':00'}</dd><dt>위험도</dt><dd>${sev(e.sev)}</dd><dt>탐지명</dt><dd>${esc(e.name)}</dd><dt>출발지</dt><dd>${who(e.src)}</dd><dt>목적지</dt><dd>${e.via?`<span class="mono">${esc(e.host||'목적지 확인 안 됨')}</span><div class="note">프록시 <span class="mono">${esc(e.via)}</span>(${esc(nm(e.dst))})를 거친 통신입니다. 프록시는 중계 장비라 피해 장비로 보지 않습니다</div>`:v.map(who).join('<br>')}</dd><dt>포트</dt><dd>${esc(e.port)}${e.proto?` (${esc(e.proto)})`:''}</dd>${e.account?`<dt>사용된 계정</dt><dd>${esc(e.account)}</dd>`:''}${e.occ>1?`<dt>반복</dt><dd>같은 공격이 이어져 ${e.occ}번 탐지됨(알림은 1번)</dd>`:''}${e.disp==='suppressed'?`<dt>처리</dt><dd><span class="chip sup">알림 끔</span> 예외 "${e.exc}"에 해당해 알림을 보내지 않았습니다.</dd>`:''}<dt>센서</dt><dd>${esc(e.sensor)}</dd></dl>
    ${sg?`<div class="sec">시그니처 정보 <span class="chip sig">Suricata</span></div>${sigBox(e)}<div class="note">시그니처 탐지는 알려진 공격의 패턴(룰)과 일치한 통신입니다. 정상 프로그램이 같은 패턴을 쓰면 오탐이 될 수 있어, 같은 PC·서버의 행위 탐지와 함께 봅니다.</div>`:''}
    ${alsoEv.length?`<div class="sec">같은 연결의 시그니처 탐지 <span class="chip sig">Zeek + Suricata</span></div><div class="note" style="margin-bottom:6px">같은 연결에서 같은 단계로 Suricata 시그니처도 탐지해 한 탐지로 보여 줍니다. 알림은 먼저 온 쪽으로 한 번만 보냈습니다.</div>${alsoEv.map(sigBox).join('')}`:''}
@@ -785,7 +836,9 @@ function openDet(id){
    <dl class="kv" style="margin-top:8px"><dt>공격 단계</dt><dd>${steps.map(stageKo).join(' → ')}</dd>${R[e.note]?`<dt>탐지 기준</dt><dd>${esc(R[e.note].cond)} · ${R[e.note].sig?`<a data-go="sigrule" data-sid="${e.sid}">시그니처 설정</a>`:`<a data-go="rule" data-n="${e.note}">기준 바꾸기</a>`}</dd>`:''}</dl>
    ${attBox(e,alsoEv)}
    <div class="sec">탐지한 근거</div><table class="t"><tr><th>항목</th><th>내용</th></tr>${(e.ev||[]).map(x=>`<tr><td class="nw">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join('')}</table>
-   ${`<div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분, 참고용</span></div>${m.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th></tr>${m.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td></tr>`).join('')}</table>`:'<div class="note">같은 시간대 기록이 없습니다.</div>'}`}
+   ${(()=>{const U=(e.xf&&e.xf.uids)||[],ex=META.filter(r=>r[5]&&U.includes(r[5])),est=m.filter(r=>!ex.includes(r));
+     return `<div class="sec">근거 연결의 기록 <span class="note" style="font-weight:400">탐지 근거와 연결 ID(uid)가 같은 기록 · 정확히 일치</span></div>${ex.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th><th>연결 ID</th></tr>${ex.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td><td class="mono note">${r[5]}</td></tr>`).join('')}</table>`:'<div class="note">근거 연결과 일치하는 기록이 없습니다. 요약 기록(연결 요약·DNS 요약)만 있는 탐지이거나, 예외 도메인처럼 기록을 보내지 않는 통신입니다.</div>'}
+     <div class="sec">같은 시간대 통신 기록 <span class="note" style="font-weight:400">같은 출발지·대상의 전후 10분 · 추정, 참고용</span></div>${est.length?`<table class="t"><tr><th>시각</th><th>종류</th><th>내용</th></tr>${est.map(r=>`<tr><td>${r[0]}</td><td class="nw">${LOGKO[r[1]]||r[1]}</td><td>${esc(r[4])}</td></tr>`).join('')}</table>`:'<div class="note">같은 시간대 기록이 없습니다.</div>'}`})()}
    <details class="tech"><summary>기술 상세(원본 데이터)</summary><dl class="kv" style="margin-top:6px"><dt>이벤트 ID</dt><dd class="mono">${e.id}</dd><dt>진단명</dt><dd class="mono">${e.diag}</dd><dt>ATT&amp;CK</dt><dd class="mono">${esc(e.tech)}</dd></dl>${sg?`<div class="note">Suricata 경보(<span class="mono">suricata_alert</span>)를 Manager가 바꾼 공통 이벤트입니다. 센서 탐지 로그(<span class="mono">nsm_detection.log</span>)에는 없습니다.</div><pre class="json">${esc(JSON.stringify({event_uid:'NSM:'+e.sensor+':suri-'+e.id.replace('NSM-',''),product:'NSM',engine:'Suricata',rule:e.note,stage:e.stage||null,technique:techs(e.tech),severity_id:{Critical:5,High:4,Medium:3,Low:2}[e.sev],src_ip:e.src,dst_ip:e.dst,dst_port:e.port,proto:e.proto,community_id:e.cid,sig_id:e.sid,sig_rev:sg.rev,signature:sg.msg,sig_category:sg.cat,sig_classtype:sg.cls,sig_severity:sg.pri,stage_by:sg.by,role_up:!!e.roleUp,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`:`<pre class="json">${esc(JSON.stringify({detection_id:e.id.replace('NSM-',''),diagnosis:e.diag,rule:e.note,techniques:techs(e.tech),category:e.corr?'Correlated':'Single',killchain_stages:steps.filter(Boolean),severity:e.sev,attacker:e.src,victims:v,evidence_count:(e.ev||[]).length,occurrence:e.occ,disposition:e.disp,exception_id:e.exc},null,1))}</pre>`}</details>`;
   const pre={scope:[e.note],src:isInt(e.src)?e.src:'',reason:`오탐 확인: ${e.name}`,disp:'suppress',sid:e.sid?String(e.sid):''};
   const foot=`${!e.corr?`<button class="btn" data-go="exc-new" data-pre="${esc(JSON.stringify(pre))}">오탐으로 처리(예외 만들기)</button>`:''}${e.sid?`<button class="btn" data-go="sigrule" data-sid="${e.sid}">이 시그니처 설정</button>`:''}${A[e.src]?`<button class="btn" data-go="asset" data-ip="${e.src}">출발지 장비(자산 목록)</button>`:''}`;
@@ -806,7 +859,7 @@ function openCorr(e){
    </div>
    <div class="sec">어느 단계까지 왔나 <span class="note" style="font-weight:400">번호 = 아래 구성 탐지 순서, 누르면 그 탐지</span></div><div class="board">${board}</div>
    <div class="sec">구성 탐지 <span class="note" style="font-weight:400">센서가 단계로 이은 탐지, 시간 순서</span></div>
-   <div class="tw"><table class="t"><tr><th>#</th><th>시각</th><th>공격 단계</th><th>탐지명 · 근거</th><th>출발 → 대상</th></tr>${ms.map((m,k)=>`<tr class="click" data-go="det" data-id="${m.id}"><td><span class="nbadge">${k+1}</span></td><td class="nw">${m.t}</td><td class="nw">${esc(stageKo(m.stage))}</td><td><b>${esc(m.name)}</b>${engTag(m)}<span class="sub">${(m.ev||[]).slice(0,1).map(x=>esc(x[0]+': '+x[1])).join('')}</span></td><td class="nw">${esc(nm(m.src))} → ${(m.victims||[m.dst]).map(x=>esc(nm(x))).join(', ')}</td></tr>`).join('')}</table></div>
+   <div class="tw"><table class="t"><tr><th>#</th><th>시각</th><th>공격 단계</th><th>탐지명 · 근거</th><th>출발 → 대상</th></tr>${ms.map((m,k)=>`<tr class="click" data-go="det" data-id="${m.id}"><td><span class="nbadge">${k+1}</span></td><td class="nw">${m.t}</td><td class="nw">${esc(stageKo(m.stage))}</td><td><b>${esc(m.name)}</b>${engTag(m)} ${judgeChips(m)}<span class="sub">${(m.ev||[]).slice(0,1).map(x=>esc(x[0]+': '+x[1])).join('')}</span></td><td class="nw">${esc(nm(m.src))} → ${(m.victims||[m.dst]).map(x=>esc(nm(x))).join(', ')}</td></tr>`).join('')}</table></div>
    ${attBox(e,[])}
    <div class="sec">갱신 이력 <span class="note" style="font-weight:400">같은 탐지 ID로 다음 단계가 이어질 때마다 갱신(revision). 알림은 처음 한 번, 이후는 갱신 표시</span></div>
    <table class="t"><tr><th>갱신</th><th>시각</th><th>추가된 탐지</th></tr>${(e.revs||[]).slice().reverse().map(r=>`<tr><td class="mono">${r[0]}</td><td class="nw">${r[1]}</td><td>${r[2].map(m=>`${esc(m.name)} <span class="note">(${esc(stageKo(m.stage))})</span>`).join(', ')}</td></tr>`).join('')}</table>
