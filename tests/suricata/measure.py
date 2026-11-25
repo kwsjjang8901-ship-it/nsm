@@ -225,19 +225,42 @@ def main(argv):
                 cur_tot["merged"] += len(mt)
                 cur_tot["sids"] += len(sids)
         b = os.path.getsize(eve)
+        # run_pcap.sh 의 Suricata 점검 값(적재된 룰·읽은 패킷). 없으면(옛 실행) 모름
+        chk = {}
+        try:
+            with open(os.path.join(d, "suricata", "check.json"), encoding="utf-8") as f:
+                chk = json.load(f)
+        except (OSError, ValueError):
+            pass
         r = {"pcap": pcap, "alerts": n_al, "events": n_ev, "merged": n_mg,
-             "zeek": len(zeek), "zeek_with_sig": sum(1 for e in zeek if e.get("also")), "bytes": b}
+             "zeek": len(zeek), "zeek_with_sig": sum(1 for e in zeek if e.get("also")), "bytes": b,
+             "loaded": chk.get("rules_loaded"), "packets": chk.get("packets")}
         rows.append(r)
         for k in ("alerts", "events", "merged", "zeek", "zeek_with_sig", "bytes"):
             tot[k] += r[k]
 
     pct = lambda a, b: f"{100 * a / b:.1f}%" if b else "-"
     print(f"## Suricata 측정 요약 (pcap {len(rows)}개)\n")
-    print("| pcap | 경보 | 시그니처 탐지 | Zeek 와 겹침 | Zeek 단독 탐지 | 그중 시그니처도 | 경보 파일 |")
-    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
-    for r in rows + [dict(tot, pcap="합계")]:
-        print(f"| {r['pcap']} | {r['alerts']:,} | {r['events']:,} | {r['merged']:,} ({pct(r['merged'], r['events'])}) | {r['zeek']:,} | "
+    num = lambda v: "?" if v is None else f"{v:,}"
+    print("| pcap | 적재된 룰 | 읽은 패킷 | 경보 | 시그니처 탐지 | Zeek 와 겹침 | Zeek 단독 탐지 | 그중 시그니처도 | 경보 파일 |")
+    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    for r in rows + [dict(tot, pcap="합계", loaded=None, packets=None)]:
+        print(f"| {r['pcap']} | {num(r.get('loaded')) if r['pcap'] != '합계' else ''} | {num(r.get('packets')) if r['pcap'] != '합계' else ''} | "
+              f"{r['alerts']:,} | {r['events']:,} | {r['merged']:,} ({pct(r['merged'], r['events'])}) | {r['zeek']:,} | "
               f"{r['zeek_with_sig']:,} ({pct(r['zeek_with_sig'], r['zeek'])}) | {r['bytes'] / 1e6:,.2f} MB |")
+    # 경보 0건은 측정 결과가 아니라 실행 문제일 가능성이 크다: 원인을 표 아래에 적는다
+    for r in rows:
+        if r["alerts"]:
+            continue
+        if r.get("loaded") == 0:
+            why = "적재된 룰이 0개입니다(룰 받기·ET_URL·룰 문법 확인). 이 결과는 측정에 쓰지 마세요"
+        elif r.get("packets") == 0:
+            why = "Suricata 가 패킷을 읽지 못했습니다(pcap 경로·형식 확인). 이 결과는 측정에 쓰지 마세요"
+        elif r.get("loaded") is None:
+            why = "경보가 0건이고 적재된 룰·패킷 수를 모릅니다(옛 실행). suricata/run.log 의 rules successfully loaded·read … packets 를 확인하세요"
+        else:
+            why = f"룰 {r['loaded']:,}개로 패킷 {r['packets']:,}개를 처리했는데 경보가 0건입니다. HOME_NET·룰 종류가 맞는지 확인하세요"
+        print(f"\n> 주의({r['pcap']}): {why}")
     print("\n### 카테고리별 (6.1절 기본값 확인)\n")
     print("| 카테고리 | 경보 | 시그니처 탐지 | Zeek 와 겹침 |")
     print("| --- | ---: | ---: | ---: |")
