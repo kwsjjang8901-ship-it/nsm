@@ -63,6 +63,7 @@ schema/
   validate.py               # 로그를 스키마로 검사(CI 가 btest 전체 출력에 실행)
 ui/
   mockup/mdsm_nsm_mockup.html  # MDS Manager NSM 화면 목업(예시 데이터). 목업형 리포트의 템플릿(ui/README.md)
+  mockup/mdsm_nsm_mockup_phase1.html  # 1차 범위 목업(공격 스토리·과거 기록 검색은 하반기, ui/README.md)
   mockup/integrated_story_mockup.html  # 통합 공격 스토리·통합 상관 룰 목업(MDS·MTA·NSM, 예시 데이터)
 docs/
   SRS.md                    # 요구사항 명세·설정 가이드(원본)
