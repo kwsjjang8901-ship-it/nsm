@@ -306,6 +306,10 @@ if [ -n "$SURI_RUN" ]; then
     for r in "${SURI_RULES[@]}"; do
         if [ "$r" = et ]; then
             # ET Open: suricata-update. ET_URL 이 로컬 파일이면 그 파일을, 주소면 그 주소를 쓴다(없으면 기본 et/open)
+            if [ -n "${ET_URL:-}" ] && [[ "$ET_URL" != *://* ]] && [ ! -f "$ET_URL" ]; then
+                echo "      ET_URL 파일이 없습니다: $ET_URL (VM 을 다시 켰다면 /tmp 가 비었을 수 있습니다. 지워지지 않는 곳에 두세요)" >&2
+                sfail=1; continue
+            fi
             mkdir -p "$SDIR/sud" "$SDIR/rules/et"
             if [ -n "$SURI_LOCAL" ]; then
                 uargs=(--data-dir "$SDIR/sud" -o "$SDIR/rules/et" --no-test --no-reload)
@@ -326,7 +330,12 @@ if [ -n "$SURI_RUN" ]; then
                       --entrypoint suricata-update "$SURICATA_IMAGE" "${uargs[@]}")
             fi
             if "${ucmd[@]}" > "$SDIR/suricata-update.log" 2>&1; then
-                cat "$SDIR/rules/et/suricata.rules" >> "$SDIR/rules/suricata.rules"
+                [ -f "$SDIR/rules/et/suricata.rules" ] && cat "$SDIR/rules/et/suricata.rules" >> "$SDIR/rules/suricata.rules"
+                net=$( { grep -cE '^(alert|drop|pass|reject)' "$SDIR/rules/et/suricata.rules" 2>/dev/null || true; } | head -1)
+                echo "      ET 룰 ${net:-0}개${SURICA:+(disable.conf 적용 뒤)}${ET_URL:+, $ET_URL}"
+                if [ "${net:-0}" -eq 0 ]; then
+                    echo "      ET 룰이 0개입니다(ET_URL 파일 내용·$SDIR/suricata-update.log 를 확인하세요)." >&2; sfail=1
+                fi
             else
                 echo "      ET 룰 받기 실패($SDIR/suricata-update.log). rules.emergingthreats.net 접근이나 ET_URL 을 확인하세요." >&2
                 tail -3 "$SDIR/suricata-update.log" | sed 's/^/        /' >&2
@@ -337,6 +346,9 @@ if [ -n "$SURI_RUN" ]; then
         fi
     done
     nrules=$( { grep -hcE '^(alert|drop|pass|reject)' "$SDIR/rules/suricata.rules" "$SDIR/rules/local.rules" || true; } | awk '{s+=$1} END {print s+0}')
+    if [ -z "$sfail" ] && [ "$nrules" -eq 0 ]; then
+        echo "      룰이 0개라 Suricata 를 돌리지 않습니다(-R 룰 파일·ET 룰 받기를 확인하세요)." >&2; sfail=1
+    fi
     # HOME_NET 은 Zeek 의 내부 판정과 같게: 사설 대역 + -n. SURICATA_HOME_NET 을 주면 그 값만 쓴다
     # (공개 데이터셋처럼 외부 공격자가 사설 주소로 보일 때. 예: CIC-IDS2017 은 192.168.10.0/24 만 내부, 172.16.0.1 은 공격 쪽 NAT)
     HOME_NETS="${SURICATA_HOME_NET:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16${NETS:+,$NETS}}"
@@ -408,9 +420,24 @@ YAML
         else
             echo "      경보 파일 정리 실패($src, 메모리·디스크를 확인하세요). 리포트에는 넣지 않습니다." >&2
         fi
-        nbad=$(grep -c "error parsing signature" "$SDIR/run.log" || true)
-        echo "      완료 ($(( $(date +%s) - sstart ))초), 룰 ${nrules}개${nbad:+$([ "$nbad" -gt 0 ] && echo ", 읽지 못한 룰 ${nbad}개($SDIR/run.log)")}"
-        if grep -q "no rules were loaded" "$SDIR/run.log"; then echo "      주의: 읽은 룰이 하나도 없습니다(룰 문법·파일을 확인하세요)." >&2; fi
+        # 점검(경보 0건의 원인을 화면에서 바로 알게): Suricata 로그의 적재된 룰 수·읽은 패킷 수, 경보 수.
+        #   룰이 0개여도, 패킷을 못 읽어도 Suricata 는 종료 코드 0 으로 끝나므로 숫자로 확인한다
+        slog() { cat "$SDIR/run.log" "$SDIR/log/suricata.log" 2>/dev/null || true; }
+        loaded=$(slog | grep -oE '[0-9]+ rules successfully loaded' | tail -1 | grep -oE '^[0-9]+' || true)
+        slog | grep -q "no rules were loaded" && loaded=0
+        nbad=$(slog | grep -oE '[0-9]+ rules failed' | tail -1 | grep -oE '^[0-9]+' || true)
+        [ -n "$nbad" ] || nbad=$(grep -c "error parsing signature" "$SDIR/run.log" || true)
+        pkts=$(slog | grep -oE 'read [0-9]+ files?, [0-9]+ packets' | tail -1 | grep -oE '[0-9]+ packets' | grep -oE '^[0-9]+' || true)
+        nal=$( { grep -c . "$SDIR/eve-alert.json" 2>/dev/null || true; } | head -1)
+        secs=$(( $(date +%s) - sstart ))
+        echo "      완료 (${secs}초), 룰 ${nrules}개 중 적재 ${loaded:-?}개${nbad:+$([ "$nbad" -gt 0 ] && echo ", 읽지 못한 룰 ${nbad}개($SDIR/run.log)")}, 패킷 ${pkts:-?}개"
+        printf '{"rules_in_files": %s, "rules_loaded": %s, "rules_failed": %s, "packets": %s, "alerts": %s, "seconds": %s}\n' \
+            "$nrules" "${loaded:-null}" "${nbad:-null}" "${pkts:-null}" "${nal:-0}" "$secs" > "$SDIR/check.json"
+        if [ "${loaded:-1}" -eq 0 ]; then echo "      주의: 읽은 룰이 하나도 없습니다(룰 문법·파일을 확인하세요). 그래서 경보가 0건입니다." >&2
+        elif [ "${pkts:-1}" -eq 0 ]; then echo "      주의: Suricata 가 패킷을 하나도 읽지 못했습니다(pcap 경로·형식·권한, $SDIR/run.log)." >&2
+        elif [ "${nal:-0}" -eq 0 ]; then
+            echo "      주의: 경보가 0건입니다(패킷 ${pkts:-?}개, 룰 ${loaded:-$nrules}개). 룰 종류(-R)·HOME_NET(SURICATA_HOME_NET)이 이 pcap 에 맞는지 확인하세요." >&2
+        fi
         # 화면 요약: 주소·이름 없이 단계별 경보 수만(한 줄씩 셈)
         [ ${#SURI[@]} -eq 0 ] || python3 - "$ROOT/tests" "$SDIR/eve-alert.json" <<'PY' || echo "      (경보 요약 실패)" >&2
 import collections, sys

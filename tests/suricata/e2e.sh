@@ -5,6 +5,7 @@
 #   2. surica 센서 설정(-y): 경보·통계 파일 분리, threshold 기본값으로 경보 수는 줄어도 시그니처 탐지 7건   (SURICA_ROOT 가 있을 때)
 #   3. ET 룰 받기(-R et): surica 표본(tests/rules/et_sample)을 ET_URL 로 받아 disable.conf 뒤 4개만             (SURICA_ROOT 가 있을 때)
 #   4. 장애 격리: 깨진 룰은 경고, 없는 설정 파일(로컬)·없는 이미지(Docker)는 Suricata 없이 계속(종료 코드 0, 리포트는 Zeek 탐지만)
+#      점검: 적재된 룰·읽은 패킷(check.json), 룰 0개면 돌리지 않음, 없는 ET_URL 파일, 맞는 경보가 없으면 "경보가 0건" 경고
 #   5. 로컬과 Docker 가 모두 있으면 Docker(SURICATA_DOCKER=1)로도 1번과 같은 결과
 #
 # 사용법: [SURICA_ROOT=<surica 경로>] tests/suricata/e2e.sh
@@ -30,6 +31,8 @@ PY
 )
 	[ "$same" = yes ] && ok "경보가 고정본과 같음" || bad "경보가 고정본과 다름(룰·pcap·이미지를 바꿨으면 tests/suricata/gen_eve.sh)"
 	[ "$(nsig a)" = 7 ] && ok "목업형 리포트에 시그니처 7건" || bad "시그니처 $(nsig a)건"
+	grep -q "룰 6개 중 적재 6개, 패킷 613개" "$TMP/a.log" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); sys.exit(0 if (c["rules_loaded"],c["packets"],c["alerts"])==(6,613,27) else 1)' "$TMP/a/suricata/check.json" \
+		&& ok "점검: 적재된 룰 6개·패킷 613개·경보 27건(check.json)" || bad "점검 값이 다름"
 else
 	cat "$TMP/a.log"; bad "run_pcap.sh -S 실패"
 fi
@@ -61,6 +64,23 @@ if run d -S -R "$TMP/bad.rules" && grep -q "읽지 못한 룰 1개" "$TMP/d.log"
 	ok "깨진 룰: 경고 후 계속"
 else
 	cat "$TMP/d.log"; bad "깨진 룰 처리"
+fi
+: > "$TMP/empty.rules"
+if run h -S -R "$TMP/empty.rules" && grep -q "룰이 0개라 Suricata 를 돌리지 않습니다" "$TMP/h.log" && grep -q "Suricata 없이 계속" "$TMP/h.log"; then
+	ok "빈 룰 파일: Suricata 를 돌리지 않고 계속"
+else
+	cat "$TMP/h.log"; bad "빈 룰 파일 처리"
+fi
+if ET_URL=/nonexistent/et-rules.tar.gz run i -S -R et && grep -q "ET_URL 파일이 없습니다" "$TMP/i.log" && grep -q "Suricata 없이 계속" "$TMP/i.log"; then
+	ok "없는 ET_URL 파일: 알리고 계속"
+else
+	cat "$TMP/i.log"; bad "없는 ET_URL 파일 처리"
+fi
+echo 'alert tcp any any -> any 1 (msg:"never"; content:"zzzzqqqq-never"; sid:2;)' > "$TMP/never.rules"
+if run j -S -R "$TMP/never.rules" && grep -q "경보가 0건입니다(패킷 613개, 룰 1개)" "$TMP/j.log"; then
+	ok "맞는 경보가 없음: 경보 0건 경고"
+else
+	cat "$TMP/j.log"; bad "경보 0건 경고"
 fi
 if command -v suricata > /dev/null 2>&1; then
 	if SURICATA_CONF=/nonexistent/suricata.yaml run e -S -R "$RULES" && grep -q "Suricata 없이 계속" "$TMP/e.log" && [ "$(nsig e)" = 0 ] \
