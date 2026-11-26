@@ -68,12 +68,15 @@ type TlsBeaconState: record {
 
 global tls_beacons: table[addr, string] of TlsBeaconState &write_expire=beacon_expire;
 
+# 판정 노드(단독 실행·프록시·매니저)에서만 쓴다(워커에 두면 호출하는 곳이 없다는 경고)
+@if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::PROXY || Cluster::local_node_type() == Cluster::MANAGER )
 function tls_beacon_size_ok(ref: count, b: count): bool
     {
     local diff = ref > b ? ref - b : b - ref;
     local tol = double_to_count(ref * tls_beacon_size_tolerance);
     return diff <= ( tol > tls_beacon_size_slack ? tol : tls_beacon_size_slack );
     }
+@endif
 
 # 워커(또는 standalone): TLS 연결이 끝나면 관측값을 만들어 상태 보유 노드로 보낸다.
 event connection_state_remove(c: connection)

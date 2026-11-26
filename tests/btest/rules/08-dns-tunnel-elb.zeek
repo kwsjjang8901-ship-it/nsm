@@ -5,5 +5,5 @@
 # @TEST-EXEC: cd off && assert-rows notice.log eq 1 note=NSM::DNS_Tunneling src=10.0.0.116
 
 @TEST-START-FILE off.zeek
-redef NSM::dns_tunnel_allowlist_domains -= { "elb.amazonaws.com" };
+redef NSM::dns_tunnel_builtin_domains -= { "elb.amazonaws.com" };
 @TEST-END-FILE

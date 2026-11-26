@@ -15,8 +15,9 @@
 # @TEST-EXEC: assert-rows dns/notice.log eq 1 note=NSM::Exfil_DNS src=10.0.0.111
 # @TEST-EXEC: assert-rows dns/evidence.log eq 0 note=NSM::DNS_Tunneling
 # @TEST-EXEC: assert-rows dns/nsm_exception.log eq 1 kind=hits exception_id=E-tun hits=1
-# 기본 도메인 예외(AV·스팸 평판 조회) 목록은 legacy drop 예외로 등록된다
-# @TEST-EXEC: assert-rows dns/nsm_exception.log eq 1 kind=loaded exception_id=legacy:dns_tunnel_allowlist_domains msg=legacy
+# 제품 기본 도메인 예외(AV·스팸 평판 조회 등)는 builtin drop 예외로 등록된다(폐기 예정 경고 없음)
+# @TEST-EXEC: assert-rows dns/nsm_exception.log eq 1 kind=loaded exception_id=builtin:dns_tunnel_domains msg=builtin
+# @TEST-EXEC: ! grep -q '폐기 예정' dns/reporter.log 2>/dev/null
 #
 # 13: 출발지 예외 .100 미탐, .101 그대로
 # @TEST-EXEC: mkdir dga && cd dga && zeek -C -r $TRACES/dga.pcap $PKG $SETUP NSM::exception_file=../dga.tsv

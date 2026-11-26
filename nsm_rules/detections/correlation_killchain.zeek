@@ -235,16 +235,18 @@ event zeek_init() &priority=10
     for ( i in chain_rules )
         merge_transition(best, chain_rules[i]);
 
-    for ( j in chain_group_rules )
+    for ( _j, g in chain_group_rules )
         {
-        local g = chain_group_rules[j];
         for ( f in g$from )
+            {
             for ( t in g$to )
                 {
                 if ( f == t )
                     next;
-                merge_transition(best, Transition($from=f, $to=t, $pivot=g$pivot, $window=g$window));
+                local gt = Transition($from=f, $to=t, $pivot=g$pivot, $window=g$window);
+                merge_transition(best, gt);
                 }
+            }
         }
 
     for ( bk, tr in best )
@@ -255,6 +257,10 @@ event zeek_init() &priority=10
         v[|v|] = tr;
         }
     }
+
+# 아래 체인 처리 함수는 상관을 판정하는 노드(단독 실행·매니저)에서만 쓴다. 워커·프록시에 두면 Zeek 가
+#   시작할 때 "호출하는 곳이 없는 함수" 경고를 함수마다 낸다.
+@if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::MANAGER )
 
 # 체인 표시용 기법 ID: 룰 레지스트리의 기법, 없으면 notice 이름
 function stage_technique(n: Notice::Type): string
@@ -715,6 +721,7 @@ function corr_process(cn: CorrNotice)
 
     prime_forward(m, current, s, dsts, cn$ts);
     }
+@endif
 
 # notice 가 기록되는 노드(워커/매니저/standalone)에서 요약을 만들어 상관 처리 노드로 보낸다.
 event Notice::log_notice(rec: Notice::Info)

@@ -80,31 +80,30 @@ function dga_label_score(label: string): count
         {
         local ch = label[i];
         ++i;
+        local consonant = F;   # 자음이면 연속 자음 길이를 늘리고, 그 밖(숫자·모음·'-' 등)이면 끊는다
         if ( ch >= "0" && ch <= "9" )
             {
             ++digits;
             ++hexchars;
-            run = 0;
-            next;
             }
-        if ( ch >= "a" && ch <= "z" )
+        else if ( ch >= "a" && ch <= "z" )
             {
             ++letters;
             if ( ch <= "f" )
                 ++hexchars;
             if ( ch in "aeiouy" )
-                run = 0;
-            else
-                {
-                ++run;
-                if ( run > maxrun )
-                    maxrun = run;
-                }
-            if ( ch in "aeiouy" )
                 ++vowels;
-            next;
+            else
+                consonant = T;
             }
-        run = 0;   # '-' 등 구분자
+        if ( consonant )
+            {
+            ++run;
+            if ( run > maxrun )
+                maxrun = run;
+            }
+        else
+            run = 0;
         }
 
     local sc = 0;

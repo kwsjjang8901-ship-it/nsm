@@ -28,9 +28,12 @@
 #   10 대용량 유출    : 워커(연결 단위 룰), 확산의 피해 host 가 유출 -> DST_TO_SRC 피벗
 # 순서를 보장하려고 매니저가 앞 단계 notice 를 상관 이벤트로 받은 뒤 다음 단계를 지시한다.
 
-global step_c2: event();
-global step_exfil: event();
-global finish: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global step_c2: event();
+    global step_exfil: event();
+    global finish: event();
+}
 
 event step_c2()
 	{

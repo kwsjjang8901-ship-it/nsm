@@ -11,6 +11,8 @@
 # @TEST-EXEC: btest-bg-run worker-1 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-1 zeek $PKG $SETUP %INPUT
 # @TEST-EXEC: btest-bg-run worker-2 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-2 zeek $PKG $SETUP %INPUT
 # @TEST-EXEC: btest-bg-wait 90
+# 프록시를 포함한 노드마다 경고·오류가 없다
+# @TEST-EXEC: ! grep -hiE "warning|error" manager/.stderr proxy-1/.stderr worker-1/.stderr worker-2/.stderr
 # @TEST-EXEC: assert-rows manager/notice.log eq 1 note=NSM::HTTP_Beaconing src=10.0.0.60 peer_descr=proxy-1
 # @TEST-EXEC: assert-rows manager/nsm_detection.log eq 1 diagnosis=NSM.C2.HttpBeaconing attacker=10.0.0.60
 # @TEST-EXEC: assert-rows manager/evidence.log eq 1 note=NSM::HTTP_Beaconing src=10.0.0.60
@@ -25,9 +27,12 @@
 global T0 = double_to_time(1794182400.0);
 global N_BEACONS = 14;
 
-global send_obs: event(i: count);
-global next_step: event(i: count);
-global finish: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global send_obs: event(i: count);
+    global next_step: event(i: count);
+    global finish: event();
+}
 
 event send_obs(i: count)
 	{
