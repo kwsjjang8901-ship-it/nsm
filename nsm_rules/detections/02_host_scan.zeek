@@ -66,6 +66,10 @@ event zeek_init()
             local scanner = key$host;
             local dport   = key$str;          # 대상 포트(문자열)
             local eid = cat(scanner, "|host-scan|", dport, "|", time_bucket(scan_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(scanner, "host-scan", dport);
+            if ( NSM::notice_suppressed(Host_Scan, nid) )
+                return;
 
             NSM::write_evidence([
                 $ts=network_time(),
@@ -81,7 +85,7 @@ event zeek_init()
                     $msg=fmt("Host scan (sweep): %s -> %d hosts on port %s in %s",
                              scanner, n_hosts, dport, scan_interval),
                     $sub=fmt("unique_hosts=%d port=%s sample=[%s]", n_hosts, dport, samples),
-                    $identifier=cat(scanner, "host-scan", dport),
+                    $identifier=nid,
                     $suppress_for=scan_interval,
                     $evidence_id=eid]);
             }

@@ -36,12 +36,17 @@ export {
 
     ## Kerberos 응답을 보낸 내부 host 를 DC 로 학습할지.
     const dcsync_learn_dcs = T &redef;
+    ## DC 로 배우려면 Kerberos 로 응답한 서로 다른 내부 클라이언트가 이만큼 있어야 한다.
+    ##   응답 한 번으로 배우면 공격 host 가 Kerberos 응답을 흉내 내 자기 DCSync 를 면제받을 수 있다.
+    const dcsync_learn_min_clients = 3 &redef;
+    ## 배운 DC 를 기억하는 시간(마지막으로 판정에 쓰이거나 다시 배운 뒤)
+    const dcsync_learn_expire = 24hr &redef;
 
     ## 복제 권한을 정상적으로 쓰는 서버(Azure AD Connect 등).
     const dcsync_allowlist: set[subnet] = {} &redef;
 
     ## 학습된 DC(조회용). 클러스터에서는 한 노드가 배운 DC 를 모든 노드가 공유한다(main.zeek share_learned).
-    global dcsync_learned_dcs: set[addr] = set();
+    global dcsync_learned_dcs: set[addr] &read_expire=dcsync_learn_expire;
 }
 
 redef record connection += {
@@ -66,25 +71,45 @@ function dcsync_is_dc(a: addr): bool
     return a in dcsync_domain_controllers || a in dcsync_learned_dcs;
     }
 
-# Kerberos 에 답한 내부 host 를 DC 로 배운다
-function dcsync_learn_addr(a: addr)
+# DC 후보별로 Kerberos 응답을 받은 내부 클라이언트(dcsync_learn_min_clients 대까지만)
+global dcsync_dc_clients: table[addr] of set[addr] &read_expire=dcsync_learn_expire;
+
+# 클라이언트를 새로 셌으면 T. 서로 다른 클라이언트가 기준 이상이면 DC 로 배운다
+function dcsync_count_client(a: addr, client: addr): bool
     {
-    if ( ! dcsync_learn_dcs || ! Site::is_local_addr(a) )
+    if ( a !in dcsync_dc_clients )
+        dcsync_dc_clients[a] = set();
+    local added = F;
+    if ( client !in dcsync_dc_clients[a] && |dcsync_dc_clients[a]| < dcsync_learn_min_clients )
+        {
+        add dcsync_dc_clients[a][client];
+        added = T;
+        }
+    if ( |dcsync_dc_clients[a]| >= dcsync_learn_min_clients )
+        add dcsync_learned_dcs[a];
+    return added;
+    }
+
+# Kerberos 에 답한 내부 host(a)와 응답을 받은 클라이언트로 DC 를 배운다
+function dcsync_learn_addr(a: addr, client: addr)
+    {
+    if ( ! dcsync_learn_dcs || ! Site::is_local_addr(a) || ! Site::is_local_addr(client) || a == client )
         return;
-    add dcsync_learned_dcs[a];
-    # 클러스터: 다른 워커·매니저도 같은 DC 목록을 갖게 한다(DC 끼리의 복제를 DCSync 로 오탐하지 않게)
-    NSM::share_learned("dc", a, 0/unknown, 0.0.0.0);
+    # 클러스터: 다른 워커·매니저도 같은 DC 목록을 갖게 한다(DC 끼리의 복제를 DCSync 로 오탐하지 않게).
+    #   클라이언트 수는 워커를 합쳐 센다. 기준 대수까지만 알린다
+    if ( dcsync_count_client(a, client) )
+        NSM::share_learned("dc", a, 0/unknown, client);
     }
 
 function dcsync_learn(c: connection)
     {
-    dcsync_learn_addr(c$id$resp_h);
+    dcsync_learn_addr(c$id$resp_h, c$id$orig_h);
     }
 
 event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
     {
     if ( kind == "dc" && dcsync_learn_dcs )
-        add dcsync_learned_dcs[a];
+        dcsync_count_client(a, b);
     }
 
 event zeek_init()

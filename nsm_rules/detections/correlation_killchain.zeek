@@ -629,6 +629,17 @@ function emit_chain(st: ChainState, last_host: addr, ts: time)
     NSM::write_detection(d);
     }
 
+# 이미 걸린 대기(prime)가 아직 유효하고 새 체인보다 더 진행돼 있으면 덮어쓰지 않는다.
+#   반복되는 정찰(포트 스캔 등)이 1단계짜리 새 체인으로, 이미 C2 까지 간 체인의 다음 단계 대기를 지우면
+#   3단계 이상 체인이 쪼개진다. 같은 체인이면(갈래 갱신) 덮어쓴다.
+function prime_keeps_existing(h: addr, to: Notice::Type, chain: ChainState, ts: time): bool
+    {
+    if ( [h, to] !in primes )
+        return F;
+    local old = primes[h, to];
+    return old$expire_at >= ts && old$chain_id != chain$chain_id && |old$stages| > |chain$stages|;
+    }
+
 function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: set[addr], ts: time)
     {
     if ( note !in transitions_from )
@@ -641,6 +652,8 @@ function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: s
 
         if ( rule$pivot == SRC_TO_SRC )
             {
+            if ( prime_keeps_existing(src, rule$to, chain, ts) )
+                next;
             local c1 = copy(chain);
             c1$expire_at = ts + rule$window;
             primes[src, rule$to] = c1;
@@ -649,6 +662,8 @@ function prime_forward(note: Notice::Type, chain: ChainState, src: addr, dsts: s
             {
             for ( d in dsts )
                 {
+                if ( prime_keeps_existing(d, rule$to, chain, ts) )
+                    next;
                 local c2 = copy(chain);
                 c2$expire_at = ts + rule$window;
                 primes[d, rule$to] = c2;

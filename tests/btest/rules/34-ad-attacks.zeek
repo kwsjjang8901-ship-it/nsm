@@ -34,7 +34,10 @@
 # @TEST-EXEC: assert-evidence-join NSM::Zerologon_Attempt
 # @TEST-EXEC: assert-evidence-join NSM::AD_Enumeration
 
-# @TEST-START-FILE ad.tsv
+# # 합성 pcap 은 DC(10.0.0.10)에 Kerberos 를 묻는 클라이언트가 한 대뿐이라 학습 기준을 1대로 둔다(3대 기준은 rules/dcsync-learn)
+redef NSM::dcsync_learn_min_clients = 1;
+
+@TEST-START-FILE ad.tsv
 #separator \x09
 #set_separator	,
 #empty_field	(empty)

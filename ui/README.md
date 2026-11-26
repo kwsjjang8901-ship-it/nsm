@@ -25,7 +25,7 @@
 **공격 단계**(정찰 → 피해 7단계)는 공격 스토리와 킬체인 상관을 잇기 위한 제품 분류로 그대로 두고, ATT&CK는 두 번째 축으로 붙입니다. 전술은 **기법으로 찾고** 공격 단계에서 끌어오지 않습니다. 둘이 다른 룰이 8개 있습니다. 포트·호스트 스캔과 AD 정보 수집은 단계가 정찰이고 전술은 Discovery이며, 웹쉘(Persistence), 원격 실행 3종(Execution), Zerologon(Lateral Movement)도 단계와 전술이 다릅니다.
 
 - 예시 데이터: `ATT`(기법 → 공식 이름·전술), `TACTICS`(전술 14개), `ATT_VER`. Manager는 MITRE 공식 데이터에서 만들고 버전을 고정해 화면에 표시합니다. 목업은 쓰는 기법만 담습니다.
-- 기법 값: 행위 탐지는 룰 기본 매핑(`RULES` 5번째 값, 센서 `attack_map`과 같게 유지), 시그니처는 룰 메타데이터 `mitre_technique_id`, 상관 탐지는 센서 `techniques`(구성 탐지 순서). 여러 개를 받으므로 `techs()`로 읽습니다.
+- 기법 값: 행위 탐지는 룰 기본 매핑(`RULES` 5번째 값, 센서 룰 레지스트리 `schema/rules.json`과 같게 유지, btest `rules/report-mockup`이 검사), 시그니처는 룰 메타데이터 `mitre_technique_id`, 상관 탐지는 센서 `techniques`(구성 탐지 순서). 여러 개를 받으므로 `techs()`로 읽습니다.
 - 화면:
   - 탐지 목록: 탐지명 아래 기법 보조 줄, ATT&CK 전술 필터, 기법 ID·이름 검색
   - 탐지 상세: 기법·이름·전술·출처와 MITRE 링크, 단계와 전술이 다르면 안내

@@ -384,7 +384,7 @@ export {
         ["Recon"] = "Recon", ["Initial Access"] = "InitialAccess", ["Command and Control"] = "C2",
         ["Credential Access"] = "CredentialAccess", ["Lateral Movement"] = "Lateral",
         ["Exfiltration"] = "Exfil", ["Impact"] = "Impact",
-    };
+    } &redef;
 
     ## 진단명·기법·단계명(레지스트리에 없으면 "")
     global rule_diagnosis: function(n: Notice::Type): string;
@@ -454,6 +454,15 @@ function notice_suppressed(note: Notice::Type, identifier: string): bool
 function rule_disabled(note: Notice::Type): bool
     {
     return note in disabled_notes;
+    }
+
+# 룰 레지스트리 값 검사: 단계명이 stage_tags 에 없으면 상관 진단명이 깨지므로 시작할 때 알린다
+#   (고객이 레지스트리에 룰을 더하거나 단계명을 바꿨을 때)
+event zeek_init() &priority=90
+    {
+    for ( n, ri in rule_registry )
+        if ( ri$stage != "" && ri$stage !in stage_tags )
+            Reporter::warning(fmt("NSM::rule_registry: %s 의 단계 '%s' 가 stage_tags 에 없음(상관 진단명에 notice 이름을 씀)", n, ri$stage));
     }
 
 # 끌 룰 이름 -> notice 종류. 모르는 이름(다른 패키지 버전의 룰 등)은 경고하고 건너뛴다.
@@ -540,8 +549,10 @@ function time_bucket(win: interval): string
 # 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않는다. 단독 실행에서는 아무 일도 하지 않는다.
 
 export {
-    ## 같은 학습 값을 다시 알리는 간격(늦게 붙은 노드·만료된 표를 채운다)
+    ## 같은 학습 값을 다시 알리는 간격(만료된 표를 채운다)
     const share_learned_refresh = 1hr &redef;
+    ## 매니저가 학습 값을 기억하는 시간(마지막으로 받은 뒤). 새로 붙거나 다시 시작한 노드에 이 값을 다시 보낸다
+    const share_learned_keep = 24hr &redef;
 
     ## 학습 값 알리기. kind 는 받는 룰이 고른다("dc"·"ai_server"·"proxy"). a·p 는 서버 주소·포트,
     ##   b 는 덧붙일 주소(프록시를 쓴 PC 등, 없으면 0.0.0.0)
@@ -560,8 +571,7 @@ function share_learned(kind: string, a: addr, p: port, b: addr)
         return;
     add share_sent[kind, a, p, b];
 @if ( Cluster::local_node_type() == Cluster::MANAGER )
-    Cluster::publish(Cluster::worker_topic, NSM::learned_shared, kind, a, p, b);
-    Cluster::publish(Cluster::proxy_topic, NSM::learned_shared, kind, a, p, b);
+    event NSM::learned_shared(kind, a, p, b);
 @else
     Cluster::publish(Cluster::manager_topic, NSM::learned_shared, kind, a, p, b);
 @endif
@@ -569,9 +579,34 @@ function share_learned(kind: string, a: addr, p: port, b: addr)
     }
 
 @if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
-# 매니저: 워커·프록시가 배운 값을 모든 워커·프록시에 다시 알린다(보낸 워커도 받지만 표에 이미 있다)
+# 매니저가 아는 학습 값과 마지막으로 다시 알린 시각
+global share_known: table[string, addr, port, addr] of time &write_expire=share_learned_keep;
+
+# 매니저: 워커·프록시가 배운 값을 모든 워커·프록시에 다시 알린다(보낸 워커도 받지만 표에 이미 있다).
+#   워커의 재전송(share_learned_refresh 마다)을 매니저가 같은 간격으로 걸러 버리면 시점이 조금만 어긋나도
+#   계속 버려지므로, 매니저는 그 절반 간격으로만 거른다.
 event NSM::learned_shared(kind: string, a: addr, p: port, b: addr) &priority=10
     {
-    share_learned(kind, a, p, b);
+    local now = network_time();
+    if ( [kind, a, p, b] in share_known && now - share_known[kind, a, p, b] < share_learned_refresh / 2 )
+        {
+        share_known[kind, a, p, b] = share_known[kind, a, p, b];   # 기억 시간만 늘린다
+        return;
+        }
+    share_known[kind, a, p, b] = now;
+    Cluster::publish(Cluster::worker_topic, NSM::learned_shared, kind, a, p, b);
+    Cluster::publish(Cluster::proxy_topic, NSM::learned_shared, kind, a, p, b);
+    }
+
+# 새로 붙거나 다시 시작한 워커·프록시는 표가 비어 있으므로 매니저가 아는 값을 모두 보낸다
+event Cluster::node_up(name: string, id: string)
+    {
+    if ( name !in Cluster::nodes )
+        return;
+    local nt = Cluster::nodes[name]$node_type;
+    if ( nt != Cluster::WORKER && nt != Cluster::PROXY )
+        return;
+    for ( [kind, a, p, b] in share_known )
+        Cluster::publish(Cluster::node_topic(name), NSM::learned_shared, kind, a, p, b);
     }
 @endif

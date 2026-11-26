@@ -121,6 +121,10 @@ function web_bf_report(kind: string, threshold: count, key: SumStats::Key, resul
     local path = |kp| > 1 ? kp[1] : "-";
     local users = ( s_user in result ) ? result[s_user]$unique : 0;
     local eid = cat(src, "|http-bf|", dst, "|", kind, "|", time_bucket(svc_bf_epoch));
+    # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+    local nid = cat(src, dst, "http-bf", kind, time_bucket(svc_bf_epoch));
+    if ( NSM::notice_suppressed(HTTP_Bruteforce, nid) )
+        return;
     local what = kind == "form" ? fmt("attempts=%d unique_passwords=%d", n, u)
                                 : fmt("basic_auth_failures=%d", n);
     local op = kind == "form" ? "http_login_password_variation" : "http_basic_auth_failure";
@@ -151,7 +155,7 @@ function web_bf_report(kind: string, threshold: count, key: SumStats::Key, resul
             $dst=dst,
             $msg=fmt("HTTP login brute force: %s -> %s %s, %s in %s", src, dst, path, what, svc_bf_epoch),
             $sub=fmt("%s path=%s", what, path),
-            $identifier=cat(src, dst, "http-bf", kind, time_bucket(svc_bf_epoch)),
+            $identifier=nid,
             $suppress_for=svc_bf_epoch,
             $evidence_id=eid]);
     }
@@ -207,8 +211,8 @@ event http_entity_data(c: connection, is_orig: bool, length: count, data: string
     if ( ! web_body_budget(c, length) )
         return;
     local body = sub_bytes(data, 1, web_attack_body_max);
-    local pw = "";
-    local user = "";
+    local pw: string;
+    local user: string;
     if ( /^[[:space:]]*[\{\[]/ in body )
         {
         pw = web_bf_json_value(body, web_bf_json_pw);

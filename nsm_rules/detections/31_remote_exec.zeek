@@ -45,7 +45,7 @@ function remote_exec_account(c: connection, kerb_prefixes: set[string]): string
     return NSM::auth_accounts(c$id$orig_h, c$id$resp_h, kerb_prefixes);
     }
 
-function remote_exec_report(c: connection, note: Notice::Type, technique: string, kind: string, kerb: set[string])
+function remote_exec_report(c: connection, note: Notice::Type, kind: string, kerb: set[string])
     {
     local src = c$id$orig_h;
     local dst = c$id$resp_h;
@@ -63,7 +63,6 @@ function remote_exec_report(c: connection, note: Notice::Type, technique: string
             $ts=network_time(),
             $evidence_id=eid,
             $note=note,
-            $technique=technique,
             $src=src,
             $dst=dst,
             $uid=NSM::conn_ref(c),
@@ -90,9 +89,9 @@ event dce_rpc_response(c: connection, fid: count, ctx_id: count, opnum: count, s
     local ep = c$dce_rpc$endpoint;
     local op = c$dce_rpc$operation;
     if ( ep == "svcctl" && op in remote_exec_service_ops )
-        remote_exec_report(c, Remote_Service_Creation, "T1569.002", "service_creation", set("cifs", "host", "rpcss"));
+        remote_exec_report(c, Remote_Service_Creation, "service_creation", set("cifs", "host", "rpcss"));
     else if ( [ep, op] in remote_exec_task_ops )
-        remote_exec_report(c, Remote_Task_Creation, "T1053.005", "task_creation", set("cifs", "host", "rpcss"));
+        remote_exec_report(c, Remote_Task_Creation, "task_creation", set("cifs", "host", "rpcss"));
     else if ( ep == "IWbemServices" && op in remote_exec_wmi_ops )
-        remote_exec_report(c, Remote_WMI_Execution, "T1047", "wmi_execution", set("rpcss", "host"));
+        remote_exec_report(c, Remote_WMI_Execution, "wmi_execution", set("rpcss", "host"));
     }

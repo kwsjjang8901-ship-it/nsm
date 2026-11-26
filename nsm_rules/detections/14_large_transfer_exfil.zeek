@@ -82,6 +82,10 @@ event zeek_init()
             # 집계형(임시) -> src 단위 합성 증적 key. 개별 연결 row 는 남기지 않고
             # (tcp_packet 단위라 폭증) 호스트 단위 요약 1행만 적재한다.
             local eid = cat(key$host, "|exfil-vol-agg|", time_bucket(exfil_epoch));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "vol-agg");
+            if ( NSM::notice_suppressed(Exfil_Volume_Aggregate, nid) )
+                return;
 
             NSM::write_evidence([
                 $ts=network_time(),
@@ -98,7 +102,7 @@ event zeek_init()
                          key$host,
                          total/(1024.0*1024.0),
                          exfil_epoch),
-                $identifier=cat(key$host, "vol-agg"),
+                $identifier=nid,
                 $suppress_for=suppress_vol_agg,
                 $evidence_id=eid
             ]);

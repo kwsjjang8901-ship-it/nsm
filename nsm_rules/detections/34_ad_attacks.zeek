@@ -89,7 +89,7 @@ function ad_attack_account(c: connection): string
     }
 
 # 단건(강제 인증·하이브 저장): (출발지, 대상, 종류) 1시간 억제
-function ad_attack_report(c: connection, note: Notice::Type, technique: string, kind: string)
+function ad_attack_report(c: connection, note: Notice::Type, kind: string)
     {
     local src = c$id$orig_h;
     local dst = c$id$resp_h;
@@ -107,7 +107,6 @@ function ad_attack_report(c: connection, note: Notice::Type, technique: string, 
             $ts=network_time(),
             $evidence_id=eid,
             $note=note,
-            $technique=technique,
             $src=src,
             $dst=dst,
             $uid=NSM::conn_ref(c),
@@ -143,6 +142,10 @@ event zeek_init()
             local dst = to_addr(key$str);
             local n = double_to_count(result["nsm.zerologon"]$sum);
             local eid = cat(src, "|zerologon|", dst, "|", time_bucket(zerologon_epoch));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(src, "zerologon", dst);
+            if ( NSM::notice_suppressed(Zerologon_Attempt, nid) )
+                return;
             local uids: vector of string = vector();
             local uid_seen: set[string] = set();
             local op = "-";
@@ -176,7 +179,7 @@ event zeek_init()
                     $dst=dst,
                     $msg=fmt("Possible Zerologon: %s made %d netlogon authentication calls to %s in %s", src, n, dst, zerologon_epoch),
                     $sub=fmt("netlogon_auth_calls=%d", n),
-                    $identifier=cat(src, "zerologon", dst),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }
@@ -198,6 +201,10 @@ event zeek_init()
             local src = key$host;
             local n = result["nsm.ad_enum"]$unique;
             local eid = cat(src, "|ad-enum|", time_bucket(ad_enum_epoch));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(src, "ad-enum");
+            if ( NSM::notice_suppressed(AD_Enumeration, nid) )
+                return;
             local first_dst: addr = 0.0.0.0;
             local ops: set[string] = set();
             if ( "nsm.ad_enum.sample" in result && result["nsm.ad_enum.sample"]?$samples )
@@ -235,7 +242,7 @@ event zeek_init()
                     $msg=fmt("AD enumeration: %s queried sessions/local groups on %d hosts in %s (BloodHound/SharpHound?)",
                              src, n, ad_enum_epoch),
                     $sub=fmt("unique_hosts=%d ops=%s", n, join_string_vec(sort(opv, strcmp), ",")),
-                    $identifier=cat(src, "ad-enum"),
+                    $identifier=nid,
                     $suppress_for=ad_enum_epoch,
                     $evidence_id=eid]);
             }
@@ -258,10 +265,10 @@ event dce_rpc_response(c: connection, fid: count, ctx_id: count, opnum: count, s
         {
         if ( ep == "spoolss" && coerce_spoolss_dc_only && ! dcsync_is_dc(dst) )
             return;
-        ad_attack_report(c, Coerced_Authentication, "T1187", "coerced_auth");
+        ad_attack_report(c, Coerced_Authentication, "coerced_auth");
         }
     else if ( detect_remote_registry_dump && ep == "winreg" && op in registry_dump_ops )
-        ad_attack_report(c, Remote_Registry_Dump, "T1003.002", "registry_dump");
+        ad_attack_report(c, Remote_Registry_Dump, "registry_dump");
     else if ( detect_zerologon && ep == "netlogon" && op in zerologon_ops )
         {
         if ( NSM::exception_drop_agg(Zerologon_Attempt, c) )

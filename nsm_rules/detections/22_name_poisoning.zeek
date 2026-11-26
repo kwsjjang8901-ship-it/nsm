@@ -62,6 +62,10 @@ event zeek_init()
             {
             local n   = result["nsm.poison"]$unique;
             local eid = cat(key$host, "|name-poisoning|", time_bucket(poisoning_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "name-poisoning");
+            if ( NSM::notice_suppressed(Name_Poisoning, nid) )
+                return;
             local victims: set[addr] = set();
             local protos: set[string] = set();
 
@@ -101,7 +105,7 @@ event zeek_init()
                     $msg=fmt("Possible LLMNR/NBT-NS/mDNS poisoning: %s answered %d different names in %s (%s)",
                              key$host, n, poisoning_interval, plist),
                     $sub=fmt("unique_names=%d protocols=%s", n, plist),
-                    $identifier=cat(key$host, "name-poisoning"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid,
                     $lm_targets=victims]);
@@ -205,6 +209,10 @@ function nbns_on_answer(responder: addr, querier: addr, id: count)
         poisoning_observe(poisoning_ports[137/udp], responder, querier, nbns_pending[querier, id]);
         return;
         }
+    # 질의보다 먼저 온 응답은 클러스터(매니저를 거쳐 순서가 바뀔 수 있음)에서만 기다린다.
+    #   단독 실행에서는 질의가 항상 먼저 보이므로, 기다리면 같은 트랜잭션 ID 를 다시 쓴 다음 질의와 잘못 짝지을 수 있다
+    if ( ! Cluster::is_enabled() )
+        return;
     if ( [querier, id] !in nbns_early )
         nbns_early[querier, id] = set();
     add nbns_early[querier, id][responder];
@@ -244,7 +252,7 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
 # NBNS 긍정 응답
 event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
     {
-    if ( c$id$resp_p != 137/udp || ! msg$QR || msg$rcode != 0 || msg$num_answers == 0 )
+    if ( c$id$resp_p != 137/udp || 137/udp !in poisoning_ports || ! msg$QR || msg$rcode != 0 || msg$num_answers == 0 )
         return;
     local hdr = get_current_packet_header();
     if ( ! hdr?$ip )
