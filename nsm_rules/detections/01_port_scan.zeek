@@ -79,6 +79,10 @@ event zeek_init()
             local scanner = key$host;
             local target  = key$str;          # dst (문자열)
             local eid = cat(scanner, "|port-scan|", target, "|", time_bucket(scan_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(scanner, "port-scan", target);
+            if ( NSM::notice_suppressed(Port_Scan, nid) )
+                return;
 
             NSM::write_evidence([
                 $ts=network_time(),
@@ -96,7 +100,7 @@ event zeek_init()
                     $msg=fmt("Port scan: %s -> %s (%d unique ports in %s)",
                              scanner, target, n_ports, scan_interval),
                     $sub=fmt("unique_ports=%d sample=[%s]", n_ports, samples),
-                    $identifier=cat(scanner, "port-scan", target),
+                    $identifier=nid,
                     $suppress_for=scan_interval,
                     $evidence_id=eid]);
             }
@@ -120,11 +124,12 @@ function observe_port_scan(c: connection, failed: bool, kind: string)
         return;
     if ( port_scan_local_only && ! Site::is_local_addr(c$id$orig_h) )
         return;
-    # 예외(예외 파일 + 기존 port_scan_allowlist·port_scan_exclude_ports). 집계 전 판정
-    if ( NSM::exception_drop_agg(Port_Scan, c) )
-        return;
     # 성공 연결 제외 옵션: 미응답/거부(failed)만 카운트
     if ( ! failed && ! port_scan_count_established )
+        return;
+    # 예외(예외 파일 + 기존 port_scan_allowlist·port_scan_exclude_ports). 집계 전 판정.
+    #   룰이 어차피 세지 않는 연결은 예외 적중으로 세지 않도록 위 조건 뒤에 둔다
+    if ( NSM::exception_drop_agg(Port_Scan, c) )
         return;
 
     # (src,dst) 그룹에 목적지 포트를 관측 -> 고유 포트 수 집계

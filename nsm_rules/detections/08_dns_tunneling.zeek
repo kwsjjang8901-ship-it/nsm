@@ -88,6 +88,7 @@ function dns_tunnel_eid(src: addr, kind: string, parent: string): string
     }
 
 ## 판정 시점 근거 적재(무작위·인코딩형 질의 표본).
+##   기법은 근거마다 그 판정에 맞는 하나를 적는다(터널링 T1071.004, 유출 T1048.003). 탐지 요약은 레지스트리 값(묶음)을 쓴다.
 function dns_tunnel_write_evidence(eid: string, note: Notice::Type, technique: string,
                                    src: addr, parent: string, rs: SumStats::ResultVal,
                                    detail: string)
@@ -150,7 +151,9 @@ event zeek_init()
             local wx = NSM::ExceptionCtx($src=key$host, $domain=parent);
 
             # [터널링] 고유 서브도메인이 많다
-            if ( uniq >= dnstun_unique_sub && ! NSM::exception_drop_ctx(DNS_Tunneling, wx, T) )
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid_t = cat(key$host, parent, "dns-tunnel");
+            if ( uniq >= dnstun_unique_sub && ! NSM::exception_drop_ctx(DNS_Tunneling, wx, T) && ! NSM::notice_suppressed(DNS_Tunneling, nid_t) )
                 {
                 local eid_t = dns_tunnel_eid(key$host, "dns-tunnel", parent);
                 dns_tunnel_write_evidence(eid_t, DNS_Tunneling, "T1071.004", key$host, parent, rs, detail);
@@ -159,13 +162,15 @@ event zeek_init()
                         $msg=fmt("DNS tunneling suspected: %s -> %s (%d unique subdomains, %.0f%% suspicious) in %s",
                                  key$host, parent, uniq, ratio * 100, dnstun_interval),
                         $sub=fmt("parent_domain=%s %s", parent, detail),
-                        $identifier=cat(key$host, parent, "dns-tunnel"),
+                        $identifier=nid_t,
                         $suppress_for=1hr,
                         $evidence_id=eid_t]);
                 }
 
             # [유출] 서브도메인에 실린 데이터량이 많다
-            if ( bytes >= dnsexfil_bytes && ! NSM::exception_drop_ctx(Exfil_DNS, wx, T) )
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid_x = cat(key$host, parent, "dns-exfil");
+            if ( bytes >= dnsexfil_bytes && ! NSM::exception_drop_ctx(Exfil_DNS, wx, T) && ! NSM::notice_suppressed(Exfil_DNS, nid_x) )
                 {
                 local eid_x = dns_tunnel_eid(key$host, "dns-exfil", parent);
                 dns_tunnel_write_evidence(eid_x, Exfil_DNS, "T1048.003", key$host, parent, rs, detail);
@@ -174,7 +179,7 @@ event zeek_init()
                         $msg=fmt("DNS-based exfiltration suspected: %s -> %s (~%.1f KB encoded, %.0f%% suspicious) in %s",
                                  key$host, parent, bytes / 1024.0, ratio * 100, dnstun_interval),
                         $sub=fmt("parent_domain=%s %s", parent, detail),
-                        $identifier=cat(key$host, parent, "dns-exfil"),
+                        $identifier=nid_x,
                         $suppress_for=1hr,
                         $evidence_id=eid_x]);
                 }

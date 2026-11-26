@@ -2813,6 +2813,24 @@ def gen_proxy_c2(out):
     cap.write(os.path.join(out, "proxy_c2.pcap"))
 
 
+def gen_krb_tgs_error(out):
+    """TGS 오류는 비밀번호 실패가 아니다: 비활성 계정이 캐시된 TGT 로 서비스 티켓을 요청하면 KDC 가
+    KRB-ERROR 18(CLIENT_REVOKED)을 cname 과 함께 돌려준다. 같은 연결에 AS-REQ 가 없으므로 오류의 cname 으로
+    세던 경로에서 무차별 대입·스프레이로 잘못 세었다.
+      .5  비활성 계정 하나로 TGS 25번 -> 오류 18 25번(무차별 대입 기준 20번)
+      .6  비활성 계정 12개로 TGS 각 1번 -> 오류 18 12번(스프레이 기준 고유 계정 10개)
+    """
+    cap = Capture()
+    t = T0
+    spn = "cifs/fs01.corp.example"
+    for _ in range(25):
+        t = krb_udp(cap, "10.0.70.5", tgs_req(t, spn), krb_error(t, 18, "svc_disabled", sname=("cifs", "fs01.corp.example")), t + 1)
+    for i in range(12):
+        t = krb_udp(cap, "10.0.70.6", tgs_req(t, spn), krb_error(t, 18, "old_user%02d" % i, sname=("cifs", "fs01.corp.example")), t + 1)
+    cap.tick(t + 700)
+    cap.write(os.path.join(out, "krb_tgs_error.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2829,7 +2847,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
               gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
-              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class, gen_proxy_c2]
+              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class, gen_proxy_c2, gen_krb_tgs_error]
 
 
 def main():

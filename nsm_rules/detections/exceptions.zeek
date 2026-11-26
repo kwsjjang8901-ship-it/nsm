@@ -466,20 +466,30 @@ function reports(): bool
     }
 
 ## 실행 중에 만료된 예외가 있으면 색인에서 빼고(적재 노드는 expired 를 기록) 다시 만든다.
+# 이번 주기에 만료된 예외를 모두 찾아 색인을 한 번 다시 만들고, 만료된 것마다 expired 행을 남긴다
+#   (첫 번째만 남기면 나머지는 색인에서 빠져 Manager 에 만료가 전해지지 않는다).
 function check_expiry()
     {
+    local recs: table[string] of ExceptionRec = table();
     for ( _nt, v in exc_index )
         for ( _i, e in v )
             if ( e$r?$expires && e$r$expires < network_time() )
-                {
-                rebuild_index(F);
-                if ( reports() && e$id !in exc_expired_reported )
-                    {
-                    exc_log("expired", e$id, e$r, "실행 중 만료");
-                    add exc_expired_reported[e$id];
-                    }
-                return;
-                }
+                recs[e$id] = e$r;
+    if ( |recs| == 0 )
+        return;
+    rebuild_index(F);
+    if ( ! reports() )
+        return;
+    local ids: vector of string = vector();
+    for ( id in recs )
+        if ( id !in exc_expired_reported )
+            ids += id;
+    sort(ids, strcmp);
+    for ( _j, id in ids )
+        {
+        exc_log("expired", id, recs[id], "실행 중 만료");
+        add exc_expired_reported[id];
+        }
     }
 
 event exception_stats_tick()

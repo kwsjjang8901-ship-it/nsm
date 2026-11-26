@@ -67,6 +67,10 @@ event zeek_init()
                 return;
             local src = key$host;
             local eid = cat(src, "|machine-acct|", time_bucket(machine_acct_epoch));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(src, "machine-acct", time_bucket(machine_acct_epoch));
+            if ( NSM::notice_suppressed(Machine_Account_Misuse, nid) )
+                return;
             local first_dst: addr = 0.0.0.0;
             local accts: vector of string = vector();
             if ( "nsm.machine_acct.sample" in result && result["nsm.machine_acct.sample"]?$samples )
@@ -100,7 +104,7 @@ event zeek_init()
                     $msg=fmt("%s authenticated with %d different machine accounts in %s (NTLM relay / pass-the-hash?)",
                              src, n, machine_acct_epoch),
                     $sub=fmt("machine_accounts=%d sample=%s", n, join_string_vec(accts, ",")),
-                    $identifier=cat(src, "machine-acct", time_bucket(machine_acct_epoch)),
+                    $identifier=nid,
                     $suppress_for=machine_acct_epoch,
                     $evidence_id=eid]);
             }

@@ -85,7 +85,8 @@ function ai_learn(h: addr, p: port)
 
 event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
     {
-    if ( kind == "ai_server" )
+    # 이 노드가 이미 배운 서버면 자기 값(포트)을 지킨다
+    if ( kind == "ai_server" && a !in ai_learned_servers )
         ai_learned_servers[a] = p;
     }
 
@@ -132,6 +133,10 @@ event zeek_init()
             local total = double_to_count(result["nsm.ai_upload"]$sum);
             local n = result["nsm.ai_upload"]$num;
             local eid = cat(src, "|ai-upload|", svc, "|", time_bucket(ai_upload_epoch));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(src, "ai-upload", svc, time_bucket(ai_upload_epoch));
+            if ( NSM::notice_suppressed(AI_Service_Upload, nid) )
+                return;
             local dst: addr = 0.0.0.0;
             if ( "nsm.ai_upload.sample" in result && result["nsm.ai_upload.sample"]?$samples )
                 for ( i in result["nsm.ai_upload.sample"]$samples )
@@ -161,7 +166,7 @@ event zeek_init()
                     $msg=fmt("Large upload to AI service %s from %s (%.1f MB in %s)", svc, src,
                              total / 1000000.0, ai_upload_epoch),
                     $sub=fmt("service=%s upload_mb=%.1f conns=%d", svc, total / 1000000.0, n),
-                    $identifier=cat(src, "ai-upload", svc, time_bucket(ai_upload_epoch)),
+                    $identifier=nid,
                     $suppress_for=ai_upload_epoch,
                     $evidence_id=eid]);
             }

@@ -174,6 +174,10 @@ event zeek_init()
 
             # 증적 key 는 탐지 시점에 1회만 생성한다(관측 시점과 재계산 금지).
             local eid = dga_evidence_id(key$host);
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "dga");
+            if ( NSM::notice_suppressed(DGA_Domain, nid) )
+                return;
 
             # 근거: 이 창에서 표본으로 잡힌 무작위형 NXDOMAIN 질의들.
             #   NOTICE 보다 먼저 적재해야 evidence_count 가 정확히 잡힌다.
@@ -207,7 +211,7 @@ event zeek_init()
                              key$host, nx, total, ratio*100, like, nx, like_ratio*100, dga_interval),
                     $sub=fmt("nxdomain=%.0f total=%.0f ratio=%.2f dga_like=%.0f dga_like_ratio=%.2f",
                              nx, total, ratio, like, like_ratio),
-                    $identifier=cat(key$host, "dga"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }

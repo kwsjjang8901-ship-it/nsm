@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 149개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 154개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -392,7 +392,7 @@ AD 도메인 인증은 NTLM보다 Kerberos가 주류라 스프레이도 KDC로 �
 | 계정 | `krb_as_request`의 `client_name`@`service_realm`(소문자)을 연결에 보관 |
 | 성공 | `krb_as_response` → 보관한 계정을 지움 |
 | 실패 | `krb_error`의 `error_code`가 24(비밀번호 틀림), 6(없는 계정), 18(잠김·비활성), 23(비밀번호 만료) |
-| 요청을 못 본 경우 | 비대칭 경로 등으로 AS-REQ를 놓치면 KRB-ERROR의 `client_name`을 씀 |
+| 요청을 못 본 경우 | 비대칭 경로 등으로 AS-REQ를 놓치면 KRB-ERROR의 `client_name`을 씀. 단 대상이 `krbtgt`인 오류(AS 교환)만: 비활성 계정이 캐시된 TGT로 서비스 티켓을 요청해 받는 TGS 오류(18 등)는 비밀번호 실패가 아님(btest `rules/17-kerberos-tgs-error`) |
 
 - 주체: `src` = 시도 출발지. KDC와 계정은 근거에 남깁니다.
 - 집계·억제: 출발지별 실패 고유 계정 수, 임계 즉시 탐지, 1시간 억제.
@@ -494,7 +494,7 @@ DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터�
 | --- | --- |
 | 인터페이스 | `dce_rpc_bind`의 UUID가 DRSUAPI(`e3514235-4b06-11d1-ab04-00c04fc2dcd2`) → (fid, ctx_id)를 연결에 보관 |
 | 호출 | `dce_rpc_request`의 opnum 3(DRSGetNCChanges)이 보관한 (fid, ctx_id)로 옴 |
-| DC 판정 | `dcsync_domain_controllers`(설정) + `krb_as_response`·`krb_tgs_response`를 보낸 내부 host 학습(`dcsync_learn_dcs`) |
+| DC 판정 | `dcsync_domain_controllers`(설정) + `krb_as_response`·`krb_tgs_response`를 **서로 다른 내부 클라이언트 3대 이상**(`dcsync_learn_min_clients`)에 보낸 내부 host 학습(`dcsync_learn_dcs`). 응답 한 번으로 배우면 공격 host가 Kerberos 응답을 흉내 내 자기 DCSync를 면제받을 수 있음. 배운 DC는 24시간(`dcsync_learn_expire`) 쓰이지 않으면 잊음 |
 
 - DRSUAPI는 동적 RPC 포트를 쓰지만 Zeek의 DCE-RPC DPD 서명으로 포트와 무관하게 해석됩니다. 패킷 프라이버시로 스텁이 암호화돼도 바인드의 UUID와 요청의 opnum은 평문입니다.
 - 주체: `src` = 복제를 요청한 출발지, `dst` = 대상 DC.
@@ -945,7 +945,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C2 | notice와 근거는 같은 `evidence_id`로 연결되고, notice보다 근거를 먼저 기록해 근거 건수가 정확해야 한다 | 각 룰 |
 | FR-C3 | notice 1건당 탐지 요약 1행을 `nsm_detection.log`에 남긴다(진단명, 기법, 킬체인 단계, 공격자, 피해 호스트, 근거 건수) | `detection_log.zeek` |
 | FR-C4 | 모든 notice에 ATT&CK 기법 ID를 붙인다(`attack` 필드) | `attack_mapping.zeek`(값은 `rule_registry`) |
-| FR-C5 | 같은 대상에 대한 반복 탐지는 룰별 억제 시간 동안 1건만 낸다(`identifier` + `suppress_for`). 억제 중인 반복에는 근거도 남기지 않는다(건별 룰은 근거를 쓰기 전에 `NSM::notice_suppressed`로 확인) | 각 룰, `main.zeek` |
+| FR-C5 | 같은 대상에 대한 반복 탐지는 룰별 억제 시간 동안 1건만 낸다(`identifier` + `suppress_for`). 억제 중인 반복에는 근거도 남기지 않는다(건별 룰과 집계형 룰 모두 근거를 쓰기 전에 같은 식별자로 `NSM::notice_suppressed`를 확인) | 각 룰, `main.zeek`, btest `rules/aggregate-suppressed-evidence` |
 | FR-C6 | 같은 공격자의 탐지가 정해진 순서·시간 안에 이어지면 `Correlated_KillChain`을 낸다(클러스터에서는 매니저가 판정) | `correlation_killchain.zeek` |
 | FR-C7 | 운영에 필요한 로그만 남기고 나머지 Zeek 기본 로그는 끈다. 로그별 출력 경로를 지정하고 디렉터리를 만든다 | `rules/filter_log.zeek` |
 | FR-C8 | (선택) 짧은 시간 안 같은 notice를 하나로 묶어 중복 건수를 표시한다. 기본은 꺼짐 | `notice_aggregation.zeek` |
@@ -999,6 +999,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | Zerologon | DCSync | 같은 출발지 | 1시간 |
 
 - 체인의 기법 ID는 룰 레지스트리(5.8절)의 기법을 씁니다. 그래서 8단계 체인도 `T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486`처럼 끝까지 기법 ID로 나옵니다.
+- 다음 단계 대기(prime)는 더 진행된 체인이 아직 유효하면 짧은 새 체인이 덮어쓰지 않습니다. 정찰이 몇 분 뒤 다시 탐지돼 1단계 새 체인이 생겨도, 이미 C2까지 간 체인의 확산 대기가 남아 정찰 → C2 → 확산이 한 체인으로 이어집니다(btest `rules/correlation-prime-keep`).
 - 묶음에 탐지를 넣거나 빼려면 해당 `corr_*_notes`를 redef 하고 `chain_group_rules`도 함께 다시 정의해야 합니다(묶음 내용은 규칙을 정의할 때 복사되기 때문).
 - 초기 침투 탐지(03·04·27·28)는 침투 대상 서버를 `lm_targets`로 넘깁니다. 그래서 공격자가 웹서버를 침투한 뒤 그 서버가 C2·확산을 하면, 체인이 공격자에서 시작해 이어집니다(`tests/btest/rules/killchain-7-stages.zeek`: 정찰 → 초기 침투 → C2 → 자격증명 → 확산 → 영향).
 - 회귀 테스트 `tests/btest/rules/correlation-ext-chain.zeek`가 정찰 → C2(DGA·비커닝) → Kerberoasting → DCSync → WinRM 확산 → 유출 → 랜섬웨어의 8단계 체인과, 단독 Kerberoasting·단독 랜섬웨어가 상관으로 이어지지 않는 경우를 검증합니다.
@@ -1058,7 +1059,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 범위 | notice 이름(`SSH_Lateral`) 또는 상관 단계 묶음(`group:recon`, `c2`, `cred`, `domain`, `lateral`, `exfil`, `impact`, 5.1.1절과 같은 묶음) |
 | 축 | `src`, `dst`(대역), `dst_port`, `service`, `domain`(SNI·HTTP Host·DNS 질의, 하위 도메인 포함), `ja4`. 여러 축은 모두 맞아야 한다(AND) |
 | 검증(거부) | 범위가 없거나 모르는 이름, 축이 하나도 없음, `reason`·`owner` 없음, 프로토콜 없는 포트, 대역 축만 있는데 /16보다 넓음(`exception_min_prefix`) |
-| 만료 | `expires`가 지나면 적용하지 않고 `nsm_exception.log`에 `expired`로 남긴다 |
+| 만료 | `expires`가 지나면 적용하지 않고 `nsm_exception.log`에 `expired`로 남긴다. 같은 확인 주기에 여러 개가 만료되면 모두 남긴다 |
 | 다시 읽기 | 파일이 바뀌면 다시 읽는다(재시작 불필요). 교체는 임시 파일 + 이름 바꾸기로 한다(7.8절). pcap을 읽을 때는 처음 적재가 끝날 때까지 패킷 처리를 멈춘다. 파일이 없으면 기다리지 않고 진행한다 |
 | 클러스터 | 매니저만 파일을 읽고 워커·프록시로 배포한다. 늦게 붙은 노드에도 보낸다. 적재 결과는 매니저가, 적중 수는 판정한 노드가 기록한다 |
 | 기존 설정 호환 | 이관한 룰의 `*_allowlist`는 시작할 때 `drop` 예외(`legacy:<이름>`)로 등록돼 그대로 동작한다 |
@@ -1110,9 +1111,11 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | 프록시(`proxy`, 쓴 PC 포함) | 공통 프록시 인식(CONNECT 2xx 뒤 TLS) | 10·12·14 유출, 09·24·33 등 프록시 인식 | 프록시 경유 판정·출발지 제외가 워커마다 다름 |
 
 - 워커가 처음 배우면 매니저로 보내고, 매니저가 모든 워커·프록시에 다시 알립니다(`NSM::learned_shared`). Zeek 9의 ZeroMQ 백엔드와 달리 Broker 백엔드는 워커끼리 직접 메시지를 주고받지 않으므로, 두 백엔드 모두에서 동작하게 매니저를 거칩니다.
-- 같은 값은 `share_learned_refresh`(1시간)마다 한 번만 다시 보냅니다. 배운 서버 수만큼만 오가므로 전송량은 무시할 수준입니다.
-- 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않습니다. 단독 실행에서는 아무 일도 하지 않습니다.
-- 22 NBNS는 학습이 아니라 두 연결(질의·응답)을 짝짓는 문제입니다. 워커는 다른 워커 목록을 모르므로, 매니저가 질의 host를 키로 워커 하나(HRW)를 골라 그 워커에서 짝짓습니다(4.3절 22).
+- 같은 값은 워커가 `share_learned_refresh`(1시간)마다 한 번만 다시 보냅니다. 매니저는 그 절반 간격으로만 걸러, 시점이 조금 어긋난 재전송을 버리지 않습니다.
+- 매니저는 받은 값을 `share_learned_keep`(24시간) 동안 기억합니다. 워커·프록시가 새로 붙거나 다시 시작하면(`Cluster::node_up`) 아는 값을 모두 그 노드에 다시 보냅니다. 재시작한 워커가 DC를 몰라 DC 복제를 DCSync로 오탐하지 않게 하기 위해서입니다.
+- 쓴 PC(프록시)·응답을 받은 클라이언트(DC)는 판단에 필요한 3대까지만 알립니다. PC마다 보내면 PC가 많은 망에서 매니저 부하가 커집니다. 판단 대수는 워커를 합쳐 셉니다.
+- 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않습니다. 이미 배운 AI 판별용 서버의 포트는 다른 워커 값으로 덮어쓰지 않습니다. 단독 실행에서는 아무 일도 하지 않습니다.
+- 22 NBNS는 학습이 아니라 두 연결(질의·응답)을 짝짓는 문제입니다. 워커는 다른 워커 목록을 모르므로, 매니저가 질의 host를 키로 워커 하나(HRW)를 골라 그 워커에서 짝짓습니다(4.3절 22). 질의보다 먼저 온 응답을 30초 기다리는 것은 클러스터에서만 합니다(단독 실행은 질의가 항상 먼저 보이고, 기다리면 트랜잭션 ID를 다시 쓴 다음 질의와 잘못 짝지을 수 있음). `poisoning_ports`에서 137/udp를 빼면 NBNS 응답을 보내지 않습니다.
 
 ### 5.8 룰 레지스트리
 
@@ -1127,6 +1130,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 - 근거(`evidence.log`)는 룰이 `technique`를 따로 넣지 않으면 레지스트리 값을 씁니다. 한 룰이 근거마다 다른 기법을 넣는 경우(예: 08 터널링·유출)는 룰 값이 그대로 남습니다.
 - 로그 스키마 생성기(`schema/build.py`)가 이 표로 `rule`·`diagnosis`·`killchain_stage` 열거값과 **Manager용 룰 목록 `schema/rules.json`**(룰, 진단명, 기법 배열, 단계, 단계 태그)을 만듭니다. 리포트(`tests/report_pcap.py`)도 같은 파일을 읽습니다.
 - btest `rules/rule-registry`가 모든 NSM notice의 등록 여부와 값 형식, 7단계 공격 pcap의 탐지·근거·notice 값이 레지스트리와 같은지 검사합니다.
+- 레지스트리로 옮기면서 예전 표(`NSM::attack_map`·`diagnosis_map`·`stage_name_map`, 상관의 `stage_attack`·`stage_tag_map`)는 없앴습니다. 고객 설정에서 이 이름을 `redef`하면 시작하지 않으므로, 배포 전에 `rule_registry`로 바꿉니다(저장소 문서에 고객 설정 항목으로 안내한 적은 없음). 레지스트리의 단계명이 `stage_tags`에 없으면 시작할 때 경고합니다.
 
 ## 6. 출력(로그) 요구사항
 
@@ -1501,6 +1505,8 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | --- | --- | --- | --- |
 | `dcsync_domain_controllers` | 비어 있음 | DC 주소 목록 | custom에 기록 권장. 자동 학습은 미러에 Kerberos 응답이 보여야 하고 그 전에는 DC를 모름(클러스터는 배운 DC를 모든 노드가 공유) |
 | `dcsync_learn_dcs` | T | Kerberos 응답(AS-REP·TGS-REP)을 보낸 내부 호스트를 DC로 학습 | DC 목록을 정확히 적었으면 F도 가능 |
+| `dcsync_learn_min_clients` | 3 | DC로 배우려면 응답을 받은 서로 다른 내부 클라이언트 수(클러스터는 워커를 합쳐 셈) | 1로 낮추면 응답을 흉내 낸 host도 DC가 됨 |
+| `dcsync_learn_expire` | 24hr | 배운 DC를 기억하는 시간(판정에 쓰이거나 다시 배우면 연장) |  |
 | `dcsync_allowlist` | 비어 있음 | 복제 권한을 정상 사용하는 서버(Azure AD Connect) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
 #### 24 비표준 포트 · 장기 연결
@@ -1629,6 +1635,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
 | `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
 | `auth_ctx_max_accounts` | 3 | 키마다 남기는 계정 수 |  |
+| `share_learned_keep` | 24hr | 매니저가 학습 값을 기억하는 시간. 새로 붙거나 다시 시작한 워커·프록시에 이 값을 다시 보냄(5.7절) |  |
 | `share_learned_refresh` | 1hr | 클러스터에서 배운 서버(DC·AI 판별용 서버·프록시)를 다른 노드에 다시 알리는 간격(5.7절) | 처음 배울 때는 바로 알림. 늦게 붙은 노드와 만료된 표를 채움 |
 | `auth_krb_classes` | cifs, http, wsman, termsrv, rpcss, host, ldap, drsuapi GUID | 기록할 Kerberos 서비스 종류 | `+=`로 추가 |
 | `chain_max_expire` | 2hr | 킬체인 상관 상태 최대 보관 시간 |  |
@@ -1742,7 +1749,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 149개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 100개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 154개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 105개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1775,6 +1782,8 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 단일 탐지의 심각도가 모두 `Information` | DCSync·랜섬웨어도 스캔과 같은 등급 | 위험도는 Manager 값(룰별 Critical·High 등, [센서 제어 스펙](SENSOR_CONTROL_SPEC.md))으로 표시. 센서 등급은 그대로 |
 | 암호화된 내용(SMB3 암호화, TLS 1.3 인증서) | 05·06·21은 SMB3 암호화 세션을 못 봄, 09의 자체서명 신호가 TLS 1.3에서 없음 | 하기 어려운 한계. JA4·SNI 신호 비중을 키움 |
 | HTTP(WebDAV)로 오가는 NTLM | 05·19가 잡지 못함(Zeek가 HTTP 안 NTLM을 해석하지 않음) | HTTP Authorization 헤더 기반 보완 룰 검토 |
+| 묶기 hold 모드(`dedup_emit_first=F`) | 첫 탐지를 내보내지 않고 묶음 요약 notice만 내므로 킬체인 상관이 돌지 않고, 요약 notice에 피해 host(`lm_targets`·`dst`)가 없음. 기본값은 T라 운영 영향 없음 | 설정을 없앨지 고칠지 결정(2026-11 점검) |
+| 클러스터 워커의 Kerberos 계정 | 인증 맥락(5.6절)이 매니저에만 모여, 워커에서 판정하는 23·31·34의 근거 계정이 Kerberos 인증이면 빈칸(같은 연결의 NTLM만 씀). 단독 실행과 결과가 다름 | 인증 맥락을 워커에도 공유하거나 매니저에서 채우는 방식 검토(2026-11 점검) |
 | 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |
 | 확산 룰(06·15·16·20)은 여러 대로 퍼지는 경우만 탐지 | 한 대로의 원격 실행은 미탐 | 임계를 1로 낮추되 관리 서버 예외를 충실히 등록 |
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |

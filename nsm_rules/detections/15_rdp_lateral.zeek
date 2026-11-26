@@ -100,6 +100,10 @@ event zeek_init()
 
             # 증적 key 는 탐지 시점에 1회만 생성한다(관측 시점과 재계산 금지).
             local eid = rdp_evidence_id(key$host);
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "rdp-lm-", time_bucket(rdp_lm_epoch));
+            if ( NSM::notice_suppressed(RDP_Lateral, nid) )
+                return;
 
             local samples = "";
             local targets: set[addr] = set();
@@ -147,7 +151,7 @@ event zeek_init()
                     $msg=fmt("RDP lateral movement: %s -> %d unique hosts in %s",
                              key$host, dst_n, rdp_lm_epoch),
                     $sub=fmt("unique_dst=%d sample=[%s]", dst_n, samples),
-                    $identifier=cat(key$host, "rdp-lm-", time_bucket(rdp_lm_epoch)),   # 창 단위로 1건
+                    $identifier=nid, # 창 단위로 1건
                     $suppress_for=rdp_lm_epoch,
                     $evidence_id=eid,
                     $lm_targets=targets]);

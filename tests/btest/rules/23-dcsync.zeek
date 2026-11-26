@@ -13,6 +13,8 @@
 # @TEST-EXEC: assert-rows nsm_detection.log eq 1 diagnosis=NSM.CredentialAccess.DcSync attacker=10.0.0.210
 # @TEST-EXEC: assert-evidence-join NSM::DCSync
 
+# 합성 pcap 은 DC(10.0.0.11)에 Kerberos 를 묻는 클라이언트가 한 대뿐이라 학습 기준을 1대로 둔다(3대 기준은 rules/dcsync-learn)
+redef NSM::dcsync_learn_min_clients = 1;
 redef NSM::dcsync_domain_controllers += { 10.0.0.12 };
 redef NSM::dcsync_allowlist += { 10.0.0.212/32 };
 redef NSM::keep_log_streams += { DCE_RPC::LOG };

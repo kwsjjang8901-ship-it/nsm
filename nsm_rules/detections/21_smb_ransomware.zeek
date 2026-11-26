@@ -95,6 +95,10 @@ event zeek_init()
             local ren  = "nsm.ransom.rename" in result ? result["nsm.ransom.rename"]$unique : 0;
             local note = "nsm.ransom.note" in result ? result["nsm.ransom.note"]$unique : 0;
             local eid = cat(key$host, "|smb-ransomware|", time_bucket(ransomware_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "smb-ransomware");
+            if ( NSM::notice_suppressed(SMB_Ransomware, nid) )
+                return;
             local servers: set[addr] = set();
 
             # 근거를 NOTICE 보다 먼저 적재한다.
@@ -128,7 +132,7 @@ event zeek_init()
                     $msg=fmt("Possible ransomware activity over SMB: %s renamed %d files with extension change, created ransom notes in %d folders in %s",
                              key$host, ren, note, ransomware_interval),
                     $sub=fmt("renamed_files=%d note_dirs=%d", ren, note),
-                    $identifier=cat(key$host, "smb-ransomware"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid,
                     $lm_targets=servers]);
@@ -153,7 +157,7 @@ function ransomware_target(c: connection): bool
 event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, dst_filename: string)
     {
     # 기본 스크립트(우선순위 5)가 current_file 의 prev_name/name 을 채운 뒤 실행된다.
-    if ( ! ransomware_target(c) || ! c?$smb_state || ! c$smb_state?$current_file )
+    if ( ! c?$smb_state || ! c$smb_state?$current_file )
         return;
     local f = c$smb_state$current_file;
     if ( ! f?$prev_name || ! f?$name )
@@ -161,6 +165,9 @@ event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, ds
     if ( smb_temp_file(f$prev_name) || smb_temp_file(f$name) )
         return;
     if ( smb_extension(f$prev_name) == smb_extension(f$name) )
+        return;
+    # 예외는 룰이 세는 변경(확장자가 바뀐 이름 변경)에만 판정한다(적중 수가 실제로 거른 건수가 되게)
+    if ( ! ransomware_target(c) )
         return;
 
     local src = c$id$orig_h;
@@ -172,10 +179,12 @@ event smb2_file_rename(c: connection, hdr: SMB2::Header, file_id: SMB2::GUID, ds
 
 event smb2_create_response(c: connection, hdr: SMB2::Header, response: SMB2::CreateResponse)
     {
-    if ( hdr$status != 0 || ! ransomware_target(c) || ! c?$smb_state || ! c$smb_state?$current_file )
+    if ( hdr$status != 0 || ! c?$smb_state || ! c$smb_state?$current_file )
         return;
     local f = c$smb_state$current_file;
     if ( ! f?$name || ransomware_note_names !in to_lower(smb_basename(f$name)) )
+        return;
+    if ( ! ransomware_target(c) )
         return;
 
     local src = c$id$orig_h;

@@ -75,7 +75,7 @@ function krb_principal(name: string, realm: string): string
     }
 
 # 근거 표본 문자열 "계정|KDC|결과" -> evidence
-function krb_spray_write_samples(eid: string, note: Notice::Type, technique: string, src: addr,
+function krb_spray_write_samples(eid: string, note: Notice::Type, src: addr,
                                  samples: vector of SumStats::Observation, detail: string)
     {
     for ( i in samples )
@@ -89,7 +89,6 @@ function krb_spray_write_samples(eid: string, note: Notice::Type, technique: str
             $ts=network_time(),
             $evidence_id=eid,
             $note=note,
-            $technique=technique,
             $account=parts[0],
             $src=src,
             $dst=to_addr(parts[1]),
@@ -120,10 +119,14 @@ event zeek_init()
             local n   = result["nsm.krb_spray"]$unique;
             local num = result["nsm.krb_spray"]$num;
             local eid = cat(key$host, "|krb-spray|", time_bucket(krb_spray_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "krb-spray");
+            if ( NSM::notice_suppressed(Kerberos_Spray, nid) )
+                return;
 
             # 근거를 NOTICE 보다 먼저 적재한다(detection 의 evidence_count 산출 시점).
             if ( result["nsm.krb_spray.sample"]?$samples )
-                krb_spray_write_samples(eid, Kerberos_Spray, "T1110.003", key$host,
+                krb_spray_write_samples(eid, Kerberos_Spray, key$host,
                                         result["nsm.krb_spray.sample"]$samples,
                                         fmt("unique_failed_users=%d failures=%d window=%s",
                                             n, num, krb_spray_interval));
@@ -133,7 +136,7 @@ event zeek_init()
                     $msg=fmt("Possible Kerberos password spray: %s failed pre-authentication for %d unique accounts in %s",
                              key$host, n, krb_spray_interval),
                     $sub=fmt("unique_failed_users=%d failures=%d", n, num),
-                    $identifier=cat(key$host, "krb-spray"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }
@@ -157,9 +160,13 @@ event zeek_init()
             {
             local n   = double_to_count(result["nsm.krb_brute"]$sum);
             local eid = cat(key$host, "|krb-brute|", key$str, "|", time_bucket(krb_spray_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, key$str, "krb-brute");
+            if ( NSM::notice_suppressed(Kerberos_Bruteforce, nid) )
+                return;
 
             if ( result["nsm.krb_brute.sample"]?$samples )
-                krb_spray_write_samples(eid, Kerberos_Bruteforce, "T1110.001", key$host,
+                krb_spray_write_samples(eid, Kerberos_Bruteforce, key$host,
                                         result["nsm.krb_brute.sample"]$samples,
                                         fmt("failures=%d window=%s", n, krb_spray_interval));
 
@@ -168,7 +175,7 @@ event zeek_init()
                     $msg=fmt("Possible Kerberos brute force: %s failed pre-authentication %d times for %s in %s",
                              key$host, n, key$str, krb_spray_interval),
                     $sub=fmt("account=%s failures=%d", key$str, n),
-                    $identifier=cat(key$host, key$str, "krb-brute"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }
@@ -202,8 +209,9 @@ event krb_error(c: connection, msg: KRB::Error_Msg)
         acct = c$nsm_krb_as_client;
         delete c$nsm_krb_as_client;
         }
-    else if ( msg?$client_name && krb_spray_target(c) )
-        # 요청을 놓친 경우(비대칭 경로 등) 오류의 cname 을 쓴다
+    else if ( msg?$client_name && krb_spray_target(c) && msg?$service_name && /^[kK][rR][bB][tT][gG][tT](\/|$)/ in msg$service_name )
+        # 요청을 놓친 경우(비대칭 경로 등) 오류의 cname 을 쓴다. 단 AS 교환(대상 krbtgt)의 오류만:
+        #   TGS 오류(비활성 계정이 캐시된 TGT 로 서비스 티켓을 요청해 받는 18 CLIENT_REVOKED 등)는 비밀번호 실패가 아니다
         acct = krb_principal(msg$client_name, msg?$client_realm ? msg$client_realm : "");
 
     if ( acct == "" )

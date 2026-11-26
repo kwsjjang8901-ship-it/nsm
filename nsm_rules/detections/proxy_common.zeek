@@ -88,21 +88,26 @@ global proxy_clients: table[addr] of set[addr] &read_expire=proxy_learn_expire;
 const abs_uri = /^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//;
 
 # 프록시 (주소, 포트)와 그 프록시로 CONNECT 에 성공한 내부 PC 를 기억한다
-function proxy_add(p: addr, pp: port, client: addr)
+# 쓴 PC 를 새로 기억했으면 T(0.0.0.0 은 PC 없이 프록시만 알릴 때)
+function proxy_add(p: addr, pp: port, client: addr): bool
     {
     add proxy_learned[p, pp];
     if ( p !in proxy_clients )
         proxy_clients[p] = set();
-    if ( |proxy_clients[p]| < proxy_source_min_clients )
-        add proxy_clients[p][client];
+    if ( client == 0.0.0.0 || client in proxy_clients[p] || |proxy_clients[p]| >= proxy_source_min_clients )
+        return F;
+    add proxy_clients[p][client];
+    return T;
     }
 
 # 터널이 확인된 프록시를 배운다
 function proxy_learn_tunnel(p: addr, pp: port, client: addr)
     {
-    proxy_add(p, pp, client);
-    # 클러스터: 다른 워커의 PC 도 같은 프록시를 쓰므로 배운 프록시와 쓴 PC 를 공유한다
-    NSM::share_learned("proxy", p, pp, client);
+    # 클러스터: 다른 워커의 PC 도 같은 프록시를 쓰므로 배운 프록시를 공유한다. 쓴 PC 는 출발지 제외 판단에
+    #   필요한 proxy_source_min_clients 대까지만 알린다(PC 마다 보내면 큰 망에서 매니저 부하가 커진다)
+    if ( proxy_add(p, pp, client) )
+        NSM::share_learned("proxy", p, pp, client);
+    NSM::share_learned("proxy", p, pp, 0.0.0.0);
     }
 
 # CONNECT 가 2xx 로 성공한 연결(uid). 이어서 TLS 가 시작되면 프록시로 배운다.
@@ -132,7 +137,7 @@ event ssl_client_hello(c: connection, version: count, record_version: count, pos
 event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
     {
     if ( kind == "proxy" && proxy_learn )
-        proxy_add(a, p, b);
+        proxy_add(a, p, b);   # 반환값은 쓰지 않음(받은 값은 다시 알리지 않는다)
     }
 
 event connection_state_remove(c: connection)
@@ -222,7 +227,7 @@ function proxy_dest(c: connection): ProxyDest
         hp = c$http$uri;
     else if ( c$http?$host )
         hp = c$http$host;
-    if ( /:[0-9]+$/ in hp )
+    if ( /:[0-9]{1,5}$/ in hp )
         d$p = to_count(split_string(hp, /:/)[|split_string(hp, /:/)| - 1]);
     else
         d$p = c$http$method == "CONNECT" ? 443 : 80;

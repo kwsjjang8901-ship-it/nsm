@@ -100,6 +100,10 @@ event zeek_init()
             {
             local n   = result["nsm.krb_roast"]$unique;
             local eid = cat(key$host, "|kerberoast|", time_bucket(krb_roast_interval));
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "kerberoast");
+            if ( NSM::notice_suppressed(Kerberoasting, nid) )
+                return;
             local kdc: addr = 0.0.0.0;
 
             # 근거를 NOTICE 보다 먼저 적재한다.
@@ -134,7 +138,7 @@ event zeek_init()
                     $msg=fmt("Possible Kerberoasting: %s received weak-cipher (RC4/DES) service tickets for %d unique SPNs in %s",
                              key$host, n, krb_roast_interval),
                     $sub=fmt("unique_services=%d", n),
-                    $identifier=cat(key$host, "kerberoast"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }
@@ -193,6 +197,10 @@ event krb_as_response(c: connection, msg: KRB::KDC_Response)
 
     local cipher = weak ? krb_weak_ciphers[msg$enc_part$cipher] : cat(msg$enc_part$cipher);
     local eid = cat(c$id$orig_h, "|asrep|", acct, "|", c$uid);
+    # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+    local nid = cat(c$id$orig_h, acct, "asrep");
+    if ( NSM::notice_suppressed(ASREP_Roasting, nid) )
+        return;
 
     if ( NSM::evidence_is_new(eid, acct) )
         NSM::write_evidence([
@@ -211,7 +219,7 @@ event krb_as_response(c: connection, msg: KRB::KDC_Response)
             $msg=fmt("Possible AS-REP Roasting: %s got an AS-REP for %s without pre-authentication (enc-part %s)",
                      c$id$orig_h, acct, cipher),
             $sub=acct,
-            $identifier=cat(c$id$orig_h, acct, "asrep"),
+            $identifier=nid,
             $suppress_for=1hr,
             $evidence_id=eid]);
     }

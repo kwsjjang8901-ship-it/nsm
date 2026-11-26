@@ -70,7 +70,7 @@ function lm_mgmt_target(c: connection, note: Notice::Type): bool
     }
 
 ## epoch_result 공통 처리: 임계 이상이면 표본(목적지)마다 근거 1행 + NOTICE 1건
-function lm_mgmt_report(note: Notice::Type, technique: string, operation: string, label: string,
+function lm_mgmt_report(note: Notice::Type, operation: string, label: string,
                         tag: string, threshold: count, key: SumStats::Key, res: SumStats::ResultVal,
                         uids: table[string] of string, klasses: set[string])
     {
@@ -79,6 +79,10 @@ function lm_mgmt_report(note: Notice::Type, technique: string, operation: string
         return;
 
     local eid = cat(key$host, "|", tag, "|", time_bucket(lm_mgmt_epoch));
+    # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+    local nid = cat(key$host, tag, time_bucket(lm_mgmt_epoch));
+    if ( NSM::notice_suppressed(note, nid) )
+        return;
     local targets: set[addr] = set();
     local shown = "";
 
@@ -99,7 +103,6 @@ function lm_mgmt_report(note: Notice::Type, technique: string, operation: string
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=note,
-                $technique=technique,
                 $src=key$host,
                 $dst=dst,
                 $uid=NSM::ev_uid(uids, cat(dst)),
@@ -112,7 +115,7 @@ function lm_mgmt_report(note: Notice::Type, technique: string, operation: string
             $src=key$host,
             $msg=fmt("%s lateral movement: %s -> %d unique hosts in %s", label, key$host, n, lm_mgmt_epoch),
             $sub=fmt("unique_dst=%d sample=[%s]", n, shown),
-            $identifier=cat(key$host, tag, time_bucket(lm_mgmt_epoch)),
+            $identifier=nid,
             $suppress_for=lm_mgmt_epoch,
             $evidence_id=eid,
             $lm_targets=targets]);
@@ -133,7 +136,7 @@ event zeek_init()
         $epoch_result(ts: time, key: SumStats::Key, result: SumStats::Result) =
             {
             if ( "nsm.winrm_lm" in result )
-                lm_mgmt_report(WinRM_Lateral, "T1021.006", "winrm_connect", "WinRM", "winrm-lm",
+                lm_mgmt_report(WinRM_Lateral, "winrm_connect", "WinRM", "winrm-lm",
                                winrm_lm_threshold, key, result["nsm.winrm_lm"],
                                NSM::ev_uids(result, "nsm.winrm_lm.ev"), winrm_auth_classes);
             }
@@ -150,7 +153,7 @@ event zeek_init()
         $epoch_result(ts: time, key: SumStats::Key, result: SumStats::Result) =
             {
             if ( "nsm.dcom_lm" in result )
-                lm_mgmt_report(DCOM_Lateral, "T1021.003", "dcom_remote_create_instance", "DCOM", "dcom-lm",
+                lm_mgmt_report(DCOM_Lateral, "dcom_remote_create_instance", "DCOM", "dcom-lm",
                                dcom_lm_threshold, key, result["nsm.dcom_lm"],
                                NSM::ev_uids(result, "nsm.dcom_lm.ev"), dcom_auth_classes);
             }

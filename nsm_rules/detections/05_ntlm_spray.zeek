@@ -97,6 +97,10 @@ event zeek_init()
 
             # 증적 key 는 탐지 시점에 1회만 생성한다(관측 시점과 재계산 금지).
             local eid = ntlm_evidence_id(key$host);
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "ntlm-spray");
+            if ( NSM::notice_suppressed(NTLM_Spray, nid) )
+                return;
 
             # 근거: 이 창에서 실패한 계정 표본("domain\user|대상서버|상태").
             #   NOTICE 보다 먼저 적재해야 detection 의 evidence_count 가 정확히 잡힌다.
@@ -130,7 +134,7 @@ event zeek_init()
                     $msg=fmt("Possible NTLM password spray: %s failed authentication for %d unique accounts in %s",
                              key$host, n, ntlm_interval),
                     $sub=fmt("unique_failed_users=%d failures=%d", n, num),
-                    $identifier=cat(key$host, "ntlm-spray"),
+                    $identifier=nid,
                     $suppress_for=1hr,
                     $evidence_id=eid]);
             }

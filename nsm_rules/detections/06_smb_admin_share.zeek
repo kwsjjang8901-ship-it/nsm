@@ -93,6 +93,10 @@ event zeek_init()
 
             # 증적 key 는 탐지 시점에 1회만 생성한다(관측 시점과 재계산 금지).
             local eid = smb_evidence_id(key$host);
+            # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+            local nid = cat(key$host, "smb-lm-", time_bucket(smb_lm_epoch));
+            if ( NSM::notice_suppressed(SMB_Admin_Share, nid) )
+                return;
             local uids = NSM::ev_uids(result, "nsm.smb_admin.ev");
 
             local samples = "";
@@ -128,7 +132,7 @@ event zeek_init()
                     $msg=fmt("SMB admin-share lateral movement: %s -> %d unique hosts in %s",
                              key$host, dst_n, smb_lm_epoch),
                     $sub=fmt("unique_dst=%d sample=[%s]", dst_n, samples),
-                    $identifier=cat(key$host, "smb-lm-", time_bucket(smb_lm_epoch)),   # 창 단위로 1건
+                    $identifier=nid, # 창 단위로 1건
                     $suppress_for=smb_lm_epoch,
                     $evidence_id=eid,
                     $lm_targets=targets]);

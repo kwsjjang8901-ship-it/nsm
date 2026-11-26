@@ -46,6 +46,10 @@ function svc_bf_report(note: Notice::Type, tag: string, operation: string, thres
     local dst = to_addr(key$str);
     local users = ( s_user != "" && s_user in result ) ? result[s_user]$unique : 0;
     local eid = cat(src, "|", tag, "|", dst, "|", time_bucket(svc_bf_epoch));
+    # 억제 중인 반복이면 근거도 쓰지 않는다(FR-C5). 식별자는 NOTICE 와 같아야 한다
+    local nid = cat(src, dst, tag, time_bucket(svc_bf_epoch));
+    if ( NSM::notice_suppressed(note, nid) )
+        return;
 
     if ( s_sample in result && result[s_sample]?$samples )
         for ( i in result[s_sample]$samples )
@@ -60,7 +64,6 @@ function svc_bf_report(note: Notice::Type, tag: string, operation: string, thres
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=note,
-                $technique="T1110.001",
                 $account=( p[0] == "-" ) ? "" : p[0],
                 $src=src,
                 $dst=dst,
@@ -75,7 +78,7 @@ function svc_bf_report(note: Notice::Type, tag: string, operation: string, thres
             $dst=dst,
             $msg=fmt("%s brute force: %s -> %s, %d failed attempts in %s", to_upper(tag), src, dst, n, svc_bf_epoch),
             $sub=( users > 0 ) ? fmt("failures=%d unique_users=%d", n, users) : fmt("failures=%d", n),
-            $identifier=cat(src, dst, tag, time_bucket(svc_bf_epoch)),
+            $identifier=nid,
             $suppress_for=svc_bf_epoch,
             $evidence_id=eid]);
     }
