@@ -61,6 +61,10 @@ export {
 
     global write_detection: function(d: DetectionInfo);
 
+    ## 클러스터: 워커·프록시가 만든 단독 탐지 행. 매니저가 사건(incident_id·occurrence)을 정해 기록한다.
+    ##   사건을 노드마다 따로 정하면 같은 (탐지 종류, 공격자, 피해 host)가 다른 워커에서 나올 때 사건이 쪼개진다.
+    global detection_assign: event(d: DetectionInfo);
+
     # 진단명은 main.zeek 의 rule_registry 에 있다(NSM::rule_diagnosis).
 
 
@@ -91,14 +95,20 @@ function fill_summaries(d: DetectionInfo, eids: vector of string)
         d$relays = v;
     }
 
-function write_detection(d: DetectionInfo)
+# 등급과 근거 요약(accounts·dst_names·relays)을 채운다. 단독 탐지의 요약은 근거를 쓴 노드에만 있으므로
+#   그 노드에서 부른다. 상관 탐지는 단계마다 실어 온 요약을 correlation_killchain 이 채운다.
+function detection_prepare(d: DetectionInfo)
     {
     if ( ! d?$severity_id )
         d$severity_id = ( d$category == "Correlated" ) ? 3 : 1;
-    # 단일 탐지는 근거와 같은 노드에서 기록되므로 여기서 요약을 채운다.
-    #   상관 탐지는 단계마다 실어 온 요약을 correlation_killchain 이 채운다(클러스터에서 근거가 다른 노드에 있다).
-    if ( d$category != "Correlated" && d?$evidence_ids && |d$evidence_ids| > 0 )
+    if ( d$category != "Correlated" && d?$evidence_ids && |d$evidence_ids| > 0 &&
+         ! d?$accounts && ! d?$dst_names && ! d?$relays )
         fill_summaries(d, d$evidence_ids);
+    }
+
+function write_detection(d: DetectionInfo)
+    {
+    detection_prepare(d);
     Log::write(NSM::DETECTION_LOG, d);
     }
 
@@ -118,6 +128,29 @@ type OngoingIncident: record {
 ## (탐지 종류|공격자|피해 host) -> 진행 중인 사건. 마지막 탐지 후 detection_continue_gap 이 지나면 끝난 사건.
 ##   클러스터에서는 탐지를 낸 노드별 상태다(집계형 탐지는 매니저가 내므로 한 곳에 모인다).
 global ongoing_incidents: table[string] of OngoingIncident &write_expire=detection_continue_gap;
+
+# 진행 중인 같은 사건(탐지 종류, 공격자, 피해 host)이면 사건 id 를 이어 받고 횟수를 올린다.
+#   클러스터에서는 매니저(단독 실행은 그 노드) 한 곳에서만 부른다.
+function assign_incident(d: DetectionInfo)
+    {
+    local ikey = cat(d?$rule ? d$rule : d$diagnosis, "|", d?$attacker ? cat(d$attacker) : "-", "|",
+                     d?$victims ? join_string_vec(d$victims, ",") : "-");
+    if ( ikey in ongoing_incidents )
+        {
+        local inc = ongoing_incidents[ikey];
+        inc$occurrences += 1;
+        ongoing_incidents[ikey] = inc;          # 쓰기로 만료 시각을 늦춘다
+        d$incident_id = inc$incident_id;
+        d$occurrence  = inc$occurrences;
+        d$first_seen  = inc$first_seen;
+        }
+    else
+        {
+        ongoing_incidents[ikey] = OngoingIncident($incident_id=d$detection_id, $first_seen=d$first_seen);
+        d$incident_id = d$detection_id;
+        d$occurrence  = 1;
+        }
+    }
 
 hook Notice::policy(n: Notice::Info) &priority=-6
     {
@@ -203,26 +236,23 @@ hook Notice::policy(n: Notice::Info) &priority=-6
     if ( n?$evidence_id )
         d$evidence_ids = vector(n$evidence_id);
 
-    # 진행 중인 같은 사건이면 사건 id 를 이어 받고 횟수를 올린다.
-    local ikey = cat(n$note, "|", d?$attacker ? cat(d$attacker) : "-", "|", d?$victims ? join_string_vec(d$victims, ",") : "-");
-    if ( ikey in ongoing_incidents )
-        {
-        local inc = ongoing_incidents[ikey];
-        inc$occurrences += 1;
-        ongoing_incidents[ikey] = inc;          # 쓰기로 만료 시각을 늦춘다
-        d$incident_id = inc$incident_id;
-        d$occurrence  = inc$occurrences;
-        d$first_seen  = inc$first_seen;
-        }
-    else
-        {
-        ongoing_incidents[ikey] = OngoingIncident($incident_id=d$detection_id, $first_seen=d$first_seen);
-        d$incident_id = d$detection_id;
-        d$occurrence  = 1;
-        }
+@if ( Cluster::is_enabled() && Cluster::local_node_type() != Cluster::MANAGER )
+    # 요약은 근거가 있는 이 노드에서 채우고, 사건은 매니저가 정해 기록한다
+    detection_prepare(d);
+    Cluster::publish(Cluster::manager_topic, NSM::detection_assign, d);
+@else
+    assign_incident(d);
+    write_detection(d);
+@endif
+    }
 
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
+event NSM::detection_assign(d: DetectionInfo)
+    {
+    assign_incident(d);
     write_detection(d);
     }
+@endif
 
 event zeek_init() &priority=5
     {

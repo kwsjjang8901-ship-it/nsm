@@ -58,7 +58,7 @@ const drsuapi_uuid = "e3514235-4b06-11d1-ab04-00c04fc2dcd2";
 const drs_get_nc_changes_opnum = 3;
 
 # 복제를 요청한 계정: 같은 연결의 NTLM 인증(c$ntlm), 없으면 같은 대상 NTLM·drsuapi·ldap 티켓 계정.
-#   클러스터 워커에서는 auth_context 표가 비어 있어(매니저에 모음) 같은 연결의 NTLM 만 쓰인다.
+#   클러스터에서는 매니저가 인증 맥락을 워커에도 알리므로(auth_ctx_to_workers) 단독 실행과 같은 계정을 찾는다.
 function dcsync_account(c: connection): string
     {
     if ( c?$ntlm && c$ntlm?$username && c$ntlm$username != "" )
