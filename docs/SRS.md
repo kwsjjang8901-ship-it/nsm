@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 148개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 149개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -68,9 +68,9 @@ flowchart LR
 | 구성 요소 | 파일 | 역할 |
 | --- | --- | --- |
 | 로더 | `nsm_rules/__load__.zeek` | 모든 구성 요소를 정해진 순서로 로드(7.1절) |
-| 공통 정의 | `detections/main.zeek` | 탐지 유형(notice) 목록, 공통 파라미터·함수, 킬체인 단계명 |
+| 공통 정의 | `detections/main.zeek` | 탐지 유형(notice) 목록, **룰 레지스트리**(`rule_registry`: 탐지 종류마다 진단명·ATT&CK·킬체인 단계, 5.8절), 공통 파라미터·함수 |
 | 탐지 룰 | `detections/01~35_*.zeek`, `web_common.zeek`, `ai_common.zeek`, `proxy_common.zeek` | 위협별 탐지(4장). `proxy_common.zeek`는 명시적 프록시 인식(유출 10·12·14, C2·AI 07·09·24·30·33 공용) |
-| 근거·요약 | `evidence_log.zeek`, `detection_log.zeek`, `attack_mapping.zeek` | 근거 기록, 탐지 요약, ATT&CK 매핑 |
+| 근거·요약 | `evidence_log.zeek`, `detection_log.zeek`, `attack_mapping.zeek` | 근거 기록, 탐지 요약, notice의 `attack` 필드(값은 룰 레지스트리) |
 | 상관·묶기 | `correlation_killchain.zeek`, `notice_aggregation.zeek` | 킬체인 상관, 중복 묶기 |
 | 설정 | `nsm_config_fixed.zeek`, `nsm_config_custom.zeek`, `intel_ja3.zeek` | 운영 기본값, 고객별 값, JA3 목록(7장) |
 | 로그 필터 | `rules/filter_log.zeek` | 남길 로그·경로·회전 |
@@ -944,7 +944,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | FR-C1 | 탐지마다 근거(누가·어디서·무엇을·어떻게)를 `evidence.log`에 1행 이상 남긴다. 집계형은 판정 시점의 표본(최대 20개)을 남긴다 | `evidence_log.zeek` |
 | FR-C2 | notice와 근거는 같은 `evidence_id`로 연결되고, notice보다 근거를 먼저 기록해 근거 건수가 정확해야 한다 | 각 룰 |
 | FR-C3 | notice 1건당 탐지 요약 1행을 `nsm_detection.log`에 남긴다(진단명, 기법, 킬체인 단계, 공격자, 피해 호스트, 근거 건수) | `detection_log.zeek` |
-| FR-C4 | 모든 notice에 ATT&CK 기법 ID를 붙인다(`attack` 필드) | `attack_mapping.zeek` |
+| FR-C4 | 모든 notice에 ATT&CK 기법 ID를 붙인다(`attack` 필드) | `attack_mapping.zeek`(값은 `rule_registry`) |
 | FR-C5 | 같은 대상에 대한 반복 탐지는 룰별 억제 시간 동안 1건만 낸다(`identifier` + `suppress_for`). 억제 중인 반복에는 근거도 남기지 않는다(건별 룰은 근거를 쓰기 전에 `NSM::notice_suppressed`로 확인) | 각 룰, `main.zeek` |
 | FR-C6 | 같은 공격자의 탐지가 정해진 순서·시간 안에 이어지면 `Correlated_KillChain`을 낸다(클러스터에서는 매니저가 판정) | `correlation_killchain.zeek` |
 | FR-C7 | 운영에 필요한 로그만 남기고 나머지 Zeek 기본 로그는 끈다. 로그별 출력 경로를 지정하고 디렉터리를 만든다 | `rules/filter_log.zeek` |
@@ -998,7 +998,7 @@ S3 multipart처럼 데이터를 여러 연결로 쪼개 보내면 연결 하나�
 | NTLM 인증 유출 | C2 | 같은 출발지 | 1시간 |
 | Zerologon | DCSync | 같은 출발지 | 1시간 |
 
-- 체인의 기법 ID 표시는 상관 전용 표(`stage_attack`)에 없으면 탐지 공통 표(`attack_map`)를 씁니다. 그래서 8단계 체인도 `T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486`처럼 끝까지 기법 ID로 나옵니다.
+- 체인의 기법 ID는 룰 레지스트리(5.8절)의 기법을 씁니다. 그래서 8단계 체인도 `T1046->T1568.002->T1071.001->T1558.003->T1003.006->T1021.006->T1041->T1486`처럼 끝까지 기법 ID로 나옵니다.
 - 묶음에 탐지를 넣거나 빼려면 해당 `corr_*_notes`를 redef 하고 `chain_group_rules`도 함께 다시 정의해야 합니다(묶음 내용은 규칙을 정의할 때 복사되기 때문).
 - 초기 침투 탐지(03·04·27·28)는 침투 대상 서버를 `lm_targets`로 넘깁니다. 그래서 공격자가 웹서버를 침투한 뒤 그 서버가 C2·확산을 하면, 체인이 공격자에서 시작해 이어집니다(`tests/btest/rules/killchain-7-stages.zeek`: 정찰 → 초기 침투 → C2 → 자격증명 → 확산 → 영향).
 - 회귀 테스트 `tests/btest/rules/correlation-ext-chain.zeek`가 정찰 → C2(DGA·비커닝) → Kerberoasting → DCSync → WinRM 확산 → 유출 → 랜섬웨어의 8단계 체인과, 단독 Kerberoasting·단독 랜섬웨어가 상관으로 이어지지 않는 경우를 검증합니다.
@@ -1113,6 +1113,20 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 - 같은 값은 `share_learned_refresh`(1시간)마다 한 번만 다시 보냅니다. 배운 서버 수만큼만 오가므로 전송량은 무시할 수준입니다.
 - 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않습니다. 단독 실행에서는 아무 일도 하지 않습니다.
 - 22 NBNS는 학습이 아니라 두 연결(질의·응답)을 짝짓는 문제입니다. 워커는 다른 워커 목록을 모르므로, 매니저가 질의 host를 키로 워커 하나(HRW)를 골라 그 워커에서 짝짓습니다(4.3절 22).
+
+### 5.8 룰 레지스트리
+
+탐지 종류(notice)마다 붙는 정보는 `main.zeek`의 `NSM::rule_registry` 한 곳에 둡니다. 룰을 추가하면 notice 선언과 함께 여기에 한 줄을 넣습니다.
+
+| 칸 | 예 | 쓰는 곳 |
+| --- | --- | --- |
+| `diagnosis` | `NSM.C2.TlsBeaconing` | 탐지 요약 `diagnosis`, 상관 진단명 앞부분(`NSM.Correlation`) |
+| `technique` | `T1071.001`(여러 개면 쉼표) | notice `attack`, 탐지 요약 `techniques`, 근거 `technique` 기본값, 상관 체인의 기법 흐름 |
+| `stage` | `Command and Control` | 탐지 요약 `killchain_stages`, 근거 `killchain_stage` 기본값, 상관 진단명의 단계 태그(`stage_tags`: `C2` 등) |
+
+- 근거(`evidence.log`)는 룰이 `technique`를 따로 넣지 않으면 레지스트리 값을 씁니다. 한 룰이 근거마다 다른 기법을 넣는 경우(예: 08 터널링·유출)는 룰 값이 그대로 남습니다.
+- 로그 스키마 생성기(`schema/build.py`)가 이 표로 `rule`·`diagnosis`·`killchain_stage` 열거값과 **Manager용 룰 목록 `schema/rules.json`**(룰, 진단명, 기법 배열, 단계, 단계 태그)을 만듭니다. 리포트(`tests/report_pcap.py`)도 같은 파일을 읽습니다.
+- btest `rules/rule-registry`가 모든 NSM notice의 등록 여부와 값 형식, 7단계 공격 pcap의 탐지·근거·notice 값이 레지스트리와 같은지 검사합니다.
 
 ## 6. 출력(로그) 요구사항
 
@@ -1728,7 +1742,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 148개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 99개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 149개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 100개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1758,8 +1772,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 한계 | 영향 | 대응·계획 |
 | --- | --- | --- |
-| 단일 탐지의 심각도가 모두 `Information` | DCSync·랜섬웨어도 스캔과 같은 등급 | 룰 레지스트리(룰 ID·ATT&CK·단계·심각도)를 두고 한 곳에서 관리 |
-| ATT&CK 매핑이 세 곳(룰의 근거, `attack_map`, `stage_attack`)에 따로 있음 | 수정 누락 위험 | 위 레지스트리로 통합 |
+| 단일 탐지의 심각도가 모두 `Information` | DCSync·랜섬웨어도 스캔과 같은 등급 | 위험도는 Manager 값(룰별 Critical·High 등, [센서 제어 스펙](SENSOR_CONTROL_SPEC.md))으로 표시. 센서 등급은 그대로 |
 | 암호화된 내용(SMB3 암호화, TLS 1.3 인증서) | 05·06·21은 SMB3 암호화 세션을 못 봄, 09의 자체서명 신호가 TLS 1.3에서 없음 | 하기 어려운 한계. JA4·SNI 신호 비중을 키움 |
 | HTTP(WebDAV)로 오가는 NTLM | 05·19가 잡지 못함(Zeek가 HTTP 안 NTLM을 해석하지 않음) | HTTP Authorization 헤더 기반 보완 룰 검토 |
 | 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |

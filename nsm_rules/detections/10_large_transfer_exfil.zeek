@@ -59,7 +59,6 @@ event connection_state_remove(c: connection)
             $ts=network_time(),
             $evidence_id=eid,
             $note=Exfil_Large_Transfer,
-            $technique="T1041",
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="outbound_bulk_transfer",

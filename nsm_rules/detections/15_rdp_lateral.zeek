@@ -128,7 +128,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=RDP_Lateral,
-                        $technique="T1021.001",
                         $src=key$host,
                         $dst=to_addr(sdst),
                         $uid=suid,

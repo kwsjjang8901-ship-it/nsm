@@ -521,24 +521,15 @@ def story_coverage(detections, ev):
     return list(rows_.values())
 
 
-# 진단 이름 -> notice 이름(근거 로그의 note 와 맞추는 용도)
-DIAG_NOTE = {
-    "Port_Scan": "PortScan", "Host_Scan": "HostScan", "SQL_Injection": "SqlInjection", "Webshell_Access": "Webshell",
-    "NTLM_Spray": "NtlmSpray", "Kerberos_Spray": "KerberosSpray", "Kerberos_Bruteforce": "KerberosBruteforce",
-    "Kerberoasting": "Kerberoasting", "ASREP_Roasting": "AsrepRoasting", "NTLM_Credential_Leak": "NtlmCredentialLeak",
-    "Outbound_SMB": "OutboundSmb", "WinRM_Lateral": "WinrmAccess", "DCOM_Lateral": "DcomExec", "SMB_Ransomware": "SmbRansomware",
-    "Name_Poisoning": "NamePoisoning", "DCSync": "DcSync", "Nonstandard_Port": "NonstandardPort", "Long_Connection": "LongConnection", "Unknown_Protocol": "UnknownProtocol",
-    "SMB_Admin_Share": "SmbAccess", "RDP_Lateral": "RdpAccess", "SSH_Lateral": "SshAccess", "HTTP_Beaconing": "HttpBeaconing",
-    "DNS_Tunneling": "DnsTunneling", "Encrypted_C2": "EncryptedChannel", "Exfil_Large_Transfer": "LargeTransfer",
-    "Exfil_Volume_Aggregate": "VolumeAggregate", "Exfil_DNS": "DnsTunnel", "Exfil_Web_Upload": "WebUpload", "DGA_Domain": "DgaDomain",
-    "SSH_Bruteforce": "SshBruteforce", "FTP_Bruteforce": "FtpBruteforce", "TLS_Heartbleed": "Heartbleed",
-    "Cross_Site_Scripting": "Xss", "HTTP_Bruteforce": "HttpBruteforce", "TLS_Beaconing": "TlsBeaconing",
-    "Remote_Service_Creation": "RemoteService", "Remote_Task_Creation": "RemoteTask", "Remote_WMI_Execution": "RemoteWmi",
-    "Machine_Account_Misuse": "MachineAccountMisuse", "AI_Service_Upload": "AiServiceUpload",
-    "AI_API_From_Server": "AiApiFromServer", "IOC_Match": "IocMatch", "AI_Service_Exploit": "AiServiceExploit",
-    "Coerced_Authentication": "CoercedAuth", "Remote_Registry_Dump": "RemoteRegistryDump",
-    "Zerologon_Attempt": "Zerologon", "AD_Enumeration": "AdEnumeration",
-}
+# notice 이름 -> 진단명 마지막 토큰(근거 로그의 note 와 맞추는 용도). 센서 룰 레지스트리에서 만든
+# schema/rules.json 을 읽는다(룰을 추가해도 여기는 고치지 않음). 상관 탐지는 뺀다.
+def _diag_note():
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema", "rules.json")
+    with open(path, encoding="utf-8") as f:
+        return {r["rule"]: r["diagnosis"].split(".")[-1] for r in json.load(f) if r["rule"] != "Correlated_KillChain"}
+
+
+DIAG_NOTE = _diag_note()
 
 
 def collect(z, assets_path, args):

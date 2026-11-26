@@ -84,7 +84,6 @@ event zeek_init()
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=Port_Scan,
-                $technique="T1046",
                 $src=scanner,
                 $dst=to_addr(target),
                 $operation="tcp_port_scan",

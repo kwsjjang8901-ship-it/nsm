@@ -87,7 +87,6 @@ event zeek_init()
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=Exfil_Volume_Aggregate,
-                $technique="T1041",
                 $src=key$host,
                 $operation="tcp_volume_aggregate",
                 $detail=fmt("sum_bytes=%.0f window=%s", total, exfil_epoch)]);

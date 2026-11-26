@@ -127,7 +127,6 @@ event zeek_init()
                             $ts=network_time(),
                             $evidence_id=eid,
                             $note=SSH_Lateral,
-                            $technique="T1021.004",
                             $src=key$host,
                             $dst=to_addr(sdst),
                             $uid=NSM::ev_uid(NSM::ev_uids(result, "nsm.ssh_lm.ev"), sdst),

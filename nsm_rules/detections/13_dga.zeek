@@ -194,7 +194,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=DGA_Domain,
-                        $technique="T1568.002",
                         $src=key$host,
                         $operation="dga_nxdomain",
                         $uid=parts[2],

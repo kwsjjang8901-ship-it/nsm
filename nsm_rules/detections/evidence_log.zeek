@@ -382,6 +382,13 @@ function write_evidence(ev: EvidenceInfo)
         apply_conn_ref(ev);
     if ( ev?$uid && ev$uid == "" )
         delete ev$uid;
+    # 기법 미지정 시 룰 레지스트리 값(룰이 탐지 근거마다 다른 기법을 넣으면 그 값을 쓴다)
+    if ( ! ev?$technique && ev?$note )
+        {
+        local tq = NSM::rule_technique(ev$note);
+        if ( tq != "" )
+            ev$technique = tq;
+        }
     if ( ev?$note && ! ev?$rule )
         ev$rule = sub(cat(ev$note), /^NSM::/, "");
     if ( ev?$detail )

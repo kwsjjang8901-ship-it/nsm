@@ -317,58 +317,78 @@ export {
     ## 이 탐지 종류가 룰 정책으로 꺼졌는지.
     global rule_disabled: function(note: Notice::Type): bool;
 
-    ## note(탐지 유형) -> 킬체인 단계명 매핑. evidence_log/detection_log 공용.
-    ##   evidence_log 가 detection_log 보다 먼저 로드되므로 공용 위치(main)에 둔다.
-    const stage_name_map: table[Notice::Type] of string = {
-        [Port_Scan]              = "Recon",
-        [Host_Scan]              = "Recon",
-        [SQL_Injection]          = "Initial Access",
-        [Webshell_Access]        = "Initial Access",
-        [NTLM_Spray]             = "Credential Access",
-        [Kerberos_Spray]         = "Credential Access",
-        [Kerberos_Bruteforce]    = "Credential Access",
-        [Kerberoasting]          = "Credential Access",
-        [ASREP_Roasting]         = "Credential Access",
-        [NTLM_Credential_Leak]   = "Credential Access",
-        [Outbound_SMB]           = "Exfiltration",
-        [WinRM_Lateral]          = "Lateral Movement",
-        [DCOM_Lateral]           = "Lateral Movement",
-        [SMB_Ransomware]         = "Impact",
-        [Name_Poisoning]         = "Credential Access",
-        [DCSync]                 = "Credential Access",
-        [Nonstandard_Port]       = "Command and Control",
-        [Long_Connection]        = "Command and Control",
-        [Unknown_Protocol]       = "Command and Control",
-        [SSH_Bruteforce]         = "Credential Access",
-        [FTP_Bruteforce]         = "Credential Access",
-        [TLS_Heartbleed]         = "Initial Access",
-        [Cross_Site_Scripting]   = "Initial Access",
-        [HTTP_Bruteforce]        = "Credential Access",
-        [TLS_Beaconing]          = "Command and Control",
-        [Remote_Service_Creation] = "Lateral Movement",
-        [Remote_Task_Creation]   = "Lateral Movement",
-        [Remote_WMI_Execution]   = "Lateral Movement",
-        [Machine_Account_Misuse] = "Credential Access",
-        [AI_Service_Upload]      = "Exfiltration",
-        [AI_API_From_Server]     = "Command and Control",
-        [IOC_Match]              = "Command and Control",
-        [AI_Service_Exploit]     = "Initial Access",
-        [Coerced_Authentication] = "Credential Access",
-        [Remote_Registry_Dump]   = "Credential Access",
-        [Zerologon_Attempt]      = "Credential Access",
-        [AD_Enumeration]         = "Recon",
-        [SMB_Admin_Share]        = "Lateral Movement",
-        [RDP_Lateral]            = "Lateral Movement",
-        [SSH_Lateral]            = "Lateral Movement",
-        [HTTP_Beaconing]         = "Command and Control",
-        [DNS_Tunneling]          = "Command and Control",
-        [Encrypted_C2]           = "Command and Control",
-        [DGA_Domain]             = "Command and Control",
-        [Exfil_Large_Transfer]   = "Exfiltration",
-        [Exfil_Volume_Aggregate] = "Exfiltration",
-        [Exfil_DNS]              = "Exfiltration",
-        [Exfil_Web_Upload]       = "Exfiltration",
+    ## 룰 레지스트리: 탐지 종류(notice)마다 진단명·ATT&CK 기법·킬체인 단계를 한 곳에 둔다.
+    ##   탐지 요약(diagnosis·techniques·killchain_stages), notice 의 attack, 근거의 technique 기본값,
+    ##   상관 체인의 단계 태그·기법 흐름, 로그 스키마의 열거값과 룰 목록(schema/rules.json)이 모두 이 표에서 나온다.
+    ##   룰을 추가하면 여기에 한 줄을 넣는다(btest rules/rule-registry 가 빠진 notice 를 잡는다).
+    type RuleInfo: record {
+        diagnosis: string;              ##< nsm_detection.diagnosis(표시용 진단명)
+        technique: string;              ##< ATT&CK 기법 ID(여러 개면 쉼표)
+        stage:     string &default="";  ##< 킬체인 단계명(Recon … Impact). 상관 탐지는 ""
+    };
+
+    const rule_registry: table[Notice::Type] of RuleInfo = {
+        [Port_Scan]                = [$diagnosis="NSM.Recon.PortScan", $technique="T1046", $stage="Recon"],
+        [Host_Scan]                = [$diagnosis="NSM.Recon.HostScan", $technique="T1018", $stage="Recon"],
+        [SQL_Injection]            = [$diagnosis="NSM.WebAttack.SqlInjection", $technique="T1190", $stage="Initial Access"],
+        [Webshell_Access]          = [$diagnosis="NSM.WebAttack.Webshell", $technique="T1505.003", $stage="Initial Access"],
+        [NTLM_Spray]               = [$diagnosis="NSM.CredentialAccess.NtlmSpray", $technique="T1110.003", $stage="Credential Access"],
+        [Kerberos_Spray]           = [$diagnosis="NSM.CredentialAccess.KerberosSpray", $technique="T1110.003", $stage="Credential Access"],
+        [Kerberos_Bruteforce]      = [$diagnosis="NSM.CredentialAccess.KerberosBruteforce", $technique="T1110.001", $stage="Credential Access"],
+        [Kerberoasting]            = [$diagnosis="NSM.CredentialAccess.Kerberoasting", $technique="T1558.003", $stage="Credential Access"],
+        [ASREP_Roasting]           = [$diagnosis="NSM.CredentialAccess.AsrepRoasting", $technique="T1558.004", $stage="Credential Access"],
+        [NTLM_Credential_Leak]     = [$diagnosis="NSM.CredentialAccess.NtlmCredentialLeak", $technique="T1187", $stage="Credential Access"],
+        [Outbound_SMB]             = [$diagnosis="NSM.Exfiltration.OutboundSmb", $technique="T1048", $stage="Exfiltration"],
+        [WinRM_Lateral]            = [$diagnosis="NSM.LateralMovement.WinrmAccess", $technique="T1021.006", $stage="Lateral Movement"],
+        [DCOM_Lateral]             = [$diagnosis="NSM.LateralMovement.DcomExec", $technique="T1021.003", $stage="Lateral Movement"],
+        [SMB_Ransomware]           = [$diagnosis="NSM.Impact.SmbRansomware", $technique="T1486", $stage="Impact"],
+        [Name_Poisoning]           = [$diagnosis="NSM.CredentialAccess.NamePoisoning", $technique="T1557.001", $stage="Credential Access"],
+        [DCSync]                   = [$diagnosis="NSM.CredentialAccess.DcSync", $technique="T1003.006", $stage="Credential Access"],
+        [Nonstandard_Port]         = [$diagnosis="NSM.C2.NonstandardPort", $technique="T1571", $stage="Command and Control"],
+        [Long_Connection]          = [$diagnosis="NSM.C2.LongConnection", $technique="T1572", $stage="Command and Control"],
+        [Unknown_Protocol]         = [$diagnosis="NSM.C2.UnknownProtocol", $technique="T1095", $stage="Command and Control"],
+        [SSH_Bruteforce]           = [$diagnosis="NSM.CredentialAccess.SshBruteforce", $technique="T1110.001", $stage="Credential Access"],
+        [FTP_Bruteforce]           = [$diagnosis="NSM.CredentialAccess.FtpBruteforce", $technique="T1110.001", $stage="Credential Access"],
+        [TLS_Heartbleed]           = [$diagnosis="NSM.WebAttack.Heartbleed", $technique="T1190", $stage="Initial Access"],
+        [Cross_Site_Scripting]     = [$diagnosis="NSM.WebAttack.Xss", $technique="T1190", $stage="Initial Access"],
+        [HTTP_Bruteforce]          = [$diagnosis="NSM.CredentialAccess.HttpBruteforce", $technique="T1110.001", $stage="Credential Access"],
+        [TLS_Beaconing]            = [$diagnosis="NSM.C2.TlsBeaconing", $technique="T1071.001", $stage="Command and Control"],
+        [Remote_Service_Creation]  = [$diagnosis="NSM.LateralMovement.RemoteService", $technique="T1569.002", $stage="Lateral Movement"],
+        [Remote_Task_Creation]     = [$diagnosis="NSM.LateralMovement.RemoteTask", $technique="T1053.005", $stage="Lateral Movement"],
+        [Remote_WMI_Execution]     = [$diagnosis="NSM.LateralMovement.RemoteWmi", $technique="T1047", $stage="Lateral Movement"],
+        [Machine_Account_Misuse]   = [$diagnosis="NSM.CredentialAccess.MachineAccountMisuse", $technique="T1557.001", $stage="Credential Access"],
+        [AI_Service_Upload]        = [$diagnosis="NSM.Exfiltration.AiServiceUpload", $technique="T1567", $stage="Exfiltration"],
+        [AI_API_From_Server]       = [$diagnosis="NSM.C2.AiApiFromServer", $technique="T1102", $stage="Command and Control"],
+        [IOC_Match]                = [$diagnosis="NSM.C2.IocMatch", $technique="T1071", $stage="Command and Control"],
+        [AI_Service_Exploit]       = [$diagnosis="NSM.WebAttack.AiServiceExploit", $technique="T1190", $stage="Initial Access"],
+        [Coerced_Authentication]   = [$diagnosis="NSM.CredentialAccess.CoercedAuth", $technique="T1187", $stage="Credential Access"],
+        [Remote_Registry_Dump]     = [$diagnosis="NSM.CredentialAccess.RemoteRegistryDump", $technique="T1003.002", $stage="Credential Access"],
+        [Zerologon_Attempt]        = [$diagnosis="NSM.CredentialAccess.Zerologon", $technique="T1210", $stage="Credential Access"],
+        [AD_Enumeration]           = [$diagnosis="NSM.Recon.AdEnumeration", $technique="T1087.002", $stage="Recon"],
+        [SMB_Admin_Share]          = [$diagnosis="NSM.LateralMovement.SmbAccess", $technique="T1021.002", $stage="Lateral Movement"],
+        [RDP_Lateral]              = [$diagnosis="NSM.LateralMovement.RdpAccess", $technique="T1021.001", $stage="Lateral Movement"],
+        [SSH_Lateral]              = [$diagnosis="NSM.LateralMovement.SshAccess", $technique="T1021.004", $stage="Lateral Movement"],
+        [HTTP_Beaconing]           = [$diagnosis="NSM.C2.HttpBeaconing", $technique="T1071.001", $stage="Command and Control"],
+        [DNS_Tunneling]            = [$diagnosis="NSM.C2.DnsTunneling", $technique="T1071.004,T1572", $stage="Command and Control"],
+        [Encrypted_C2]             = [$diagnosis="NSM.C2.EncryptedChannel", $technique="T1573.002", $stage="Command and Control"],
+        [Exfil_Large_Transfer]     = [$diagnosis="NSM.Exfiltration.LargeTransfer", $technique="T1041", $stage="Exfiltration"],
+        [Exfil_Volume_Aggregate]   = [$diagnosis="NSM.Exfiltration.VolumeAggregate", $technique="T1041", $stage="Exfiltration"],
+        [Exfil_DNS]                = [$diagnosis="NSM.Exfiltration.DnsTunnel", $technique="T1048.003", $stage="Exfiltration"],
+        [Exfil_Web_Upload]         = [$diagnosis="NSM.Exfiltration.WebUpload", $technique="T1567.002", $stage="Exfiltration"],
+        [DGA_Domain]               = [$diagnosis="NSM.C2.DgaDomain", $technique="T1568.002", $stage="Command and Control"],
+        [Correlated_KillChain]     = [$diagnosis="NSM.Correlation", $technique="T1021.002,T1041"],
     } &redef;
+
+    ## 킬체인 단계명 -> 상관 체인의 짧은 태그(진단명 NSM.Correlation.<첫 단계>.<마지막 단계>에 씀)
+    const stage_tags: table[string] of string = {
+        ["Recon"] = "Recon", ["Initial Access"] = "InitialAccess", ["Command and Control"] = "C2",
+        ["Credential Access"] = "CredentialAccess", ["Lateral Movement"] = "Lateral",
+        ["Exfiltration"] = "Exfil", ["Impact"] = "Impact",
+    };
+
+    ## 진단명·기법·단계명(레지스트리에 없으면 "")
+    global rule_diagnosis: function(n: Notice::Type): string;
+    global rule_technique: function(n: Notice::Type): string;
 
     ## note -> 킬체인 단계명(매핑 없으면 "").
     global killchain_stage_of: function(n: Notice::Type): string;
@@ -380,7 +400,17 @@ export {
 
 function killchain_stage_of(n: Notice::Type): string
     {
-    return ( n in stage_name_map ) ? stage_name_map[n] : "";
+    return ( n in rule_registry ) ? rule_registry[n]$stage : "";
+    }
+
+function rule_diagnosis(n: Notice::Type): string
+    {
+    return ( n in rule_registry ) ? rule_registry[n]$diagnosis : "";
+    }
+
+function rule_technique(n: Notice::Type): string
+    {
+    return ( n in rule_registry ) ? rule_registry[n]$technique : "";
     }
 
 function parent_domain(name: string): string

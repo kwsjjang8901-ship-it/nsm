@@ -483,57 +483,59 @@ Zeek 기본 로그의 선별본(필드는 meta_export_streams 의 fields). 필�
 
 단독 탐지의 `diagnosis`는 룰마다 고정입니다. 상관 탐지(`Correlated_KillChain`)는 `NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>`입니다.
 
-| `rule` | `diagnosis` |
-| --- | --- |
-| `AD_Enumeration` | `NSM.Recon.AdEnumeration` |
-| `AI_API_From_Server` | `NSM.C2.AiApiFromServer` |
-| `AI_Service_Exploit` | `NSM.WebAttack.AiServiceExploit` |
-| `AI_Service_Upload` | `NSM.Exfiltration.AiServiceUpload` |
-| `ASREP_Roasting` | `NSM.CredentialAccess.AsrepRoasting` |
-| `Coerced_Authentication` | `NSM.CredentialAccess.CoercedAuth` |
-| `Correlated_KillChain` | `NSM.Correlation.<첫 단계>.<마지막 단계>` |
-| `Cross_Site_Scripting` | `NSM.WebAttack.Xss` |
-| `DCOM_Lateral` | `NSM.LateralMovement.DcomExec` |
-| `DCSync` | `NSM.CredentialAccess.DcSync` |
-| `DGA_Domain` | `NSM.C2.DgaDomain` |
-| `DNS_Tunneling` | `NSM.C2.DnsTunneling` |
-| `Encrypted_C2` | `NSM.C2.EncryptedChannel` |
-| `Exfil_DNS` | `NSM.Exfiltration.DnsTunnel` |
-| `Exfil_Large_Transfer` | `NSM.Exfiltration.LargeTransfer` |
-| `Exfil_Volume_Aggregate` | `NSM.Exfiltration.VolumeAggregate` |
-| `Exfil_Web_Upload` | `NSM.Exfiltration.WebUpload` |
-| `FTP_Bruteforce` | `NSM.CredentialAccess.FtpBruteforce` |
-| `HTTP_Beaconing` | `NSM.C2.HttpBeaconing` |
-| `HTTP_Bruteforce` | `NSM.CredentialAccess.HttpBruteforce` |
-| `Host_Scan` | `NSM.Recon.HostScan` |
-| `IOC_Match` | `NSM.C2.IocMatch` |
-| `Kerberoasting` | `NSM.CredentialAccess.Kerberoasting` |
-| `Kerberos_Bruteforce` | `NSM.CredentialAccess.KerberosBruteforce` |
-| `Kerberos_Spray` | `NSM.CredentialAccess.KerberosSpray` |
-| `Long_Connection` | `NSM.C2.LongConnection` |
-| `Machine_Account_Misuse` | `NSM.CredentialAccess.MachineAccountMisuse` |
-| `NTLM_Credential_Leak` | `NSM.CredentialAccess.NtlmCredentialLeak` |
-| `NTLM_Spray` | `NSM.CredentialAccess.NtlmSpray` |
-| `Name_Poisoning` | `NSM.CredentialAccess.NamePoisoning` |
-| `Nonstandard_Port` | `NSM.C2.NonstandardPort` |
-| `Outbound_SMB` | `NSM.Exfiltration.OutboundSmb` |
-| `Port_Scan` | `NSM.Recon.PortScan` |
-| `RDP_Lateral` | `NSM.LateralMovement.RdpAccess` |
-| `Remote_Registry_Dump` | `NSM.CredentialAccess.RemoteRegistryDump` |
-| `Remote_Service_Creation` | `NSM.LateralMovement.RemoteService` |
-| `Remote_Task_Creation` | `NSM.LateralMovement.RemoteTask` |
-| `Remote_WMI_Execution` | `NSM.LateralMovement.RemoteWmi` |
-| `SMB_Admin_Share` | `NSM.LateralMovement.SmbAccess` |
-| `SMB_Ransomware` | `NSM.Impact.SmbRansomware` |
-| `SQL_Injection` | `NSM.WebAttack.SqlInjection` |
-| `SSH_Bruteforce` | `NSM.CredentialAccess.SshBruteforce` |
-| `SSH_Lateral` | `NSM.LateralMovement.SshAccess` |
-| `TLS_Beaconing` | `NSM.C2.TlsBeaconing` |
-| `TLS_Heartbleed` | `NSM.WebAttack.Heartbleed` |
-| `Unknown_Protocol` | `NSM.C2.UnknownProtocol` |
-| `Webshell_Access` | `NSM.WebAttack.Webshell` |
-| `WinRM_Lateral` | `NSM.LateralMovement.WinrmAccess` |
-| `Zerologon_Attempt` | `NSM.CredentialAccess.Zerologon` |
+Manager가 읽는 같은 목록이 [`schema/rules.json`](../schema/rules.json)에 있습니다(룰 레지스트리 `NSM::rule_registry`에서 생성).
+
+| `rule` | `diagnosis` | 킬체인 단계 | ATT&CK |
+| --- | --- | --- | --- |
+| `AD_Enumeration` | `NSM.Recon.AdEnumeration` | Recon | T1087.002 |
+| `Host_Scan` | `NSM.Recon.HostScan` | Recon | T1018 |
+| `Port_Scan` | `NSM.Recon.PortScan` | Recon | T1046 |
+| `AI_Service_Exploit` | `NSM.WebAttack.AiServiceExploit` | Initial Access | T1190 |
+| `Cross_Site_Scripting` | `NSM.WebAttack.Xss` | Initial Access | T1190 |
+| `SQL_Injection` | `NSM.WebAttack.SqlInjection` | Initial Access | T1190 |
+| `TLS_Heartbleed` | `NSM.WebAttack.Heartbleed` | Initial Access | T1190 |
+| `Webshell_Access` | `NSM.WebAttack.Webshell` | Initial Access | T1505.003 |
+| `AI_API_From_Server` | `NSM.C2.AiApiFromServer` | Command and Control | T1102 |
+| `DGA_Domain` | `NSM.C2.DgaDomain` | Command and Control | T1568.002 |
+| `DNS_Tunneling` | `NSM.C2.DnsTunneling` | Command and Control | T1071.004, T1572 |
+| `Encrypted_C2` | `NSM.C2.EncryptedChannel` | Command and Control | T1573.002 |
+| `HTTP_Beaconing` | `NSM.C2.HttpBeaconing` | Command and Control | T1071.001 |
+| `IOC_Match` | `NSM.C2.IocMatch` | Command and Control | T1071 |
+| `Long_Connection` | `NSM.C2.LongConnection` | Command and Control | T1572 |
+| `Nonstandard_Port` | `NSM.C2.NonstandardPort` | Command and Control | T1571 |
+| `TLS_Beaconing` | `NSM.C2.TlsBeaconing` | Command and Control | T1071.001 |
+| `Unknown_Protocol` | `NSM.C2.UnknownProtocol` | Command and Control | T1095 |
+| `ASREP_Roasting` | `NSM.CredentialAccess.AsrepRoasting` | Credential Access | T1558.004 |
+| `Coerced_Authentication` | `NSM.CredentialAccess.CoercedAuth` | Credential Access | T1187 |
+| `DCSync` | `NSM.CredentialAccess.DcSync` | Credential Access | T1003.006 |
+| `FTP_Bruteforce` | `NSM.CredentialAccess.FtpBruteforce` | Credential Access | T1110.001 |
+| `HTTP_Bruteforce` | `NSM.CredentialAccess.HttpBruteforce` | Credential Access | T1110.001 |
+| `Kerberoasting` | `NSM.CredentialAccess.Kerberoasting` | Credential Access | T1558.003 |
+| `Kerberos_Bruteforce` | `NSM.CredentialAccess.KerberosBruteforce` | Credential Access | T1110.001 |
+| `Kerberos_Spray` | `NSM.CredentialAccess.KerberosSpray` | Credential Access | T1110.003 |
+| `Machine_Account_Misuse` | `NSM.CredentialAccess.MachineAccountMisuse` | Credential Access | T1557.001 |
+| `NTLM_Credential_Leak` | `NSM.CredentialAccess.NtlmCredentialLeak` | Credential Access | T1187 |
+| `NTLM_Spray` | `NSM.CredentialAccess.NtlmSpray` | Credential Access | T1110.003 |
+| `Name_Poisoning` | `NSM.CredentialAccess.NamePoisoning` | Credential Access | T1557.001 |
+| `Remote_Registry_Dump` | `NSM.CredentialAccess.RemoteRegistryDump` | Credential Access | T1003.002 |
+| `SSH_Bruteforce` | `NSM.CredentialAccess.SshBruteforce` | Credential Access | T1110.001 |
+| `Zerologon_Attempt` | `NSM.CredentialAccess.Zerologon` | Credential Access | T1210 |
+| `DCOM_Lateral` | `NSM.LateralMovement.DcomExec` | Lateral Movement | T1021.003 |
+| `RDP_Lateral` | `NSM.LateralMovement.RdpAccess` | Lateral Movement | T1021.001 |
+| `Remote_Service_Creation` | `NSM.LateralMovement.RemoteService` | Lateral Movement | T1569.002 |
+| `Remote_Task_Creation` | `NSM.LateralMovement.RemoteTask` | Lateral Movement | T1053.005 |
+| `Remote_WMI_Execution` | `NSM.LateralMovement.RemoteWmi` | Lateral Movement | T1047 |
+| `SMB_Admin_Share` | `NSM.LateralMovement.SmbAccess` | Lateral Movement | T1021.002 |
+| `SSH_Lateral` | `NSM.LateralMovement.SshAccess` | Lateral Movement | T1021.004 |
+| `WinRM_Lateral` | `NSM.LateralMovement.WinrmAccess` | Lateral Movement | T1021.006 |
+| `AI_Service_Upload` | `NSM.Exfiltration.AiServiceUpload` | Exfiltration | T1567 |
+| `Exfil_DNS` | `NSM.Exfiltration.DnsTunnel` | Exfiltration | T1048.003 |
+| `Exfil_Large_Transfer` | `NSM.Exfiltration.LargeTransfer` | Exfiltration | T1041 |
+| `Exfil_Volume_Aggregate` | `NSM.Exfiltration.VolumeAggregate` | Exfiltration | T1041 |
+| `Exfil_Web_Upload` | `NSM.Exfiltration.WebUpload` | Exfiltration | T1567.002 |
+| `Outbound_SMB` | `NSM.Exfiltration.OutboundSmb` | Exfiltration | T1048 |
+| `SMB_Ransomware` | `NSM.Impact.SmbRansomware` | Impact | T1486 |
+| `Correlated_KillChain` | `NSM.Correlation.<첫 단계>.<마지막 단계>` | (구성 탐지의 단계) | T1021.002, T1041 |
 
 ### 킬체인 단계 (`killchain_stages`, `killchain_stage`)
 

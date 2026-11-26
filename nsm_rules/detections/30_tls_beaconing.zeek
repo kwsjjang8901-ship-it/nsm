@@ -193,7 +193,6 @@ event tls_beacon_obs(obs: TlsBeaconObs)
             $ts=network_time(),
             $evidence_id=eid,
             $note=TLS_Beaconing,
-            $technique="T1071.001",
             $src=orig,
             $dst=resp,
             $operation="tls_beacon",

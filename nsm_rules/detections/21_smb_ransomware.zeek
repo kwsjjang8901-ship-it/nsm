@@ -114,7 +114,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=SMB_Ransomware,
-                        $technique="T1486",
                         $src=key$host,
                         $dst=to_addr(p[1]),
                         $uid=( |p| > 3 ) ? p[3] : "",

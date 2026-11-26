@@ -116,7 +116,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=NTLM_Spray,
-                        $technique="T1110.003",
                         $account=parts[0],
                         $src=key$host,
                         $dst=to_addr(parts[1]),

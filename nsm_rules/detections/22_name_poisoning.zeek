@@ -79,7 +79,6 @@ event zeek_init()
                     local ev = EvidenceInfo($ts=network_time(),
                                             $evidence_id=eid,
                                             $note=Name_Poisoning,
-                                            $technique="T1557.001",
                                             $src=key$host,
                                             $operation=fmt("%s_poisoned_response", p[0]),
                                             $detail=fmt("name=%s unique_names=%d window=%s",

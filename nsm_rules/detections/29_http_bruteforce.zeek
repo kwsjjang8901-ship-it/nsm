@@ -138,7 +138,6 @@ function web_bf_report(kind: string, threshold: count, key: SumStats::Key, resul
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=HTTP_Bruteforce,
-                $technique="T1110.001",
                 $account=( p[0] == "-" ) ? "" : p[0],
                 $src=src,
                 $dst=dst,
