@@ -113,6 +113,35 @@ event zeek_init()
 ## NBNS 응답에는 질문 섹션이 없고 NB 레코드는 Zeek 가 이벤트로 내지 않는다(DNS.cc ParseRR_NBS).
 ##   그래서 질의 이름을 (질의 host, 트랜잭션 ID)로 잠시 기억해 응답과 짝짓는다.
 global nbns_pending: table[addr, count] of string &create_expire=30sec;
+# 질의보다 먼저 도착한 응답(클러스터에서 질의·응답이 다른 워커를 거쳐 오면 순서가 바뀔 수 있다)
+global nbns_early: table[addr, count] of set[addr] &create_expire=30sec;
+
+## 클러스터: NBNS 질의(브로드캐스트)와 응답(유니캐스트)은 다른 연결이라 다른 워커로 갈 수 있다.
+##   워커는 질의·응답을 매니저로 보내고, 매니저가 질의 host 를 키로 워커 하나(HRW)를 골라 그 워커에
+##   넘겨 짝짓게 한다. 워커는 다른 워커를 모르고(Broker 는 워커끼리 직접 잇지 않음) 매니저만 워커
+##   전체 목록을 안다. 원격으로만 받는 이벤트라 export 한다(export 하지 않으면 Zeek 가 핸들러를 쓰지 않는다).
+export {
+    global nbns_query_seen: event(querier: addr, id: count, name: string);
+    global nbns_answer_seen: event(responder: addr, querier: addr, id: count);
+    global nbns_fwd_query: event(querier: addr, id: count, name: string);
+    global nbns_fwd_answer: event(responder: addr, querier: addr, id: count);
+}
+
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
+event NSM::nbns_fwd_query(querier: addr, id: count, name: string)
+    {
+    local t = Cluster::hrw_topic(Cluster::worker_pool, querier);
+    if ( t != "" )
+        Cluster::publish(t, NSM::nbns_query_seen, querier, id, name);
+    }
+
+event NSM::nbns_fwd_answer(responder: addr, querier: addr, id: count)
+    {
+    local t = Cluster::hrw_topic(Cluster::worker_pool, querier);
+    if ( t != "" )
+        Cluster::publish(t, NSM::nbns_answer_seen, responder, querier, id);
+    }
+@endif
 
 # 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
 event zeek_init()
@@ -160,6 +189,47 @@ event dns_AAAA_reply(c: connection, msg: dns_msg, ans: dns_answer, a: addr)
     poisoning_answer(c, msg, ans);
     }
 
+function nbns_on_query(querier: addr, id: count, name: string)
+    {
+    nbns_pending[querier, id] = name;
+    if ( [querier, id] !in nbns_early )
+        return;
+    for ( r in nbns_early[querier, id] )
+        poisoning_observe(poisoning_ports[137/udp], r, querier, name);
+    delete nbns_early[querier, id];
+    }
+
+function nbns_on_answer(responder: addr, querier: addr, id: count)
+    {
+    if ( [querier, id] in nbns_pending )
+        {
+        poisoning_observe(poisoning_ports[137/udp], responder, querier, nbns_pending[querier, id]);
+        return;
+        }
+    if ( [querier, id] !in nbns_early )
+        nbns_early[querier, id] = set();
+    add nbns_early[querier, id][responder];
+    }
+
+# 관측한 질의·응답을 짝짓는 곳으로 보낸다(클러스터 워커는 매니저를 거쳐 맡은 워커로, 그 밖에는 바로 처리)
+function nbns_query(querier: addr, id: count, name: string)
+    {
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::WORKER )
+    Cluster::publish(Cluster::manager_topic, NSM::nbns_fwd_query, querier, id, name);
+@else
+    nbns_on_query(querier, id, name);
+@endif
+    }
+
+function nbns_answer(responder: addr, querier: addr, id: count)
+    {
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::WORKER )
+    Cluster::publish(Cluster::manager_topic, NSM::nbns_fwd_answer, responder, querier, id);
+@else
+    nbns_on_answer(responder, querier, id);
+@endif
+    }
+
 # NBNS 질의 기억
 event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qclass: count)
     {
@@ -169,7 +239,7 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
     if ( ! hdr?$ip )
         return;
     local decoded = decode_netbios_name(query);
-    nbns_pending[hdr$ip$src, msg$id] = |decoded| > 0 ? decoded : query;
+    nbns_query(hdr$ip$src, msg$id, |decoded| > 0 ? decoded : query);
     }
 
 # NBNS 긍정 응답
@@ -178,8 +248,17 @@ event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
     if ( c$id$resp_p != 137/udp || ! msg$QR || msg$rcode != 0 || msg$num_answers == 0 )
         return;
     local hdr = get_current_packet_header();
-    if ( ! hdr?$ip || [hdr$ip$dst, msg$id] !in nbns_pending )
+    if ( ! hdr?$ip )
         return;
-    local name = nbns_pending[hdr$ip$dst, msg$id];
-    poisoning_observe(poisoning_ports[137/udp], hdr$ip$src, hdr$ip$dst, name);
+    nbns_answer(hdr$ip$src, hdr$ip$dst, msg$id);
+    }
+
+event NSM::nbns_query_seen(querier: addr, id: count, name: string)
+    {
+    nbns_on_query(querier, id, name);
+    }
+
+event NSM::nbns_answer_seen(responder: addr, querier: addr, id: count)
+    {
+    nbns_on_answer(responder, querier, id);
     }

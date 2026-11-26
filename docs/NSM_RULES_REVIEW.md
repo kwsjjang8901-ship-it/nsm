@@ -85,7 +85,7 @@
 | 20_winrm_dcom_lateral | WinRM_Lateral, DCOM_Lateral | 확산 | 합성 | 관리 서버 예외 필수 |
 | 21_smb_ransomware | SMB_Ransomware | 영향 | 합성 | 덮어쓰기·대량 삭제형 미탐, SMB3 암호화 |
 | 22_name_poisoning | Name_Poisoning | 자격증명 | 합성 | 클러스터에서 NBNS 질의·응답이 다른 워커로 가면 놓침 |
-| 23_dcsync | DCSync | 자격증명 | 합성 | 클러스터에서 DC 학습이 워커별(DC 목록 설정 권장) |
+| 23_dcsync | DCSync | 자격증명 | 합성 | (클러스터 DC 학습 공유로 해결, SRS 5.7절) |
 | 24_nonstd_port | Nonstandard_Port, Long_Connection | C2 | 합성, CIC 오탐 3건 | 8081 TLS·443 평문 HTTP 같은 웹 서비스가 걸림 |
 | 25_unknown_protocol | Unknown_Protocol | C2 | 합성, CIC 목 침투 C2(444/tcp) 탐지 | - |
 | 26_service_bruteforce | SSH_Bruteforce, FTP_Bruteforce | 자격증명 | 합성, CIC 화 탐지 | RDP 무차별 대입 없음 |
@@ -95,7 +95,7 @@
 | 30_tls_beaconing | TLS_Beaconing | C2 | 합성, CIC 오탐 6건 | 주기 패턴이 30분 이상 이어져야 탐지 |
 | 31_remote_exec | Remote_Service_Creation, Remote_Task_Creation, Remote_WMI_Execution | 확산 | 합성 | 관리 서버 예외 필수 |
 | 32_machine_account | Machine_Account_Misuse | 자격증명 | 합성 | NAT·장애 조치 클러스터 예외 필요 |
-| 33_ai_threats | AI_Service_Exploit, AI_API_From_Server, AI_Service_Upload | 초기 침투·C2·유출 | 합성(CIC 0건) | HTTPS AI 서버 미관측, 업무 AI 사용 정책 결정 필요, 서버 학습이 워커별 |
+| 33_ai_threats | AI_Service_Exploit, AI_API_From_Server, AI_Service_Upload | 초기 침투·C2·유출 | 합성(CIC 0건) | HTTPS AI 서버 미관측, 업무 AI 사용 정책 결정 필요 |
 | 34_ad_attacks | AD_Enumeration, Coerced_Authentication, Remote_Registry_Dump, Zerologon_Attempt | 정찰·자격증명 | 합성 | 10대 미만 조회는 미탐, 암호화 RPC로 보낸 호출은 미관측 |
 
 ---
@@ -127,7 +127,7 @@
 | R3 | AD·AI 룰 실측 없음 | 임계·필드 가정이 실제 도구와 다를 수 있음 | 6장의 공개 pcap을 로컬에서 실행해 파일별 결과표 작성 |
 | R4 | 비콘 오탐 | CIC 오탐 19건 중 15건 | 예외 등록 지원(반복 오탐 묶음 제시), 비콘 위험 등급(목적지 평판·흔한 목적지 여부) |
 | R5 | 한 대 대상 확산·단발 정찰 | 조용한 공격자 미탐 | 31이 원격 실행을 1건으로 보완. 관리 서버 예외를 갖춘 뒤 06·15·16·20 임계 1 검토 |
-| R6 | 클러스터 워커별 상태 | 22·23·33 서버 학습이 워커마다 다름 | 23·33은 목록 설정 권장. 필요하면 클러스터 공유 상태 |
+| R6 | 클러스터 워커별 상태 | 22·23·33 서버 학습이 워커마다 다름 | **해결(2026-11-26)**: 학습 값 공유와 NBNS 짝짓기(SRS 5.7절) |
 | R7 | 암호화 구간 | SMB3 암호화, TLS 1.3 인증서, DoH, 암호화 RPC는 못 봄 | 하기 어려운 한계. JA4·SNI·흐름 신호 비중을 키움 |
 | R8 | HTTP 안 NTLM | 05·19 미탐 | HTTP Authorization 헤더 기반 보완 검토 |
 | R9 | 기존 `*_allowlist` 호환 설정 | 사유·만료가 없고 재시작 필요 | 예외 파일로 이관 후 다음 메이저에서 제거 검토 |
@@ -206,6 +206,6 @@
 | 연동 설계 | 소급검색 화면 범위, Suricata 경보를 NSM 탐지 흐름에 합치는 설계안, MDS·MTA·NSM 통합 상관 설계안 | #106, #109, #122 |
 | 로그 형식(Manager 연동) | 탐지 요약 필드(`rule`·`severity_id`·`victim_count`·계정·목적지 이름·프록시), 계정 나누기, 상관 탐지 갈래 합치기·`revision`, 근거 포트·Community ID 등 공통 필드, JSON Schema와 CI 검증, 데이터 파일 지문, 센서 상태 로그, 선별 전송 필드 이름 통일. 기준 문서 [LOG_SCHEMA.md](LOG_SCHEMA.md) | #121, #123\~#129 |
 | 리포트 | 목업형 리포트(목업 화면을 템플릿으로), 센서 등급 그대로 표시 | #119, #120 |
-| 테스트 | btest 146개(룰·계약·예외·선별 전송 99개, 클러스터 9개, 자산 식별 38개), 합성 pcap 64개 | |
+| 테스트 | btest 148개(룰·계약·예외·선별 전송 99개, 클러스터 11개, 자산 식별 38개), 합성 pcap 64개 | |
 
 5장의 남은 위험 R1\~R3, R5\~R9와 8장의 작업 순서는 그대로입니다.

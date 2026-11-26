@@ -500,3 +500,48 @@ function time_bucket(win: interval): string
     local now = |network_time()|;
     return cat(double_to_count(floor(now / w)));
     }
+
+# ------------------------------------------------------------------ 클러스터: 학습한 값 공유
+#
+# 워커는 연결 단위로 트래픽을 나눠 받으므로, 한 워커가 배운 서버(DC·AI 판별용 서버·프록시)를
+# 다른 워커가 모르면 같은 판단이 워커마다 달라진다(DC 복제를 DCSync 로 오탐 등).
+# 처음 배웠을 때(이후 share_learned_refresh 마다 한 번) 매니저로 보내고, 매니저가 모든 워커·프록시에
+# 다시 알린다(Broker 백엔드는 워커끼리 직접 메시지를 주고받지 않으므로 매니저를 거친다).
+# 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않는다. 단독 실행에서는 아무 일도 하지 않는다.
+
+export {
+    ## 같은 학습 값을 다시 알리는 간격(늦게 붙은 노드·만료된 표를 채운다)
+    const share_learned_refresh = 1hr &redef;
+
+    ## 학습 값 알리기. kind 는 받는 룰이 고른다("dc"·"ai_server"·"proxy"). a·p 는 서버 주소·포트,
+    ##   b 는 덧붙일 주소(프록시를 쓴 PC 등, 없으면 0.0.0.0)
+    global share_learned: function(kind: string, a: addr, p: port, b: addr);
+
+    ## 다른 노드가 배운 값(룰이 kind 를 골라 자기 표에 넣는다). 매니저는 받은 값을 워커·프록시에 다시 알린다
+    global learned_shared: event(kind: string, a: addr, p: port, b: addr);
+}
+
+global share_sent: set[string, addr, port, addr] &create_expire=share_learned_refresh;
+
+function share_learned(kind: string, a: addr, p: port, b: addr)
+    {
+@if ( Cluster::is_enabled() )
+    if ( [kind, a, p, b] in share_sent )
+        return;
+    add share_sent[kind, a, p, b];
+@if ( Cluster::local_node_type() == Cluster::MANAGER )
+    Cluster::publish(Cluster::worker_topic, NSM::learned_shared, kind, a, p, b);
+    Cluster::publish(Cluster::proxy_topic, NSM::learned_shared, kind, a, p, b);
+@else
+    Cluster::publish(Cluster::manager_topic, NSM::learned_shared, kind, a, p, b);
+@endif
+@endif
+    }
+
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
+# 매니저: 워커·프록시가 배운 값을 모든 워커·프록시에 다시 알린다(보낸 워커도 받지만 표에 이미 있다)
+event NSM::learned_shared(kind: string, a: addr, p: port, b: addr) &priority=10
+    {
+    share_learned(kind, a, p, b);
+    }
+@endif
