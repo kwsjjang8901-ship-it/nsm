@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 145개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 146개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1214,6 +1214,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | --- | --- | --- |
 | `nsm_config_fixed.zeek` | 제품 공통 운영 기본값(모든 고객 동일) | 관리됨. 룰 기본값을 덮어쓰는 값 + 주석 처리된 예시 |
 | `nsm_config_custom.zeek` | **고객 환경별 값**(내부망, DC, 예외 목록, 로그 경로) | **빈 파일로 유지**. 배포 시 고객별로 별도 작성(부록 A) |
+| `nsm_config_policy.zeek` | **룰 정책**: MDS Manager 룰 정책 화면에서 정한 룰 사용 여부(`NSM::disabled_rules`)·기준값·정책 버전(`NSM::rule_policy_version`) | **빈 파일로 유지**. Manager가 만들어 배포하고, 바꾸면 센서를 다시 시작([센서 제어 스펙](SENSOR_CONTROL_SPEC.md)) |
 | `intel_ja3.zeek` | JA3 차단 목록 데이터 | 관리됨 |
 
 `__load__.zeek`가 아래 순서로 로드하므로, 나중에 로드되는 파일의 값이 이깁니다.
@@ -1221,11 +1222,11 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 1. `rules/ja3`(JA3 패키지) → `main` → `evidence_log`
 2. 탐지 룰 34개(킬체인 순서)
 3. `detection_log` → `attack_mapping` → `notice_aggregation` → `correlation_killchain` → `metadata`(메타데이터 선별 전송. 이때 `rules/filter_log`도 함께 로드)
-4. `nsm_config_fixed` → **`nsm_config_custom`** → `intel_ja3`
+4. `nsm_config_fixed` → **`nsm_config_custom`** → **`nsm_config_policy`** → `intel_ja3`
 5. `policy/protocols/conn/mac-logging`, `policy/tuning/json-logs`
 6. `rules/filter_log`(로그 필터·경로. 3에서 이미 로드됨)
 
-따라서 **값의 우선순위는 custom > fixed > 룰 파일 기본값**입니다. 설정 파일은 `redef`만 담고 `@load`는 두지 않으며, 단독으로 실행하면 선언이 없어 오류가 납니다.
+따라서 **값의 우선순위는 policy > custom > fixed > 룰 파일 기본값**입니다. 룰 정책 파일은 Manager가 쓰므로 직접 고치지 않습니다. 룰 정책을 바꾸면 센서를 다시 시작하고(진행 중인 집계·비커닝 추적·킬체인 상관은 다시 쌓임), 예외 파일·IOC 파일은 재시작 없이 다시 읽습니다. 설정 파일은 `redef`만 담고 `@load`는 두지 않으며, 단독으로 실행하면 선언이 없어 오류가 납니다.
 
 ### 7.2 설정 문법 빠른 안내
 
@@ -1709,7 +1710,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 145개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 97개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 146개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 99개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |

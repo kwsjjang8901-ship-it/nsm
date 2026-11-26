@@ -7,6 +7,7 @@ Zeek 기반 NSM 탐지 룰 패키지(`nsm_rules/`). 요구사항·설정의 원�
 - 대상 Zeek 9.x, CI는 9.0.1과 8.0.9. 문법 검사·시작 시 경고가 하나라도 나오면 CI가 실패한다.
   이벤트·훅 핸들러 위 주석은 `#`로 쓴다(`##`는 선언 문서용이라 Zeek 8.x가 "Discarded extraneous Zeekygen comment" 경고를 낸다).
 - `nsm_rules/nsm_config_custom.zeek`는 저장소에서 비워 둔다(고객별로 배포 때 작성). 운영 기본값은 `nsm_config_fixed.zeek`.
+  `nsm_config_policy.zeek`(룰 정책, Manager가 만들어 배포)도 저장소에서 비워 둔다. 로드 순서는 fixed → custom → policy(`docs/SENSOR_CONTROL_SPEC.md`).
 - 테스트: `tests/run_tests.sh` (btest, 결과는 `tests/btest/output/`, JSON 로그).
 - 합성 pcap은 `tests/gen_pcaps.py`로 만든다. 새 생성기는 파일 끝에 덧붙여 기존 pcap이 바이트 단위로 그대로이게 한다(CI가 재현성을 검사).
   `tests/pcaps/asset-id/`는 자산 식별 PoC에서 가져온 고정 파일이라 재현성 검사 대상이 아니다(생성기는 `tests/asset-id/`에 출처 기록용으로만 둠).

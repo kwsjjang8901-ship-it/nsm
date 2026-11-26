@@ -61,6 +61,7 @@
 
 @load ./detections/nsm_config_fixed
 @load ./detections/nsm_config_custom
+@load ./detections/nsm_config_policy   # Manager 가 만드는 룰 정책(끌 룰·기준값·버전). 고객 설정보다 우선. 바꾸면 재시작
 @load ./detections/intel_ja3
 
 @load policy/protocols/conn/mac-logging

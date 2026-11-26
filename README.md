@@ -71,6 +71,7 @@ docs/
   DETECTION_GUIDE.md        # 탐지 룰 쉬운 설명(관제·운영 담당자용, 탐지 48종, 실제 공격 사례·위험도)
   REPORT_SPEC.md            # 통합 리포트(run_pcap.sh·report_pcap.py) 생성 구조와 스펙
   DETECTION_ENRICH_SPEC.md  # 탐지 정보 보강(Manager): 메타데이터로 판단 4개·핵심 사실·기록 표, 룰별 코드 없는 구조
+  SENSOR_CONTROL_SPEC.md    # 센서 제어(Manager → 센서): 룰 정책 파일·재시작 배포 절차·룰 끄기·엔진 업데이트·재시작 없는 항목
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)

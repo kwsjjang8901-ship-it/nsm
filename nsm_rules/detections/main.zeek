@@ -302,6 +302,21 @@ export {
     ##   억제 중이면 NOTICE 는 어차피 버려지므로 근거도 쓰지 않는다(쓰면 어떤 탐지에도 연결되지 않는 행이 쌓인다).
     global notice_suppressed: function(note: Notice::Type, identifier: string): bool;
 
+    ## 룰 정책(docs/SENSOR_CONTROL_SPEC.md): 끌 룰 이름(notice 이름에서 NSM:: 를 뺀 값, 예: "Port_Scan").
+    ##   Manager 가 만드는 nsm_config_policy.zeek 에서 redef 하고, 바꾸면 센서를 다시 시작한다.
+    ##   끈 룰은 계산(예외 입구)·근거·notice·탐지 요약·상관에서 모두 빠진다. 룰별 detect_* 스위치와 함께 쓰며 둘 중 하나라도 끄면 꺼진다.
+    const disabled_rules: set[string] = {} &redef;
+
+    ## 룰 정책 버전(Manager 가 정책 파일에 씀). 센서 상태 로그(nsm_sensor.log)의 rule_policy_version 으로 보고해
+    ##   Manager 가 "배포한 정책이 재시작 뒤 적용됐는지" 확인한다. 비우면 보고하지 않는다.
+    const rule_policy_version = "" &redef;
+
+    ## disabled_rules 를 notice 종류로 바꾼 것(시작할 때 한 번). 판정은 rule_disabled() 로.
+    global disabled_notes: set[Notice::Type] = set();
+
+    ## 이 탐지 종류가 룰 정책으로 꺼졌는지.
+    global rule_disabled: function(note: Notice::Type): bool;
+
     ## note(탐지 유형) -> 킬체인 단계명 매핑. evidence_log/detection_log 공용.
     ##   evidence_log 가 detection_log 보다 먼저 로드되므로 공용 위치(main)에 둔다.
     const stage_name_map: table[Notice::Type] of string = {
@@ -401,7 +416,41 @@ function is_external(a: addr): bool
 
 function notice_suppressed(note: Notice::Type, identifier: string): bool
     {
+    if ( note in disabled_notes )
+        return T;
     return Notice::is_being_suppressed(Notice::Info($note=note, $identifier=identifier));
+    }
+
+function rule_disabled(note: Notice::Type): bool
+    {
+    return note in disabled_notes;
+    }
+
+# 끌 룰 이름 -> notice 종류. 모르는 이름(다른 패키지 버전의 룰 등)은 경고하고 건너뛴다.
+event zeek_init() &priority=100
+    {
+    local known = enum_names(Notice::Type);
+    for ( r in disabled_rules )
+        {
+        local id = "NSM::" + r;
+        if ( id !in known )
+            {
+            Reporter::warning(fmt("NSM::disabled_rules: 모르는 룰 이름 %s (건너뜀)", r));
+            next;
+            }
+        local v = lookup_ID(id);
+        if ( v is Notice::Type )
+            add disabled_notes[v as Notice::Type];
+        }
+    }
+
+# 끈 룰의 notice 는 다른 처리(ATT&CK·예외·묶기·탐지 요약)보다 먼저 버린다: 기록하지 않으면 상관에도 들어가지 않는다.
+hook Notice::policy(n: Notice::Info) &priority=100
+    {
+    if ( n$note !in disabled_notes )
+        return;
+    n$actions = set();
+    break;
     }
 
 function domain_matches(name: string, allow: set[string]): bool
