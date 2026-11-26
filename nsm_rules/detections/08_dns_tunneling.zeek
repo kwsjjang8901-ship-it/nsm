@@ -19,7 +19,7 @@
 ##! 오탐 통제
 ##!   - 등록 도메인은 parent_domain()(co.kr 등 2단계 공용 접미사 처리)으로 구한다(H5 해소).
 ##!   - 내부 출발지만(dnstun_local_only), 내부 재귀 리졸버 제외(dns_tunnel_resolvers),
-##!     역방향 조회 제외, 도메인 예외(dns_tunnel_allowlist_domains: 기본 AV·스팸 평판 조회, AWS 로드밸런서 이름).
+##!     역방향 조회 제외, 도메인 예외(제품 기본 dns_tunnel_builtin_domains: AV·스팸 평판 조회, AWS 로드밸런서 이름).
 ##!
 ##! 이전 구현과의 차이
 ##!   - 08: 신호 OR 로 관측해 TXT·고엔트로피 정상 조회가 섞였고 co.kr 이 한 부모로 묶였다.
@@ -52,12 +52,16 @@ export {
     const dns_tunnel_resolvers: set[addr] = {} &redef;
 
     ## 도메인 예외(부분매칭). 서브도메인에 조회값을 인코딩하는 정상 서비스(AV 평판, DNSBL 등).
-    const dns_tunnel_allowlist_domains: set[string] = {
+    ## 제품 기본 예외 도메인(builtin:dns_tunnel_domains): 무작위형 라벨을 정상적으로 대량 조회하는 서비스
+    const dns_tunnel_builtin_domains: set[string] = {
         "sophosxl.net", "e5.sk",                                   # AV 평판 조회
         "spamhaus.org", "spamcop.net", "sorbs.net", "surbl.org",
         "uribl.com", "barracudacentral.org",                       # DNSBL
         "elb.amazonaws.com",                                       # AWS 로드밸런서 이름(AWS 가 발급하는 무작위형 라벨, 임의 인코딩 불가)
     } &redef;
+
+    ## 폐기 예정: 고객 도메인 예외는 예외 파일로. 쓰면 시작할 때 경고한다
+    const dns_tunnel_allowlist_domains: set[string] = {} &redef;
 
     ## 질의 1건이 수상한지(서브도메인, 질의 타입).
     global dns_tunnel_query_suspicious: function(subdom: string, qtype: count): bool;
@@ -187,9 +191,12 @@ event zeek_init()
     ]);
     }
 
-# 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
+# 제품 기본 예외와 기존 redef 예외 목록을 예외 엔진에 drop 예외로 등록한다(호환).
 event zeek_init()
     {
+    if ( |dns_tunnel_builtin_domains| > 0 )
+        NSM::exception_add_builtin("builtin:dns_tunnel_domains",
+            [$scope=set("DNS_Tunneling", "Exfil_DNS"), $domain=dns_tunnel_builtin_domains]);
     if ( |dns_tunnel_allowlist_domains| > 0 )
         NSM::exception_add_legacy("legacy:dns_tunnel_allowlist_domains",
             [$scope=set("DNS_Tunneling", "Exfil_DNS"), $domain=dns_tunnel_allowlist_domains]);

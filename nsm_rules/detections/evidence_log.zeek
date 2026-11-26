@@ -279,7 +279,7 @@ function apply_conn_ref(ev: EvidenceInfo)
     local rh = to_addr(p[3]);
     local op = to_count(p[2]);
     local rp = to_count(p[4]);
-    local tp: transport_proto;
+    local tp = unknown_transport;
     switch ( p[5] ) {
     case "tcp":  tp = tcp;  break;
     case "udp":  tp = udp;  break;

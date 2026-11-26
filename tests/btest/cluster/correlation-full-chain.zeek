@@ -41,10 +41,13 @@
 #   01 스캔·07 비커닝·10 유출 = 워커(연결 단위), 13 DGA·06 확산 = 매니저(SumStats)
 # 순서를 보장하려고 매니저가 앞 단계 notice 를 상관 이벤트로 받은 뒤 다음 단계를 지시한다.
 
-global step_scan: event();
-global step_beacon: event();
-global step_exfil: event();
-global finish: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global step_scan: event();
+    global step_beacon: event();
+    global step_exfil: event();
+    global finish: event();
+}
 
 global exfil_seen = 0;
 

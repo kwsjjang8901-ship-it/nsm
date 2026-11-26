@@ -20,8 +20,11 @@ export {
     global step: event(i: count);
     global finish: event();
 }
-global next_step: event(i: count);
-global finish_all: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global next_step: event(i: count);
+    global finish_all: event();
+}
 
 # 0: worker-1 이 .80 웹 공격, 1: worker-2 가 같은 .80 웹 공격(같은 사건), 2: worker-2 가 .81 웹 공격(다른 사건)
 event step(i: count)

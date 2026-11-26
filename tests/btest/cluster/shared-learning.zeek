@@ -9,6 +9,8 @@
 # @TEST-EXEC: btest-bg-run worker-1 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-1 zeek $PKG $SETUP %INPUT
 # @TEST-EXEC: btest-bg-run worker-2 ZEEKPATH=$(zeek-config --zeekpath):.. CLUSTER_NODE=worker-2 zeek $PKG $SETUP %INPUT
 # @TEST-EXEC: btest-bg-wait 60
+# 노드마다 시작·실행 중 경고·오류가 없다(워커·매니저에서만 쓰는 함수는 그 노드에만 둔다)
+# @TEST-EXEC: ! grep -hiE "warning|error" manager/.stderr worker-1/.stderr worker-2/.stderr
 # 배운 노드뿐 아니라 보지 못한 노드와 매니저도 같은 판단을 한다(DC 클라이언트는 worker-1 2대 + worker-2 1대)
 # @TEST-EXEC: grep -qx 'worker-1 dc=T ai=T proxy=T proxy_host=T' worker-1/.stdout
 # @TEST-EXEC: grep -qx 'worker-2 dc=T ai=T proxy=T proxy_host=T' worker-2/.stdout

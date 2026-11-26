@@ -129,6 +129,7 @@ type OngoingIncident: record {
 ##   클러스터에서는 탐지를 낸 노드별 상태다(집계형 탐지는 매니저가 내므로 한 곳에 모인다).
 global ongoing_incidents: table[string] of OngoingIncident &write_expire=detection_continue_gap;
 
+@if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::MANAGER )
 # 진행 중인 같은 사건(탐지 종류, 공격자, 피해 host)이면 사건 id 를 이어 받고 횟수를 올린다.
 #   클러스터에서는 매니저(단독 실행은 그 노드) 한 곳에서만 부른다.
 function assign_incident(d: DetectionInfo)
@@ -151,6 +152,7 @@ function assign_incident(d: DetectionInfo)
         d$occurrence  = 1;
         }
     }
+@endif
 
 hook Notice::policy(n: Notice::Info) &priority=-6
     {

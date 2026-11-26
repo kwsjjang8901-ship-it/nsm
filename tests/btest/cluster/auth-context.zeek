@@ -27,9 +27,12 @@ export {
     global finish: event();
     global wcheck: event();
 }
-global check: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global check: event();
+    global finish_all: event();
+}
 global krb_n = 0;
-global finish_all: event();
 global ntlm_n = 0;
 
 event finish()

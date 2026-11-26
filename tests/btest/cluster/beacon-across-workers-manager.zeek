@@ -21,9 +21,12 @@
 global T0 = double_to_time(1794182400.0);
 global N_BEACONS = 14;
 
-global send_obs: event(i: count);
-global next_step: event(i: count);
-global finish: event();
+# 원격으로 받는 이벤트는 export 한다(로컬 호출이 없는 노드에서 Zeek 가 경고)
+export {
+    global send_obs: event(i: count);
+    global next_step: event(i: count);
+    global finish: event();
+}
 
 event send_obs(i: count)
 	{

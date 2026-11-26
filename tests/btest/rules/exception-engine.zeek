@@ -32,6 +32,8 @@
 # @TEST-EXEC: mkdir legacy && cd legacy && zeek -C -r $TRACES/ssh_lateral.pcap $PKG $SETUP ../legacy.zeek
 # @TEST-EXEC: assert-rows legacy/notice.log eq 0 note=NSM::SSH_Lateral
 # @TEST-EXEC: assert-rows legacy/nsm_exception.log eq 1 kind=loaded exception_id=legacy:ssh_lm_allowlist disposition=drop msg=legacy
+# 기존 *_allowlist 를 쓰면 시작할 때 예외 파일로 옮기라는 폐기 예정 경고를 남긴다
+# @TEST-EXEC: grep -q 'NSM::ssh_lm_allowlist: 폐기 예정 설정' legacy/reporter.log
 # @TEST-EXEC: mkdir legacy2 && cd legacy2 && zeek -C -r $TRACES/tls_c2.pcap $PKG $SETUP NSM::enc_c2_w_mismatch_selfsigned=1 ../legacy.zeek
 # @TEST-EXEC: assert-rows legacy2/notice.log eq 0 note=NSM::Encrypted_C2 src=10.0.0.74
 # @TEST-EXEC: assert-rows legacy2/notice.log eq 1 note=NSM::Encrypted_C2 src=10.0.0.70

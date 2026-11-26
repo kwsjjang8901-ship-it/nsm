@@ -102,7 +102,11 @@ export {
     global exception_count: function(id: string);
 
     ## 기존 redef 예외 목록 등록(룰 파일의 zeek_init 에서). 항상 drop, 검증 생략.
+    ##   폐기 예정(2026-11): 고객이 *_allowlist 를 쓰면 시작할 때 예외 파일로 옮기라고 경고한다. 다음 메이저 버전에서 제거.
     global exception_add_legacy: function(id: string, r: ExceptionRec);
+
+    ## 제품 기본 예외(룰 파일의 zeek_init 에서, id 는 builtin:<이름>). 항상 drop, 경고 없음.
+    global exception_add_builtin: function(id: string, r: ExceptionRec);
 
     ## 예외 목록 배포(매니저 -> 워커·프록시).
     global exception_update: event(recs: table[string] of ExceptionRec);
@@ -239,7 +243,7 @@ function rebuild_index(report: bool)
     local origin: table[string] of string = table();
 
     for ( lid, lr in exc_legacy )
-        { srcs[lid] = lr; origin[lid] = "legacy"; }
+        { srcs[lid] = lr; origin[lid] = /^builtin:/ in lid ? "builtin" : "legacy"; }
     for ( fid, fr in exc_active )
         {
         if ( fid in srcs )
@@ -410,6 +414,18 @@ function exception_add_legacy(id: string, r: ExceptionRec)
         r$reason = "기존 redef 설정";
     if ( ! r?$owner )
         r$owner = "config";
+    exc_legacy[id] = r;
+    Reporter::warning(fmt("NSM::%s: 폐기 예정 설정입니다. 같은 내용을 예외 파일로 옮기세요(SRS 7.8). 다음 메이저 버전에서 제거됩니다",
+                          sub(id, /^legacy:/, "")));
+    }
+
+function exception_add_builtin(id: string, r: ExceptionRec)
+    {
+    r$disposition = "drop";
+    if ( ! r?$reason )
+        r$reason = "제품 기본 예외";
+    if ( ! r?$owner )
+        r$owner = "product";
     exc_legacy[id] = r;
     }
 
