@@ -63,7 +63,7 @@ function lm_mgmt_target(c: connection, note: Notice::Type): bool
     {
     local src = c$id$orig_h;
     local dst = c$id$resp_h;
-    if ( ! Site::is_local_addr(src) || ! Site::is_local_addr(dst) || src == dst )
+    if ( ! ( src in Site::local_nets ) || ! ( dst in Site::local_nets ) || src == dst )
         return F;
     # 예외(예외 파일 + 기존 lm_mgmt_allowlist). 집계 전 판정
     return ! NSM::exception_drop_agg(note, c);

@@ -36,7 +36,7 @@ global web_body_seen: table[string] of count &create_expire=10min &default=0;
 
 function web_attack_target(c: connection, note: Notice::Type): bool
     {
-    if ( web_attack_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( web_attack_local_servers_only && ! ( c$id$resp_h in Site::local_nets ) )
         return F;
     # 예외(예외 파일 + 기존 web_attack_allowlist). 요청 줄 시점에는 Host 헤더가 아직 없어 domain 축은 맞지 않는다.
     if ( NSM::exception_drop(note, c) )
@@ -51,11 +51,19 @@ event zeek_init()
             [$scope=set("SQL_Injection", "Webshell_Access", "Cross_Site_Scripting", "HTTP_Bruteforce"), $src=web_attack_allowlist]);
     }
 
+# 같은 요청 줄·본문 조각을 03·04·28 이 차례로 정규화하므로 마지막 입력·결과를 기억해 한 번만 계산한다
+global web_norm_in = "";
+global web_norm_out = "";
+
 function web_normalize(s: string): string
     {
+    if ( s == web_norm_in )
+        return web_norm_out;
     local v = gsub(s, /\+/, " ");
     v = unescape_URI(unescape_URI(v));
-    return to_lower(v);
+    web_norm_in = s;
+    web_norm_out = to_lower(v);
+    return web_norm_out;
     }
 
 function web_body_budget(c: connection, length: count): bool

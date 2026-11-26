@@ -93,7 +93,7 @@ function dcsync_count_client(a: addr, client: addr): bool
 # Kerberos 에 답한 내부 host(a)와 응답을 받은 클라이언트로 DC 를 배운다
 function dcsync_learn_addr(a: addr, client: addr)
     {
-    if ( ! dcsync_learn_dcs || ! Site::is_local_addr(a) || ! Site::is_local_addr(client) || a == client )
+    if ( ! dcsync_learn_dcs || ! ( a in Site::local_nets ) || ! ( client in Site::local_nets ) || a == client )
         return;
     # 클러스터: 다른 워커·매니저도 같은 DC 목록을 갖게 한다(DC 끼리의 복제를 DCSync 로 오탐하지 않게).
     #   클라이언트 수는 워커를 합쳐 센다. 기준 대수까지만 알린다

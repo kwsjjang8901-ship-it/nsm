@@ -78,7 +78,7 @@ event zeek_init()
 
 function nsm_outbound(c: connection): bool
     {
-    return Site::is_local_addr(c$id$orig_h) && ! Site::is_local_addr(c$id$resp_h);
+    return ( c$id$orig_h in Site::local_nets ) && ! ( c$id$resp_h in Site::local_nets );
     }
 
 event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirmationInfo)
@@ -94,7 +94,7 @@ event analyzer_confirmation_info(atype: AllAnalyzers::Tag, info: AnalyzerConfirm
     local p = c$id$resp_p;
     if ( proto == "ssl" && c?$http && c$http?$method && c$http$method == "CONNECT" )
         {
-        pdst = proxy_aware_nonstd && Site::is_local_addr(c$id$orig_h) ? proxy_c2_dest(c) : "";
+        pdst = proxy_aware_nonstd && ( c$id$orig_h in Site::local_nets ) ? proxy_c2_dest(c) : "";
         if ( pdst == "" )
             return;                        # 프록시 인식을 끄거나 목적지를 모르면 보지 않음
         p = count_to_port(proxy_dest(c)$p, tcp);

@@ -102,7 +102,7 @@ function is_asset_addr(ip: addr): bool
 		return ip in asset_nets;
 
 	if ( |Site::local_nets| > 0 )
-		return Site::is_local_addr(ip);
+		return ( ip in Site::local_nets );
 
 	return ip in Site::private_address_space;
 	}

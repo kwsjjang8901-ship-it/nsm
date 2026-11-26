@@ -85,7 +85,7 @@ event connection_state_remove(c: connection)
         return;
     local orig = c$id$orig_h;
     local resp = c$id$resp_h;
-    if ( ! Site::is_local_addr(orig) )
+    if ( ! ( orig in Site::local_nets ) )
         return;
     # 명시적 프록시 터널(CONNECT 안 TLS)은 실제 목적지 이름으로 묶는다(proxy_aware_beacon, 기본 끔).
     # 목적지를 모르는 터널은 프록시 하나로 묶이면 주기 오탐이 나므로 보지 않는다.
@@ -98,7 +98,7 @@ event connection_state_remove(c: connection)
             return;
         via = proxy_detail(c);
         }
-    else if ( ! is_external(resp) )
+    else if ( ! ( resp !in Site::local_nets ) )
         return;
     if ( c?$duration && c$duration > tls_beacon_max_duration )
         return;

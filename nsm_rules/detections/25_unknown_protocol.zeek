@@ -51,7 +51,7 @@ redef record connection += {
 function unk_candidate(c: connection): bool
     {
     return detect_unknown_protocol && get_port_transport_proto(c$id$resp_p) == tcp &&
-           Site::is_local_addr(c$id$orig_h) && ! Site::is_local_addr(c$id$resp_h) &&
+           ( c$id$orig_h in Site::local_nets ) && ! ( c$id$resp_h in Site::local_nets ) &&
            c$id$resp_p !in unknown_proto_skip_ports;
     }
 

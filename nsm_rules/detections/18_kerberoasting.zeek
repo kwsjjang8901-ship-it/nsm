@@ -72,7 +72,7 @@ event zeek_init()
 
 function krb_roast_target(c: connection, note: Notice::Type): bool
     {
-    if ( krb_roast_local_kdc_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( krb_roast_local_kdc_only && ! ( c$id$resp_h in Site::local_nets ) )
         return F;
     # 예외(예외 파일 + 기존 krb_roast_allowlist). 집계 전 판정
     if ( NSM::exception_drop_agg(note, c) )

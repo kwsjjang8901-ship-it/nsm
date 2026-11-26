@@ -151,7 +151,7 @@ event zeek_init()
 
 function ntlm_spray_target(c: connection): bool
     {
-    if ( ntlm_spray_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( ntlm_spray_local_servers_only && ! ( c$id$resp_h in Site::local_nets ) )
         return F;
     # 예외(예외 파일 + 기존 ntlm_spray_allowlist): 인증 프록시·VDI 게이트웨이 등. 집계 전 판정
     if ( NSM::exception_drop_agg(NTLM_Spray, c) )

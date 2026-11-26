@@ -131,6 +131,34 @@ global ioc_file_recs: table[string, string] of IocVal = table();
 global ioc_active: table[string, string] of Intel::Item = table();
 global ioc_waiting_initial = F;
 
+# 이 노드에 적재된 IOC 종류별 개수. 없는 종류는 값을 정규화·조회하지 않는다(IOC 가 비었거나 URL IOC 가 없는
+#   흔한 경우 HTTP 요청·DNS 질의·연결마다 하던 정규화와 Intel 조회를 건너뛴다). Intel 프레임워크가 이 노드의
+#   저장소(단독 실행·매니저는 전체, 워커는 매니저가 나눠 준 최소 저장소)에 넣고 뺄 때 부르는 훅으로 센다
+global ioc_kind_n: table[Intel::Type] of count &default=0;
+global ioc_has_ip = F;
+global ioc_has_domain = F;
+global ioc_has_url = F;
+
+function ioc_update_kinds()
+    {
+    ioc_has_ip = ioc_kind_n[Intel::ADDR] + ioc_kind_n[Intel::SUBNET] > 0;
+    ioc_has_domain = ioc_kind_n[Intel::DOMAIN] > 0;
+    ioc_has_url = ioc_kind_n[Intel::URL] > 0;
+    }
+
+hook Intel::indicator_inserted(indicator: string, indiator_type: Intel::Type)
+    {
+    ++ioc_kind_n[indiator_type];
+    ioc_update_kinds();
+    }
+
+hook Intel::indicator_removed(indicator: string, indiator_type: Intel::Type)
+    {
+    if ( ioc_kind_n[indiator_type] > 0 )
+        --ioc_kind_n[indiator_type];
+    ioc_update_kinds();
+    }
+
 function ioc_log(kind: string, indicator: string, t: string, msg: string)
     {
     # 적재 결과 행은 실제 시각(트래픽을 읽기 전에도 0 이 아님)
@@ -259,6 +287,8 @@ event zeek_init() &priority=-10
 
 function ioc_seen_domain(name: string, w: Intel::Where, c: connection)
     {
+    if ( ! ioc_has_domain )
+        return;
     local d = ioc_norm_domain(name);
     if ( d == "" || is_valid_ip(d) )
         return;
@@ -280,13 +310,13 @@ global ioc_conn_checked: set[string] &create_expire=1day;
 ## established: 연결이 성립했나(TCP 3-way 완료, UDP 는 응답 있음)
 function ioc_seen_conn(c: connection, established: bool)
     {
-    if ( c$uid in ioc_conn_checked )
+    if ( ! ioc_has_ip || c$uid in ioc_conn_checked )
         return;
     add ioc_conn_checked[c$uid];
-    if ( Site::is_local_addr(c$id$orig_h) && is_external(c$id$resp_h) )
+    if ( ( c$id$orig_h in Site::local_nets ) && ( c$id$resp_h !in Site::local_nets ) )
         Intel::seen(Intel::Seen($host=c$id$resp_h, $where=established ? IOC_IN_CONN : IOC_IN_CONN_ATTEMPT, $conn=c));
     # 들어온 연결은 성립한 것만(응답 없는 스캔은 보지 않음)
-    else if ( ioc_match_inbound && established && is_external(c$id$orig_h) && Site::is_local_addr(c$id$resp_h) )
+    else if ( ioc_match_inbound && established && ( c$id$orig_h !in Site::local_nets ) && ( c$id$resp_h in Site::local_nets ) )
         Intel::seen(Intel::Seen($host=c$id$orig_h, $where=IOC_IN_CONN_INBOUND, $conn=c));
     }
 
@@ -313,14 +343,14 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
     {
     if ( ! detect_ioc_match || ! ioc_match_dns || query == "" )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) || c$id$orig_h in dns_tunnel_resolvers )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || c$id$orig_h in dns_tunnel_resolvers )
         return;
     ioc_seen_domain(query, IOC_IN_DNS, c);
     }
 
 event ssl_extension_server_name(c: connection, is_client: bool, names: string_vec)
     {
-    if ( ! detect_ioc_match || ! is_client || ! Site::is_local_addr(c$id$orig_h) )
+    if ( ! detect_ioc_match || ! is_client || ! ( c$id$orig_h in Site::local_nets ) )
         return;
     for ( _i, n in names )
         ioc_seen_domain(n, IOC_IN_TLS_SNI, c);
@@ -328,12 +358,12 @@ event ssl_extension_server_name(c: connection, is_client: bool, names: string_ve
 
 event http_message_done(c: connection, is_orig: bool, stat: http_message_stat)
     {
-    if ( ! detect_ioc_match || ! is_orig || ! c?$http || ! Site::is_local_addr(c$id$orig_h) )
+    if ( ! detect_ioc_match || ! is_orig || ! c?$http || ! ( c$id$orig_h in Site::local_nets ) )
         return;
     local h = c$http;
     if ( h?$host && h$host != "" )
         ioc_seen_domain(h$host, IOC_IN_HTTP_HOST, c);
-    if ( ! h?$uri || ( h?$method && h$method == "CONNECT" ) )
+    if ( ! ioc_has_url || ! h?$uri || ( h?$method && h$method == "CONNECT" ) )
         return;
     local url = ioc_scheme in h$uri ? ioc_norm_url(h$uri)
                                     : ( h?$host ? ioc_norm_url(cat(h$host, h$uri)) : "" );

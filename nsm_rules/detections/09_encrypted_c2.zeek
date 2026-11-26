@@ -79,11 +79,11 @@ event ssl_established(c: connection)
 
     local orig = c$id$orig_h;
     local resp = c$id$resp_h;
-    if ( ! Site::is_local_addr(orig) )
+    if ( ! ( orig in Site::local_nets ) )
         return;
     # 내부 -> 외부 방향만. 명시적 프록시 터널(CONNECT) 안의 TLS 는 실제 목적지를 알 때만 본다(proxy_aware_enc_c2).
     local pdst = proxy_aware_enc_c2 ? proxy_c2_dest(c) : "";
-    if ( ! is_external(resp) && pdst == "" )
+    if ( ! ( resp !in Site::local_nets ) && pdst == "" )
         return;
     local dkey = pdst != "" ? pdst : cat(resp);
     # 예외(예외 파일 + 기존 enc_c2_allowlist·enc_c2_allowlist_sni). 축: dst, SNI(domain), ja4 등

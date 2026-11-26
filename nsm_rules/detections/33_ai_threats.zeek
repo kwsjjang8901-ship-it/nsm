@@ -75,7 +75,7 @@ global ai_learned_servers: table[addr] of port &read_expire=ai_server_learn_expi
 
 function ai_learn(h: addr, p: port)
     {
-    if ( p in ai_server_ports && Site::is_local_addr(h) )
+    if ( p in ai_server_ports && ( h in Site::local_nets ) )
         {
         ai_learned_servers[h] = p;
         # 클러스터: 서버가 AI API 를 부르는 연결은 다른 워커로 갈 수 있으므로 배운 서버를 공유한다
@@ -175,11 +175,11 @@ event zeek_init()
 
 event connection_state_remove(c: connection)
     {
-    if ( ! Site::is_local_addr(c$id$orig_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) )
         return;
     # 명시적 프록시 경유도 실제 목적지(SNI·CONNECT 대상)로 본다(proxy_aware_ai). 목적지를 모르면 보지 않음
     local pdst = proxy_aware_ai ? proxy_c2_dest(c) : "";
-    if ( ! is_external(c$id$resp_h) && pdst == "" )
+    if ( ! ( c$id$resp_h !in Site::local_nets ) && pdst == "" )
         return;
     local name = sub(conn_service_name(c), /:[0-9]+$/, "");
     if ( name == "" )
@@ -206,9 +206,9 @@ event ssl_established(c: connection)
     if ( ! detect_ai_api_from_server || ! c$ssl?$server_name )
         return;
     local src = c$id$orig_h;
-    if ( ! Site::is_local_addr(src) || ! ai_is_server(src) )
+    if ( ! ( src in Site::local_nets ) || ! ai_is_server(src) )
         return;
-    if ( ! is_external(c$id$resp_h) && ! ( proxy_aware_ai && proxy_c2_dest(c) != "" ) )
+    if ( ! ( c$id$resp_h !in Site::local_nets ) && ! ( proxy_aware_ai && proxy_c2_dest(c) != "" ) )
         return;
     local name = c$ssl$server_name;
     local svc = ai_service_match(name);
@@ -243,7 +243,7 @@ event ssl_established(c: connection)
 
 event http_request(c: connection, method: string, original_URI: string, unescaped_URI: string, version: string)
     {
-    if ( ! detect_ai_service_exploit || ! Site::is_local_addr(c$id$resp_h) )
+    if ( ! detect_ai_service_exploit || ! ( c$id$resp_h in Site::local_nets ) )
         return;
     local parts = split_string1(original_URI, /\?/);
     local path = to_lower(unescape_URI(unescape_URI(parts[0])));
@@ -263,7 +263,7 @@ event http_request(c: connection, method: string, original_URI: string, unescape
         local nid = cat(c$id$orig_h, c$id$resp_h, "ai-exploit", s$name);
         if ( NSM::notice_suppressed(AI_Service_Exploit, nid) )
             return;
-        local origin = Site::is_local_addr(c$id$orig_h) ? "internal" : "external";
+        local origin = ( c$id$orig_h in Site::local_nets ) ? "internal" : "external";
         local eid = cat(c$id$orig_h, "|ai-exploit|", c$id$resp_h, "|", c$uid);
         NSM::write_evidence([
             $ts=network_time(),

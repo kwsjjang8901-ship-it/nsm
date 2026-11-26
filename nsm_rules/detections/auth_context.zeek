@@ -108,7 +108,7 @@ event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
     {
     if ( ! request?$user_name || request$user_name == "" )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) || ! Site::is_local_addr(c$id$resp_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || ! ( c$id$resp_h in Site::local_nets ) )
         return;
     local who = to_lower(request$user_name);
     if ( request?$domain_name && request$domain_name != "" )
@@ -118,7 +118,7 @@ event ntlm_authenticate(c: connection, request: NTLM::Authenticate)
 
 event krb_tgs_response(c: connection, msg: KRB::KDC_Response)
     {
-    if ( ! Site::is_local_addr(c$id$orig_h) || msg$client_name == "" )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || msg$client_name == "" )
         return;
     local spn = to_lower(msg$ticket$service_name);
     local parts = split_string1(spn, /\//);

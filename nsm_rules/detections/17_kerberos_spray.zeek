@@ -64,7 +64,7 @@ event zeek_init()
 
 function krb_spray_target(c: connection): bool
     {
-    if ( krb_spray_local_kdc_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( krb_spray_local_kdc_only && ! ( c$id$resp_h in Site::local_nets ) )
         return F;
     return T;
     }
