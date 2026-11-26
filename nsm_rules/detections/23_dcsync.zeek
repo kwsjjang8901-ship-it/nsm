@@ -40,7 +40,7 @@ export {
     ## 복제 권한을 정상적으로 쓰는 서버(Azure AD Connect 등).
     const dcsync_allowlist: set[subnet] = {} &redef;
 
-    ## 학습된 DC(조회용).
+    ## 학습된 DC(조회용). 클러스터에서는 한 노드가 배운 DC 를 모든 노드가 공유한다(main.zeek share_learned).
     global dcsync_learned_dcs: set[addr] = set();
 }
 
@@ -66,10 +66,25 @@ function dcsync_is_dc(a: addr): bool
     return a in dcsync_domain_controllers || a in dcsync_learned_dcs;
     }
 
+# Kerberos 에 답한 내부 host 를 DC 로 배운다
+function dcsync_learn_addr(a: addr)
+    {
+    if ( ! dcsync_learn_dcs || ! Site::is_local_addr(a) )
+        return;
+    add dcsync_learned_dcs[a];
+    # 클러스터: 다른 워커·매니저도 같은 DC 목록을 갖게 한다(DC 끼리의 복제를 DCSync 로 오탐하지 않게)
+    NSM::share_learned("dc", a, 0/unknown, 0.0.0.0);
+    }
+
 function dcsync_learn(c: connection)
     {
-    if ( dcsync_learn_dcs && Site::is_local_addr(c$id$resp_h) && c$id$resp_h !in dcsync_learned_dcs )
-        add dcsync_learned_dcs[c$id$resp_h];
+    dcsync_learn_addr(c$id$resp_h);
+    }
+
+event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
+    {
+    if ( kind == "dc" && dcsync_learn_dcs )
+        add dcsync_learned_dcs[a];
     }
 
 event zeek_init()

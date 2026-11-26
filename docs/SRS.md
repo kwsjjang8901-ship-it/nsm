@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 146개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 148개(자산 식별·선별 전송 포함), 합성 pcap 64개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -463,7 +463,7 @@ Windows는 DNS로 못 찾은 이름을 LLMNR·NBT-NS로 묻고, Responder·Invei
 | --- | --- |
 | LLMNR (5355) | `dns_A_reply` / `dns_AAAA_reply` 응답 레코드 이름 |
 | mDNS (5353) | 같음. mDNS 응답은 질문 섹션이 없어(RFC 6762) 레코드 이름을 씀 |
-| NBNS (137) | NB 응답 레코드는 Zeek가 이벤트를 내지 않음(`ParseRR_NBS`가 건너뜀). 그래서 `dns_request`의 질의 이름을 (질의 host, 트랜잭션 ID)로 30초 기억했다가 `dns_message`의 긍정 응답과 짝지음 |
+| NBNS (137) | NB 응답 레코드는 Zeek가 이벤트를 내지 않음(`ParseRR_NBS`가 건너뜀). 그래서 `dns_request`의 질의 이름을 (질의 host, 트랜잭션 ID)로 30초 기억했다가 `dns_message`의 긍정 응답과 짝지음. 클러스터에서는 질의(브로드캐스트)와 응답(유니캐스트)이 다른 연결이라 다른 워커로 갈 수 있으므로, 워커가 둘 다 매니저로 보내고 매니저가 질의 host를 키로 고른 워커 하나(HRW)에서 짝지음. 응답이 먼저 와도 30초 기다림 |
 
 - 응답자 = 응답 패킷의 출발 주소(연결 방향과 무관, `get_current_packet_header`). LLMNR 유니캐스트 응답은 Zeek가 서버 포트 기준으로 방향을 뒤집으므로 `resp_p = 5355`로 들어옵니다.
 - 주체: `src` = 응답자(공격 host).
@@ -499,7 +499,7 @@ DCSync(mimikatz `lsadump::dcsync`, impacket secretsdump)는 DC인 척 디렉터�
 - DRSUAPI는 동적 RPC 포트를 쓰지만 Zeek의 DCE-RPC DPD 서명으로 포트와 무관하게 해석됩니다. 패킷 프라이버시로 스텁이 암호화돼도 바인드의 UUID와 요청의 opnum은 평문입니다.
 - 주체: `src` = 복제를 요청한 출발지, `dst` = 대상 DC.
 - 집계·억제: 단건. (출발지, DC) 단위 1시간 억제.
-- 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 예외로 뺍니다(기존 `dcsync_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). DC 목록(`dcsync_domain_controllers`)은 예외가 아니라 탐지 조건이라 그대로 설정에 둡니다. 클러스터에서는 DC 학습이 워커별이라 DC 목록을 설정에 적는 것을 권장합니다.
+- 제외·오탐 통제: Azure AD Connect·ADFS 동기화 서버처럼 복제 권한을 정상적으로 쓰는 서버는 예외로 뺍니다(기존 `dcsync_allowlist`). 예외는 예외 엔진(5.4절)으로 거르며, 기존 설정은 그대로 동작합니다(drop 예외로 자동 등록). DC 목록(`dcsync_domain_controllers`)은 예외가 아니라 탐지 조건이라 그대로 설정에 둡니다. 클러스터에서는 한 워커가 배운 DC를 매니저를 거쳐 모든 노드가 공유합니다(5.7절). 미러에 Kerberos 응답이 보이지 않는 구간이면 DC 목록을 적습니다.
 - 근거: 포트, 대상이 알려진 DC인지, 스텁 길이, uid, 계정(같은 연결의 NTLM 인증, 없으면 인증 맥락의 drsuapi·ldap 티켓 계정. 5.6절).
 
 ##### 강제 인증 (`Coerced_Authentication`, T1187) · 34_ad_attacks
@@ -765,7 +765,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 - 주체: `src` = 서버, `dst` = AI 서비스 주소(프록시 경유면 프록시 주소).
 - 프록시 경유: 서버가 프록시로 나가는 환경도 CONNECT 대상을 알면 봅니다(`proxy_aware_ai`, 기본 켬). SNI가 터널 안에서 그대로 보입니다.
 - 집계·억제: 단건. (서버, AI 서비스) 단위 24시간 억제.
-- 제외·오탐 통제: 승인된 AI 연동 서버(사내 챗봇 백엔드 등)는 예외 엔진(5.4절, `exception_drop`)으로 출발지·도메인 축 예외를 등록합니다. 서버 학습은 워커별 상태라 클러스터에서는 `ai_server_nets`에 서버 대역을 적는 것을 권장합니다.
+- 제외·오탐 통제: 승인된 AI 연동 서버(사내 챗봇 백엔드 등)는 예외 엔진(5.4절, `exception_drop`)으로 출발지·도메인 축 예외를 등록합니다. 클러스터에서는 한 워커가 배운 서버를 모든 노드가 공유합니다(5.7절). 서버팜처럼 대역을 아는 곳은 `ai_server_nets`에 적으면 학습 전부터 판정합니다.
 - 근거: AI 서비스, SNI, 서버로 본 이유(`learned_server_port=…` 또는 `server_net`), uid. 킬체인 묶음은 C2. 탐지 요약 진단명 `NSM.C2.AiApiFromServer`.
 
 ##### IOC 일치 (`IOC_Match`, T1071) · 35_ioc_match
@@ -856,7 +856,7 @@ PC에 프록시가 설정된 환경(PAC·WPAD 포함)에서는 PC의 웹 연결�
 - 내부·외부 판단(`local_nets`)과 상관없이 동작합니다.
 - 프록시가 아닌 곳을 배우지 않도록 좁게 잡았습니다. 외부 스캐너가 내부 웹서버로 보내는 CONNECT·절대 URL 탐색, 거부(4xx)된 CONNECT, 절대 URL만 있는 요청으로는 배우지 않습니다. 어떤 요청에도 200으로 답하는 장비(프린터·NAS 같은 임베디드 웹서버)에 취약점 점검 장비가 CONNECT만 보내고 끝낸 경우도 배우지 않습니다(진짜 프록시를 쓰는 PC는 CONNECT 뒤 바로 HTTPS 접속을 이어 감). TLS가 아닌 터널(CONNECT 뒤 SSH 등)만 쓰는 프록시는 `proxy_servers`로 지정합니다. 그렇지 않으면 그 웹서버가 프록시로 잘못 배워져, 웹서버의 외부 유출이 출발지 제외로 빠지고 웹서버로 가는 내부 업로드가 유출로 잡힙니다(테스트 10.0.41.x).
 - 프록시가 출발지인 연결을 빼는 것은 탐지를 없애는 쪽이라, `proxy_servers`이거나 서로 다른 내부 PC `proxy_source_min_clients`(3)대 이상의 CONNECT에 성공한 프록시만 뺍니다. PC 한두 대만 쓰는 디버깅 프록시를 띄워 유출을 숨기는 것을 막습니다.
-- 배운 프록시는 워커마다 따로 기억합니다. 같은 PC-프록시 쌍은 보통 같은 워커로 갑니다.
+- 클러스터에서는 한 워커가 배운 프록시와 그 프록시를 쓴 PC를 모든 노드가 공유합니다(5.7절). 출발지 제외에 필요한 PC 수(`proxy_source_min_clients`)도 워커를 합쳐 셉니다.
 - PC-프록시 구간도 TLS인 HTTPS 프록시는 CONNECT가 암호화돼 인식하지 못합니다. 미러링이 프록시 바깥 구간만 보면 출발지가 모두 프록시라 PC를 알 수 없습니다(10장).
 
 ##### 클라우드 업로드 유출 (`Exfil_Web_Upload`, T1567.002) · 12_web_upload_exfil
@@ -1098,6 +1098,21 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 - 조회: 같은 대상 NTLM 계정이 있으면 그것을, 없으면 룰별 서비스 종류의 티켓 계정을 씁니다. 여러 개면 쉼표로 잇습니다(키당 최대 `auth_ctx_max_accounts`). 실패한 인증도 기록되므로 "시도한 계정"일 수 있습니다.
 - 클러스터: 확산 판정(SumStats)은 매니저에서 하고, DC로 가는 티켓 요청과 확산 연결은 다른 워커가 볼 수 있습니다. 그래서 각 노드는 새 (출발지, 키, 계정) 조합을 `auth_ctx_resend`마다 한 번만 매니저로 보내고, 매니저가 `auth_ctx_expire` 동안 보관합니다. 워커에서 판정하는 DCSync는 같은 연결의 NTLM만 씁니다.
 - 대표 uid: 집계형 근거는 고유 수를 세는 스트림과 별도로 "목적지|uid" 표본(`ev_observe`, 창마다 (출발지, 목적지)당 첫 연결 하나)을 두거나, 이미 있는 표본 문자열에 uid를 덧붙여 근거 행에 남깁니다. 표본 수 한도(`lm_num_samples`)를 넘으면 일부 행은 uid가 없을 수 있습니다.
+
+### 5.7 클러스터 학습 공유
+
+클러스터에서 워커는 연결 단위로 트래픽을 나눠 받습니다. 한 워커가 배운 값을 다른 워커가 모르면 같은 트래픽도 워커에 따라 판단이 달라집니다. 예를 들어 DC끼리의 정상 복제를, DC를 아직 배우지 못한 워커가 보면 DCSync로 탐지합니다. 그래서 배운 값은 모든 노드가 공유합니다.
+
+| 학습 값 | 배우는 룰 | 쓰는 룰 | 공유하지 않을 때 문제 |
+| --- | --- | --- | --- |
+| DC(`dc`) | 23(Kerberos 응답을 보낸 내부 host) | 23 DCSync 출발지 제외, 34 spoolss 강제 인증(DC 대상만)·Zerologon 근거 | DC 복제 오탐, 강제 인증 미탐 |
+| AI 판별용 서버(`ai_server`) | 33(서버 포트에 응답한 내부 host) | 33 서버의 AI API 접속 | 미탐 |
+| 프록시(`proxy`, 쓴 PC 포함) | 공통 프록시 인식(CONNECT 2xx 뒤 TLS) | 10·12·14 유출, 09·24·33 등 프록시 인식 | 프록시 경유 판정·출발지 제외가 워커마다 다름 |
+
+- 워커가 처음 배우면 매니저로 보내고, 매니저가 모든 워커·프록시에 다시 알립니다(`NSM::learned_shared`). Zeek 9의 ZeroMQ 백엔드와 달리 Broker 백엔드는 워커끼리 직접 메시지를 주고받지 않으므로, 두 백엔드 모두에서 동작하게 매니저를 거칩니다.
+- 같은 값은 `share_learned_refresh`(1시간)마다 한 번만 다시 보냅니다. 배운 서버 수만큼만 오가므로 전송량은 무시할 수준입니다.
+- 받은 노드는 자기 표에 넣기만 하고 다시 보내지 않습니다. 단독 실행에서는 아무 일도 하지 않습니다.
+- 22 NBNS는 학습이 아니라 두 연결(질의·응답)을 짝짓는 문제입니다. 워커는 다른 워커 목록을 모르므로, 매니저가 질의 host를 키로 워커 하나(HRW)를 골라 그 워커에서 짝짓습니다(4.3절 22).
 
 ## 6. 출력(로그) 요구사항
 
@@ -1470,7 +1485,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 
 | 파라미터 | 기본값 | 의미 | 조정 가이드 |
 | --- | --- | --- | --- |
-| `dcsync_domain_controllers` | 비어 있음 | DC 주소 목록 | **custom에 필수 기록**(클러스터에서는 자동 학습이 워커별로 따로 이뤄짐) |
+| `dcsync_domain_controllers` | 비어 있음 | DC 주소 목록 | custom에 기록 권장. 자동 학습은 미러에 Kerberos 응답이 보여야 하고 그 전에는 DC를 모름(클러스터는 배운 DC를 모든 노드가 공유) |
 | `dcsync_learn_dcs` | T | Kerberos 응답(AS-REP·TGS-REP)을 보낸 내부 호스트를 DC로 학습 | DC 목록을 정확히 적었으면 F도 가능 |
 | `dcsync_allowlist` | 비어 있음 | 복제 권한을 정상 사용하는 서버(Azure AD Connect) | custom에 기록. 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 
@@ -1562,7 +1577,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | --- | --- | --- | --- |
 | `ai_service_domains` | ChatGPT·OpenAI·Claude·Gemini·Copilot·DeepSeek·Mistral·Perplexity·Grok·Hugging Face 등 27개 | AI 서비스·LLM API 도메인(하위 도메인 포함). 07·30 근거의 `ai_service` 표시에도 씀 | 고객이 쓰는 국내·사내 AI 서비스를 `+=` |
 | `detect_ai_upload` / `ai_upload_epoch` / `ai_upload_bytes` | T / 1hr / 10000000 | AI 서비스 업로드 탐지, 창, 바이트 임계 | 승인 서비스는 예외 파일로 |
-| `detect_ai_api_from_server` / `ai_server_ports` / `ai_server_nets` / `ai_server_learn_expire` | T / DNS·Kerberos·LDAP·DB·메일 포트 / 비어 있음 / 24hr | 서버 학습 포트, 서버 대역, 학습 기억 시간 | 클러스터는 `ai_server_nets`에 서버 대역 지정 권장 |
+| `detect_ai_api_from_server` / `ai_server_ports` / `ai_server_nets` / `ai_server_learn_expire` | T / DNS·Kerberos·LDAP·DB·메일 포트 / 비어 있음 / 24hr | 서버 학습 포트, 서버 대역, 학습 기억 시간 | 클러스터는 배운 서버를 모든 노드가 공유(5.7절) |
 | `detect_ai_service_exploit` / `ai_service_sigs` | T / Ray·Ollama·TorchServe·Jupyter·MLflow 6개 | AI 인프라 관리·실행 API 서명 | 사내 AI 플랫폼의 관리 API를 서명으로 추가 |
 
 #### 34 AD 공격(DCE-RPC)
@@ -1600,6 +1615,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
 | `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
 | `auth_ctx_max_accounts` | 3 | 키마다 남기는 계정 수 |  |
+| `share_learned_refresh` | 1hr | 클러스터에서 배운 서버(DC·AI 판별용 서버·프록시)를 다른 노드에 다시 알리는 간격(5.7절) | 처음 배울 때는 바로 알림. 늦게 붙은 노드와 만료된 표를 채움 |
 | `auth_krb_classes` | cifs, http, wsman, termsrv, rpcss, host, ldap, drsuapi GUID | 기록할 Kerberos 서비스 종류 | `+=`로 추가 |
 | `chain_max_expire` | 2hr | 킬체인 상관 상태 최대 보관 시간 |  |
 | `chain_rules` | 개별 전이 23개(5.1절) | 어느 탐지에서 어느 탐지로 이어지는지 | `+=`로 규칙 추가 가능 |
@@ -1695,6 +1711,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | NFR-3 | 성능 | 장기 연결·대용량 전송은 연결이 끝나기 전에 탐지한다 | ConnThreshold(바이트·기간 임계) 사용(14·24) |
 | NFR-4 | 클러스터 | 집계형 탐지는 워커가 나눠 본 트래픽을 합쳐 판정한다 | SumStats(매니저가 합침) |
 | NFR-5 | 클러스터 | 킬체인 상관은 다른 워커에서 나온 탐지도 이어 붙인다 | 매니저가 판정, btest cluster 테스트로 검증 |
+| NFR-5a | 클러스터 | 학습으로 판단하는 룰(DC·AI 판별용 서버·프록시)과 두 연결을 짝짓는 룰(22 NBNS)은 트래픽이 워커에 어떻게 나뉘어도 단독 실행과 같게 판단한다 | 5.7절 학습 공유·NBNS 짝짓기, btest `cluster/shared-learning`·`cluster/nbns-across-workers` |
 | NFR-6 | 클러스터 | 07 비커닝은 (출발지, 목적지) 상태를 한 노드에 모은다 | proxy가 있으면 proxy, 없으면 manager로 모음 |
 | NFR-7 | 호환성 | Zeek 9.0.1과 8.0.9에서 같은 결과 | CI 매트릭스로 두 버전 모두 검사 |
 | NFR-8 | 호환성 | 예전 배포 설정에서 쓰던 파라미터는 지우지 않는다 | 더 이상 쓰지 않는 값은 `&deprecated`로 남겨 경고만 출력 |
@@ -1711,7 +1728,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 146개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 99개(`tests/btest/rules`), 클러스터 테스트 9개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 148개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태 테스트 99개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1745,7 +1762,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | ATT&CK 매핑이 세 곳(룰의 근거, `attack_map`, `stage_attack`)에 따로 있음 | 수정 누락 위험 | 위 레지스트리로 통합 |
 | 암호화된 내용(SMB3 암호화, TLS 1.3 인증서) | 05·06·21은 SMB3 암호화 세션을 못 봄, 09의 자체서명 신호가 TLS 1.3에서 없음 | 하기 어려운 한계. JA4·SNI 신호 비중을 키움 |
 | HTTP(WebDAV)로 오가는 NTLM | 05·19가 잡지 못함(Zeek가 HTTP 안 NTLM을 해석하지 않음) | HTTP Authorization 헤더 기반 보완 룰 검토 |
-| 클러스터에서 워커별로 따로 판단하는 룰 | 22 NBNS는 질의·응답이 다른 워커로 가면 놓침, 23의 DC 학습이 워커별로 따로 이뤄짐 | 23은 DC 목록 설정으로 해결. 필요하면 클러스터 공유 상태로 보강 |
+| 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |
 | 확산 룰(06·15·16·20)은 여러 대로 퍼지는 경우만 탐지 | 한 대로의 원격 실행은 미탐 | 임계를 1로 낮추되 관리 서버 예외를 충실히 등록 |
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
 | 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |

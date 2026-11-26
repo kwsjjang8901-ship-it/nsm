@@ -76,7 +76,17 @@ global ai_learned_servers: table[addr] of port &read_expire=ai_server_learn_expi
 function ai_learn(h: addr, p: port)
     {
     if ( p in ai_server_ports && Site::is_local_addr(h) )
+        {
         ai_learned_servers[h] = p;
+        # 클러스터: 서버가 AI API 를 부르는 연결은 다른 워커로 갈 수 있으므로 배운 서버를 공유한다
+        NSM::share_learned("ai_server", h, p, 0.0.0.0);
+        }
+    }
+
+event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
+    {
+    if ( kind == "ai_server" )
+        ai_learned_servers[a] = p;
     }
 
 # TCP: 3-way 핸드셰이크가 끝났으면 응답한 것이다.

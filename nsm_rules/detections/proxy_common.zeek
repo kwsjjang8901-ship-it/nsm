@@ -16,7 +16,7 @@
 ##!   - 절대 URL 만으로는 배우지 않는다(웹서버도 절대 URL 을 받는다). 배운 프록시로 가는 평문 HTTP 는 프록시 경유로 본다.
 ##!   - 배운 프록시나 proxy_servers 로 가는 TCP 연결은 "프록시를 거친 외부 연결"로 본다. 첫 요청을 못 본
 ##!     연결(캡처 전부터 열려 있던 연결 등)도 포함하며, 그때는 실제 목적지 이름을 모른다.
-##!   - 배운 내용은 워커마다 따로 갖는다(같은 PC-프록시 쌍은 보통 같은 워커로 간다).
+##!   - 클러스터에서는 한 워커가 배운 프록시와 쓴 PC 를 모든 노드에 알려 같은 표를 갖는다(main.zeek share_learned).
 ##!
 ##! 프록시가 출발지인 외부 전송(프록시 -> 인터넷 구간)은 같은 업로드를 PC -> 프록시 구간에서 이미 보므로
 ##! 유출 탐지에서 뺀다(exfil_skip_proxy_source). 다만 출발지 제외는 탐지를 없애는 쪽이라 더 엄격하게,
@@ -87,6 +87,24 @@ global proxy_clients: table[addr] of set[addr] &read_expire=proxy_learn_expire;
 
 const abs_uri = /^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//;
 
+# 프록시 (주소, 포트)와 그 프록시로 CONNECT 에 성공한 내부 PC 를 기억한다
+function proxy_add(p: addr, pp: port, client: addr)
+    {
+    add proxy_learned[p, pp];
+    if ( p !in proxy_clients )
+        proxy_clients[p] = set();
+    if ( |proxy_clients[p]| < proxy_source_min_clients )
+        add proxy_clients[p][client];
+    }
+
+# 터널이 확인된 프록시를 배운다
+function proxy_learn_tunnel(p: addr, pp: port, client: addr)
+    {
+    proxy_add(p, pp, client);
+    # 클러스터: 다른 워커의 PC 도 같은 프록시를 쓰므로 배운 프록시와 쓴 PC 를 공유한다
+    NSM::share_learned("proxy", p, pp, client);
+    }
+
 # CONNECT 가 2xx 로 성공한 연결(uid). 이어서 TLS 가 시작되면 프록시로 배운다.
 global proxy_connect_ok: set[string] &create_expire=10min;
 
@@ -107,13 +125,14 @@ event ssl_client_hello(c: connection, version: count, record_version: count, pos
     if ( c$uid !in proxy_connect_ok )
         return;
     delete proxy_connect_ok[c$uid];
-    local p = c$id$resp_h;
-    add proxy_learned[p, c$id$resp_p];
-    if ( p !in proxy_clients )
-        proxy_clients[p] = set();
-    if ( |proxy_clients[p]| < proxy_source_min_clients )
-        add proxy_clients[p][c$id$orig_h];
+    proxy_learn_tunnel(c$id$resp_h, c$id$resp_p, c$id$orig_h);
     event NSM::proxy_tunnel_confirmed(c);
+    }
+
+event NSM::learned_shared(kind: string, a: addr, p: port, b: addr)
+    {
+    if ( kind == "proxy" && proxy_learn )
+        proxy_add(a, p, b);
     }
 
 event connection_state_remove(c: connection)
