@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""센서 처리 성능 측정(docs/SENSOR_SIZING_GUIDE.md 3장) — 코어 하나가 감당하는 트래픽과 메모리.
+"""센서 처리 성능 측정(docs/SENSOR_SIZING_GUIDE.md 2·3장) — 코어 하나가 감당하는 트래픽과 메모리.
 
     사용: tests/measure_perf.py [-n 반복=3] [-p 구성,...] [-l 내부 대역] [-z "zeek 인자"] [-o 결과.json] <pcap> ...
 
