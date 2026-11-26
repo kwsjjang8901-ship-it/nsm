@@ -38,9 +38,8 @@
 
 ## 공통 등록
 
-- [ ] `main.zeek` notice enum·단계명
-- [ ] `attack_mapping.zeek`
-- [ ] `detection_log.zeek` 진단명
+- [ ] `main.zeek` notice enum, 룰 레지스트리(`rule_registry`: 진단명·ATT&CK·단계) 한 줄
+- [ ] `python3 schema/build.py`로 `schema/rules.json`·`docs/LOG_SCHEMA.md` 재생성
 - [ ] `correlation_killchain.zeek` 단계 묶음(`corr_*_notes`)
 - [ ] `nsm_config_fixed.zeek` 해당 섹션(주석 예시)
 - [ ] `docs/SRS.md` 4장 룰 목록, 7장 파라미터, 필요하면 5.1·10장

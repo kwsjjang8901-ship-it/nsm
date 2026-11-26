@@ -80,7 +80,6 @@ function unk_report(c: connection, reason: string)
         $ts=network_time(),
         $evidence_id=eid,
         $note=Unknown_Protocol,
-        $technique="T1095",
         $src=c$id$orig_h,
         $dst=c$id$resp_h,
         $operation="unidentified_protocol_outbound",

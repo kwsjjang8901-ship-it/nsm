@@ -61,7 +61,6 @@ function sqli_report(c: connection, where: string, method: string, raw: string)
             $ts=network_time(),
             $evidence_id=eid,
             $note=SQL_Injection,
-            $technique="T1190",
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="http_request",

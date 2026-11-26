@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Manager 로 가는 로그의 JSON Schema 와 문서를 만든다.
 
-  python3 schema/build.py            # schema/logs/**.schema.json, docs/LOG_SCHEMA.md 를 다시 쓴다
+  python3 schema/build.py            # schema/logs/**.schema.json, schema/rules.json, docs/LOG_SCHEMA.md 를 다시 쓴다
   python3 schema/build.py --check    # 다시 만든 결과가 저장소 파일과 다르면 실패(CI)
   python3 schema/build.py --fields fields.json   # Zeek 를 실행하지 않고 저장해 둔 필드 정의를 쓴다
 
 필드 목록·타입·필수 여부는 Zeek 를 실행해 레코드 정의에서 뽑는다(schema/fields.zeek).
 설명·열거값·형식은 schema/overlay.json 에 적는다. 코드에서 필드를 더하거나 빼면 --check 가 실패하고,
 NSM 로그에 설명이 없는 필드가 생기면 생성 자체가 실패한다.
+룰 목록(schema/rules.json)은 nsm_rules 의 룰 레지스트리(main.zeek rule_registry)에서 만든다. Manager 가 룰 정책 화면·
+진단명·ATT&CK 표시에 쓰며, 스키마 버전에는 들어가지 않는다(로그 형식이 아니므로).
 """
 import argparse
 import hashlib
@@ -22,6 +24,14 @@ SCHEMA_DIR = os.path.join(ROOT, "schema", "logs")
 DOC = os.path.join(ROOT, "docs", "LOG_SCHEMA.md")
 OVERLAY = os.path.join(ROOT, "schema", "overlay.json")
 VERSION_ZEEK = os.path.join(ROOT, "nsm_rules", "sensor", "schema_version.zeek")
+RULES = os.path.join(ROOT, "schema", "rules.json")
+STAGE_ORDER = ["Recon", "Initial Access", "Command and Control", "Credential Access", "Lateral Movement", "Exfiltration", "Impact", ""]
+
+
+def rule_catalog(fields):
+    """룰 레지스트리를 킬체인 단계 순 → 룰 이름 순으로(상관 탐지는 맨 끝)"""
+    rows = fields.get("rules", [])
+    return sorted(rows, key=lambda r: (STAGE_ORDER.index(r["stage"]) if r["stage"] in STAGE_ORDER else 99, r["rule"]))
 
 VERSION_TEMPLATE = """##! 로그 스키마 버전. schema/build.py 가 schema/logs 의 내용으로 만든다(직접 고치지 않는다).
 
@@ -215,11 +225,13 @@ def render_doc(schemas, enums, fields, ver):
     w("")
     w("단독 탐지의 `diagnosis`는 룰마다 고정입니다. 상관 탐지(`Correlated_KillChain`)는 `NSM.Correlation.<첫 단계>.<가장 많이 진행된 단계>`입니다.")
     w("")
-    w("| `rule` | `diagnosis` |")
-    w("| --- | --- |")
-    rd = sorted(zip(fields_enum(fields, "rule"), fields_enum(fields, "diagnosis")))
-    for r, dg in rd:
-        w("| `%s` | `%s` |" % (r, dg if r != "Correlated_KillChain" else "NSM.Correlation.<첫 단계>.<마지막 단계>"))
+    w("Manager가 읽는 같은 목록이 [`schema/rules.json`](../schema/rules.json)에 있습니다(룰 레지스트리 `NSM::rule_registry`에서 생성).")
+    w("")
+    w("| `rule` | `diagnosis` | 킬체인 단계 | ATT&CK |")
+    w("| --- | --- | --- | --- |")
+    for r in rule_catalog(fields):
+        dg = r["diagnosis"] if r["rule"] != "Correlated_KillChain" else "NSM.Correlation.<첫 단계>.<마지막 단계>"
+        w("| `%s` | `%s` | %s | %s |" % (r["rule"], dg, r["stage"] or "(구성 탐지의 단계)", ", ".join(r["techniques"])))
     w("")
     w("### 킬체인 단계 (`killchain_stages`, `killchain_stage`)")
     w("")
@@ -254,6 +266,8 @@ def main():
     ver = schema_version(files)
     files[DOC] = render_doc(schemas, enums, fields, ver) + "\n"
     files[VERSION_ZEEK] = VERSION_TEMPLATE % ver
+    # 룰 하나에 한 줄(바뀐 룰이 diff 에서 바로 보이게)
+    files[RULES] = "[\n" + ",\n".join(json.dumps(r, ensure_ascii=False) for r in rule_catalog(fields)) + "\n]\n"
     stale = []
     for path, text in files.items():
         cur = open(path, encoding="utf-8").read() if os.path.exists(path) else None

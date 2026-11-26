@@ -70,7 +70,6 @@ function webshell_report(c: connection, where: string, method: string, raw: stri
             $ts=network_time(),
             $evidence_id=eid,
             $note=Webshell_Access,
-            $technique="T1505.003",
             $src=c$id$orig_h,
             $dst=c$id$resp_h,
             $operation="http_request",

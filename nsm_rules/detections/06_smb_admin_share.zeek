@@ -114,7 +114,6 @@ event zeek_init()
                             $ts=network_time(),
                             $evidence_id=eid,
                             $note=SMB_Admin_Share,
-                            $technique="T1021.002",
                             $src=key$host,
                             $dst=to_addr(sdst),
                             $uid=NSM::ev_uid(uids, sdst),

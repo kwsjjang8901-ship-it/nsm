@@ -1,9 +1,9 @@
-# @TEST-DOC: 목업형 리포트 — 등급은 센서 값(단독 Information, 상관 Suspicious). report_pcap.py 가 기존 리포트와 함께 ui/mockup/mdsm_nsm_mockup.html 을 템플릿으로 같은 데이터를 목업 화면용으로 넣은 *_mockup.html 을 만든다. 7단계 공격(killchain_story): 탐지 행 id 는 시각순 NSM-00001…, 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건(6단계, 피해까지), 스토리 1개(단계·이벤트 id 연결), 대상이 없는 비콘은 근거의 목적지, 내부 주소 목록. 프록시 경유(proxy_c2): 대상은 프록시, 실제 목적지(host)와 via. --no-mockup 이면 만들지 않는다. 목업 룰 표의 ATT&CK 기법은 센서 attack_map 과 같아야 하고, 목업 ATT&CK 조회표(ATT)에 모두 있어야 한다
+# @TEST-DOC: 목업형 리포트 — 등급은 센서 값(단독 Information, 상관 Suspicious). report_pcap.py 가 기존 리포트와 함께 ui/mockup/mdsm_nsm_mockup.html 을 템플릿으로 같은 데이터를 목업 화면용으로 넣은 *_mockup.html 을 만든다. 7단계 공격(killchain_story): 탐지 행 id 는 시각순 NSM-00001…, 상관 탐지는 공격자별로 가장 긴(같으면 마지막) 체인 1건(6단계, 피해까지), 스토리 1개(단계·이벤트 id 연결), 대상이 없는 비콘은 근거의 목적지, 내부 주소 목록. 프록시 경유(proxy_c2): 대상은 프록시, 실제 목적지(host)와 via. --no-mockup 이면 만들지 않는다. 목업 룰 표의 ATT&CK 기법은 센서 룰 레지스트리(schema/rules.json)와 같아야 하고, 목업 ATT&CK 조회표(ATT)에 모두 있어야 한다
 # @TEST-EXEC: zeek -C -r $TRACES/killchain_story.pcap $PKG $SETUP
 # @TEST-EXEC: python3 $PKG/../tests/report_pcap.py . -o kc.html --pcap killchain_story.pcap > out.txt
 # @TEST-EXEC: test -s kc.html && test -s kc_mockup.html && grep -q '목업형 리포트: kc_mockup.html' out.txt
 # @TEST-EXEC: python3 check.py kc_mockup.html kc
-# @TEST-EXEC: python3 attmap.py $PKG/detections/attack_mapping.zeek kc_mockup.html
+# @TEST-EXEC: python3 attmap.py $SCHEMA/rules.json kc_mockup.html
 # @TEST-EXEC: mkdir px && cd px && zeek -C -r $TRACES/proxy_c2.pcap $PKG $SETUP && python3 $PKG/../tests/report_pcap.py . -o px.html > /dev/null && python3 ../check.py px_mockup.html px
 # @TEST-EXEC: mkdir no && cd no && zeek -C -r $TRACES/proxy_c2.pcap $PKG $SETUP && python3 $PKG/../tests/report_pcap.py . -o no.html --no-mockup > /dev/null && test -s no.html && test ! -e no_mockup.html
 
@@ -40,10 +40,10 @@ assert d["sensors"] and d["sent"] and d["banner"].startswith("PoC 리포트")
 
 # @TEST-START-FILE attmap.py
 import re, sys
-zeek = open(sys.argv[1], encoding="utf-8").read()
+import json
 page = open(sys.argv[2], encoding="utf-8").read()
-sensor = {n: sorted(v.split(",")) for n, v in re.findall(r'\[([A-Za-z0-9_]+)\]\s*=\s*"(T[0-9.,T]+)"', zeek)}
-sensor.pop("Correlated_KillChain", None)  # 상관 탐지는 구성 탐지의 기법을 씀(목업 룰 표에 없음)
+# 상관 탐지는 구성 탐지의 기법을 씀(목업 룰 표에 없음)
+sensor = {r["rule"]: sorted(r["techniques"]) for r in json.load(open(sys.argv[1])) if r["rule"] != "Correlated_KillChain"}
 rules = page[page.index("const RULES=["):]
 rules = rules[:rules.index("];")]
 mock = {n: sorted(v.split(",")) for n, v in re.findall(r"\['[0-9]+','([A-Za-z0-9_]+)','[^']*','[^']*','([^']*)'", rules)}

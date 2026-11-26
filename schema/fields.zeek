@@ -21,6 +21,15 @@ type EnumDesc: record {
     values: vector of string;
 };
 
+# 룰 레지스트리 한 줄(schema/rules.json, Manager 의 룰 목록)
+type RuleDesc: record {
+    rule:       string;
+    diagnosis:  string;
+    techniques: vector of string;
+    stage:      string;
+    stage_tag:  string;
+};
+
 # 레코드의 &log 필드를 JSON 출력 이름(중첩은 "a.b")으로 편다.
 function flatten(rt: any, prefix: string, out: vector of FieldDesc)
     {
@@ -90,16 +99,24 @@ event zeek_init() &priority=-100
     local enums: vector of EnumDesc = vector();
     local rules: vector of string = vector();
     local diags: vector of string = vector();
-    for ( n, dg in NSM::diagnosis_map )
+    local catalog: vector of RuleDesc = vector();
+    local stages: set[string] = set();
+    for ( n, ri in NSM::rule_registry )
         {
-        rules += sub(cat(n), /^NSM::/, "");
-        diags += dg;
+        local rn = sub(cat(n), /^NSM::/, "");
+        rules += rn;
+        diags += ri$diagnosis;
+        if ( ri$stage != "" )
+            add stages[ri$stage];
+        local tq: vector of string = vector();
+        for ( _j, t in split_string(ri$technique, /[ ]*,[ ]*/) )
+            if ( t != "" )
+                tq += t;
+        catalog += RuleDesc($rule=rn, $diagnosis=ri$diagnosis, $techniques=tq, $stage=ri$stage,
+                            $stage_tag=ri$stage in NSM::stage_tags ? NSM::stage_tags[ri$stage] : "");
         }
     enums += EnumDesc($name="rule", $values=rules);
     enums += EnumDesc($name="diagnosis", $values=diags);
-    local stages: set[string] = set();
-    for ( _n, sn in NSM::stage_name_map )
-        add stages[sn];
     local sv: vector of string = vector();
     for ( s in stages )
         sv += s;
@@ -119,6 +136,6 @@ event zeek_init() &priority=-100
             }
     enums += EnumDesc($name="asset_signal", $values=sig);
 
-    print to_json([$logs=logs, $enums=enums]);
+    print to_json([$logs=logs, $enums=enums, $rules=catalog]);
     terminate();
     }

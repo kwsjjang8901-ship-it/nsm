@@ -137,7 +137,6 @@ event dce_rpc_request(c: connection, fid: count, ctx_id: count, opnum: count, st
             $ts=network_time(),
             $evidence_id=eid,
             $note=DCSync,
-            $technique="T1003.006",
             $src=src,
             $dst=c$id$resp_h,
             $operation="drsuapi_DRSGetNCChanges",

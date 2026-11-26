@@ -146,7 +146,6 @@ function hb_report(c: connection, st: HeartbeatState, result: string)
         $ts=network_time(),
         $evidence_id=eid,
         $note=TLS_Heartbleed,
-        $technique="T1190",
         $src=c$id$orig_h,
         $dst=c$id$resp_h,
         $uid=NSM::conn_ref(c),

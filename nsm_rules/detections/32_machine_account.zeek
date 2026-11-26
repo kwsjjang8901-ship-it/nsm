@@ -87,7 +87,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=Machine_Account_Misuse,
-                        $technique="T1557.001",
                         $account=p[0],
                         $src=src,
                         $dst=to_addr(p[2]),

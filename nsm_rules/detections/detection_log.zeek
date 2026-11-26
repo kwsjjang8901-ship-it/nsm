@@ -61,59 +61,8 @@ export {
 
     global write_detection: function(d: DetectionInfo);
 
-    const diagnosis_map: table[Notice::Type] of string = {
-        [Port_Scan]              = "NSM.Recon.PortScan",
-        [Host_Scan]              = "NSM.Recon.HostScan",
-        [SQL_Injection]          = "NSM.WebAttack.SqlInjection",
-        [Webshell_Access]        = "NSM.WebAttack.Webshell",
-        [NTLM_Spray]             = "NSM.CredentialAccess.NtlmSpray",
-        [Kerberos_Spray]         = "NSM.CredentialAccess.KerberosSpray",
-        [Kerberos_Bruteforce]    = "NSM.CredentialAccess.KerberosBruteforce",
-        [Kerberoasting]          = "NSM.CredentialAccess.Kerberoasting",
-        [ASREP_Roasting]         = "NSM.CredentialAccess.AsrepRoasting",
-        [NTLM_Credential_Leak]   = "NSM.CredentialAccess.NtlmCredentialLeak",
-        [Outbound_SMB]           = "NSM.Exfiltration.OutboundSmb",
-        [WinRM_Lateral]          = "NSM.LateralMovement.WinrmAccess",
-        [DCOM_Lateral]           = "NSM.LateralMovement.DcomExec",
-        [SMB_Ransomware]         = "NSM.Impact.SmbRansomware",
-        [Name_Poisoning]         = "NSM.CredentialAccess.NamePoisoning",
-        [DCSync]                 = "NSM.CredentialAccess.DcSync",
-        [Nonstandard_Port]       = "NSM.C2.NonstandardPort",
-        [Long_Connection]        = "NSM.C2.LongConnection",
-        [Unknown_Protocol]       = "NSM.C2.UnknownProtocol",
-        [SSH_Bruteforce]         = "NSM.CredentialAccess.SshBruteforce",
-        [FTP_Bruteforce]         = "NSM.CredentialAccess.FtpBruteforce",
-        [TLS_Heartbleed]         = "NSM.WebAttack.Heartbleed",
-        [Cross_Site_Scripting]   = "NSM.WebAttack.Xss",
-        [HTTP_Bruteforce]        = "NSM.CredentialAccess.HttpBruteforce",
-        [TLS_Beaconing]          = "NSM.C2.TlsBeaconing",
-        [Remote_Service_Creation] = "NSM.LateralMovement.RemoteService",
-        [Remote_Task_Creation]   = "NSM.LateralMovement.RemoteTask",
-        [Remote_WMI_Execution]   = "NSM.LateralMovement.RemoteWmi",
-        [Machine_Account_Misuse] = "NSM.CredentialAccess.MachineAccountMisuse",
-        [AI_Service_Upload]      = "NSM.Exfiltration.AiServiceUpload",
-        [AI_API_From_Server]     = "NSM.C2.AiApiFromServer",
-        [IOC_Match]              = "NSM.C2.IocMatch",
-        [AI_Service_Exploit]     = "NSM.WebAttack.AiServiceExploit",
-        [Coerced_Authentication] = "NSM.CredentialAccess.CoercedAuth",
-        [Remote_Registry_Dump]   = "NSM.CredentialAccess.RemoteRegistryDump",
-        [Zerologon_Attempt]      = "NSM.CredentialAccess.Zerologon",
-        [AD_Enumeration]         = "NSM.Recon.AdEnumeration",
-        [SMB_Admin_Share]        = "NSM.LateralMovement.SmbAccess",
-        [RDP_Lateral]            = "NSM.LateralMovement.RdpAccess",
-        [SSH_Lateral]            = "NSM.LateralMovement.SshAccess",
-        [HTTP_Beaconing]         = "NSM.C2.HttpBeaconing",
-        [DNS_Tunneling]          = "NSM.C2.DnsTunneling",
-        [Encrypted_C2]           = "NSM.C2.EncryptedChannel",
-        [Exfil_Large_Transfer]   = "NSM.Exfiltration.LargeTransfer",
-        [Exfil_Volume_Aggregate] = "NSM.Exfiltration.VolumeAggregate",
-        [Exfil_DNS]              = "NSM.Exfiltration.DnsTunnel",
-        [Exfil_Web_Upload]       = "NSM.Exfiltration.WebUpload",
-        [DGA_Domain]             = "NSM.C2.DgaDomain",
-        [Correlated_KillChain]   = "NSM.Correlation",
-    } &redef;
+    # 진단명은 main.zeek 의 rule_registry 에 있다(NSM::rule_diagnosis).
 
-    # stage_name_map 은 main.zeek 로 이동(evidence_log 와 공용). NSM::stage_name_map 사용.
 
     global attacker_segment: function(a: addr): subnet;
 }
@@ -175,7 +124,7 @@ hook Notice::policy(n: Notice::Info) &priority=-6
     if ( n$note == Correlated_KillChain )
         return;
 
-    if ( n$note !in diagnosis_map )
+    if ( n$note !in rule_registry )
         return;
 
     # 계약: notice.log 에 기록되는 notice 1건 = detection 1건.
@@ -194,15 +143,15 @@ hook Notice::policy(n: Notice::Info) &priority=-6
         d$detection_id = n$evidence_id;
     else
         d$detection_id = cat(n$note, "-", n$ts);
-    d$diagnosis    = diagnosis_map[n$note];
+    d$diagnosis    = rule_registry[n$note]$diagnosis;
     d$rule         = sub(cat(n$note), /^NSM::/, "");
     d$category     = "Single";
     d$severity     = "Information";
     d$first_seen   = n$ts;
     d$last_seen    = n$ts;
 
-    if ( n$note in stage_name_map )
-        d$killchain_stages = vector(stage_name_map[n$note]);
+    if ( rule_registry[n$note]$stage != "" )
+        d$killchain_stages = vector(rule_registry[n$note]$stage);
 
     if ( n?$disposition )
         d$disposition = n$disposition;
@@ -211,8 +160,8 @@ hook Notice::policy(n: Notice::Info) &priority=-6
 
     if ( n?$attack )
         d$techniques = technique_vec(n$attack);
-    else if ( n$note in NSM::attack_map )
-        d$techniques = technique_vec(NSM::attack_map[n$note]);
+    else if ( rule_technique(n$note) != "" )
+        d$techniques = technique_vec(rule_technique(n$note));
 
     if ( n?$src )
         {

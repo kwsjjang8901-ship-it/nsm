@@ -163,18 +163,6 @@ export {
     global corr_notice: event(cn: CorrNotice);
     # chain_max_victims 는 main.zeek 로 이동(detection_log 와 공용).
 
-    const stage_attack: table[Notice::Type] of string = {
-        [Port_Scan]              = "T1046",
-        [Host_Scan]              = "T1018",
-        [HTTP_Beaconing]         = "T1071.001",
-        [Encrypted_C2]           = "T1573.002",
-        [DGA_Domain]             = "T1568.002",
-        [SMB_Admin_Share]        = "T1021.002",
-        [RDP_Lateral]            = "T1021.001",
-        [SSH_Lateral]            = "T1021.004",
-        [Exfil_Large_Transfer]   = "T1041",
-        [Exfil_Volume_Aggregate] = "T1041",
-    } &redef;
 }
 
 type ChainState: record {
@@ -268,14 +256,11 @@ event zeek_init() &priority=10
         }
     }
 
-## 체인 표시용 기법 ID: 상관 전용 표(stage_attack) -> 탐지 공통 표(attack_map) -> notice 이름
+# 체인 표시용 기법 ID: 룰 레지스트리의 기법, 없으면 notice 이름
 function stage_technique(n: Notice::Type): string
     {
-    if ( n in stage_attack )
-        return stage_attack[n];
-    if ( n in NSM::attack_map )
-        return NSM::attack_map[n];
-    return cat(n);
+    local t = rule_technique(n);
+    return t != "" ? t : cat(n);
     }
 
 global kc_counter: count = 0;
@@ -383,60 +368,11 @@ function summary_vec(s: set[string]): vector of string
     return out;
     }
 
-const stage_tag_map: table[Notice::Type] of string = {
-    [Port_Scan]              = "Recon",
-    [Host_Scan]              = "Recon",
-    [SQL_Injection]          = "InitialAccess",
-    [Webshell_Access]        = "InitialAccess",
-    [NTLM_Spray]             = "CredentialAccess",
-    [Kerberos_Spray]         = "CredentialAccess",
-    [Kerberos_Bruteforce]    = "CredentialAccess",
-    [Kerberoasting]          = "CredentialAccess",
-    [ASREP_Roasting]         = "CredentialAccess",
-    [NTLM_Credential_Leak]   = "CredentialAccess",
-    [Outbound_SMB]           = "Exfil",
-    [WinRM_Lateral]          = "Lateral",
-    [DCOM_Lateral]           = "Lateral",
-    [SMB_Ransomware]         = "Impact",
-    [Name_Poisoning]         = "CredentialAccess",
-    [DCSync]                 = "CredentialAccess",
-    [Nonstandard_Port]       = "C2",
-    [Long_Connection]        = "C2",
-    [Unknown_Protocol]       = "C2",
-    [SSH_Bruteforce]         = "CredentialAccess",
-    [FTP_Bruteforce]         = "CredentialAccess",
-    [TLS_Heartbleed]         = "InitialAccess",
-    [Cross_Site_Scripting]   = "InitialAccess",
-    [HTTP_Bruteforce]        = "CredentialAccess",
-    [TLS_Beaconing]          = "C2",
-    [Remote_Service_Creation] = "Lateral",
-    [Remote_Task_Creation]   = "Lateral",
-    [Remote_WMI_Execution]   = "Lateral",
-    [Machine_Account_Misuse] = "CredentialAccess",
-    [AI_Service_Upload]      = "Exfil",
-    [AI_API_From_Server]     = "C2",
-    [IOC_Match]              = "C2",
-    [AI_Service_Exploit]     = "InitialAccess",
-    [Coerced_Authentication] = "CredentialAccess",
-    [Remote_Registry_Dump]   = "CredentialAccess",
-    [Zerologon_Attempt]      = "CredentialAccess",
-    [AD_Enumeration]         = "Recon",
-    [HTTP_Beaconing]         = "C2",
-    [DNS_Tunneling]          = "C2",
-    [Encrypted_C2]           = "C2",
-    [DGA_Domain]             = "C2",
-    [SMB_Admin_Share]        = "Lateral",
-    [RDP_Lateral]            = "Lateral",
-    [SSH_Lateral]            = "Lateral",
-    [Exfil_Large_Transfer]   = "Exfil",
-    [Exfil_Volume_Aggregate] = "Exfil",
-    [Exfil_DNS]              = "Exfil",
-    [Exfil_Web_Upload]       = "Exfil",
-} &redef;
 
 function stage_tag(note: Notice::Type): string
     {
-    return note in stage_tag_map ? stage_tag_map[note] : cat(note);
+    local st = killchain_stage_of(note);
+    return st in stage_tags ? stage_tags[st] : cat(note);
     }
 
 # evidence_ids 의 실제 기록 건수를 합산한다(단계 수가 아니라 근거 행 수).
@@ -568,7 +504,7 @@ function agg_diagnosis(agg: ChainAgg): string
             last = tg;
             }
         }
-    return fmt("%s.%s.%s", NSM::diagnosis_map[Correlated_KillChain], first, last);
+    return fmt("%s.%s.%s", rule_diagnosis(Correlated_KillChain), first, last);
     }
 
 function agg_tids_vec(agg: ChainAgg): vector of string
@@ -586,7 +522,7 @@ function agg_stage_names(agg: ChainAgg): vector of string
     local seen: set[string] = set();
     for ( _i, n in agg$notes )
         {
-        local nm = n in NSM::stage_name_map ? NSM::stage_name_map[n] : cat(n);
+        local nm = killchain_stage_of(n) != "" ? killchain_stage_of(n) : cat(n);
         if ( nm in seen )
             next;
         add seen[nm];

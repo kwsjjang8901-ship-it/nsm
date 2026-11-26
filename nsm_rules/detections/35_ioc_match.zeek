@@ -421,7 +421,6 @@ event Intel::match(s: Intel::Seen, items: set[Intel::Item])
         $ts=network_time(),
         $evidence_id=eid,
         $note=IOC_Match,
-        $technique="T1071",
         $src=src,
         $dst=c$id$resp_h,
         $uid=NSM::conn_ref(c),

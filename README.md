@@ -13,11 +13,11 @@ Zeek 기반 NSM(Network Security Monitoring) 탐지 룰 패키지입니다.
 nsm_rules/
   __load__.zeek             # 패키지 로더 (@load nsm_rules)
   detections/
-    main.zeek               # Notice 타입, 공통 파라미터·헬퍼
+    main.zeek               # Notice 타입, 룰 레지스트리(진단명·ATT&CK·단계), 공통 파라미터·헬퍼
     evidence_log.zeek       # 증적(evidence.log) 스트림
     auth_context.zeek       # 확산 근거의 계정(최근 NTLM·Kerberos 서비스 티켓 인증)
     detection_log.zeek      # 탐지 요약(nsm_detection.log) 스트림
-    attack_mapping.zeek     # Notice → ATT&CK 매핑
+    attack_mapping.zeek     # notice 의 attack 필드(값은 main.zeek 룰 레지스트리)
     notice_aggregation.zeek # 동일 notice 집계
     correlation_killchain.zeek # 킬체인 상관분석
     nsm_config_fixed.zeek   # 운영 튜닝(redef 전용)
@@ -62,6 +62,7 @@ schema/
   fields.zeek               # Zeek 레코드 정의에서 필드·열거값을 뽑는 스크립트
   overlay.json              # 필드 설명·열거값·형식(사람이 고침)
   build.py                  # 스키마·문서 생성(--check: 코드와 다르면 실패)
+  rules.json                # Manager 용 룰 목록(룰·진단명·ATT&CK·킬체인 단계, 룰 레지스트리에서 생성)
   validate.py               # 로그를 스키마로 검사(CI 가 btest 전체 출력에 실행)
 ui/
   mockup/mdsm_nsm_mockup.html  # MDS Manager NSM 화면 목업(예시 데이터). 목업형 리포트의 템플릿(ui/README.md)

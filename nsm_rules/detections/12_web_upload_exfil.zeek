@@ -92,7 +92,6 @@ event zeek_init()
                         $ts=network_time(),
                         $evidence_id=eid,
                         $note=Exfil_Web_Upload,
-                        $technique="T1567.002",
                         $src=src,
                         $dst=to_addr(p[1]),
                         $uid=p[0],

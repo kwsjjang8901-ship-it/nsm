@@ -265,7 +265,6 @@ event beacon_obs(obs: BeaconObs)
             $ts=network_time(),
             $evidence_id=eid,
             $note=HTTP_Beaconing,
-            $technique="T1071.001",
             $src=orig,
             $dst=resp,
             $operation="http_beacon",

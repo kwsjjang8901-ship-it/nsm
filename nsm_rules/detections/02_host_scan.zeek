@@ -71,7 +71,6 @@ event zeek_init()
                 $ts=network_time(),
                 $evidence_id=eid,
                 $note=Host_Scan,
-                $technique="T1018",
                 $src=scanner,
                 $operation="tcp_host_sweep",
                 $detail=fmt("unique_hosts=%d port=%s sample=[%s] window=%s",
