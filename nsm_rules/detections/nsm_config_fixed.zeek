@@ -322,8 +322,8 @@ redef NSM::exfil_bytes_threshold         = 50*1024*1024;   # 단일 연결 orig_
 redef NSM::webupload_bytes               = 50*1024*1024;    # (출발지, 클라우드 서비스)별 창 안 업로드 합계 임계(50MB)
 redef NSM::webupload_epoch               = 1hr;             # 누적 창
 # redef NSM::web_upload_allowlist         += { 10.20.60.0/24 };       # 승인된 클라우드 대역, nsm_config_custom.zeek에 포함됨.
-# 클라우드 서비스 목적지 패턴 추가(예: mega, wetransfer 변형 등):
-# redef NSM::cloud_hosts                  += /(?i:.*mega\.nz)/;
+# 클라우드 저장 서비스 목적지 패턴 추가. 소문자 이름 전체로 비교하므로 이름 전체를 쓴다:
+# redef NSM::cloud_hosts                  += /(.*\.)?pcloud\.com/;
 
 # =============================================================================
 # [10·12·14, 07·09·24·30·33 공용] 명시적 프록시 인식 (proxy_common.zeek)

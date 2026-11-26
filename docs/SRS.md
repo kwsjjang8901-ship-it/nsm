@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 156개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 158개(자산 식별·선별 전송 포함), 합성 pcap 66개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -658,7 +658,7 @@ DNS 터널(iodine, dnscat2 등)은 공격자 도메인의 서브도메인에 데
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 질의 | `dns_request`의 `query`, `qtype` |
-| 등록 도메인 | `parent_domain()` (co.kr 등 2단계 공용 접미사 처리) |
+| 등록 도메인 | `parent_domain()`: 공용 접미사 + 라벨 1개. 접미사는 `multi_label_suffixes`(co.kr 등), 국가 2단계(`cc_second_levels`: com.vn·co.th 등), 클라우드·동적 DNS(`tenant_suffixes`: duckdns.org·cloudfront.net 등, 하위 이름마다 주인이 다름) |
 | 수상한 질의 | TXT(16)·NULL(10) 질의, 서브도메인에 40자 이상 라벨, 20자 이상이면서 무작위형(13 DGA의 라벨 점수 2 이상) 라벨 중 하나 |
 
 - 주체: `src` = 감염 host.
@@ -695,7 +695,7 @@ DGA 악성코드는 알고리즘으로 만든 도메인을 대량 조회하고, 
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
 | 응답 | `dns_message`(응답 쪽)의 `rcode`(3 = NXDOMAIN), `c$dns$query` |
-| 등록 라벨 | `registered_label()`: `www.xk3f.com` → `xk3f`, `a.b.xk3f.co.kr` → `xk3f` |
+| 등록 라벨 | `registered_label()`: `www.xk3f.com` → `xk3f`, `a.b.xk3f.co.kr` → `xk3f`, `www.xk3f.com.vn` → `xk3f`, `xk3f.duckdns.org` → `xk3f`(동적 DNS 아래 무작위 이름도 판정) |
 | 무작위형 점수 | 모음 비율 0.25 미만(+1), 연속 자음 4자 이상(+1), 길이 정규화 엔트로피 0.9 이상(+1), 숫자 비율 0.15\~0.70(+1), 16자 이상(+1), 16진수만 + 숫자·문자 혼합 8자 이상(+2). 합이 2 이상이면 무작위형 |
 
 - 주체: `src` = 감염 host.
@@ -776,7 +776,7 @@ C2·터널은 방화벽 정책을 피하려고 HTTP·TLS·SSH를 4444, 8081, 222
 | --- | --- |
 | IOC 적재 | IOC 파일(`ioc_file`, TSV)을 Input 프레임워크 `Input::add_table`(`REREAD`)로 읽어 Intel 프레임워크에 `Intel::insert`. 다시 읽을 때 지운 줄은 `Intel::remove`로 뺌. 클러스터에서는 매니저만 읽고 Intel 프레임워크가 워커에 배포(btest `cluster/ioc-match`, `cluster/ioc-match-proxy`: 워커가 본 값을 매니저가 판정, 다시 읽어 지운 IOC는 워커에서도 빠짐, 예외 적용). pcap을 읽을 때는 적재가 끝날 때까지 패킷 처리를 멈춤(`suspend_processing`) |
 | IP | 내부 → 외부 연결의 목적지: TCP는 `connection_established`(연결 성립), 응답 없는 TCP 시도와 UDP는 `connection_state_remove`. `Intel::seen($host=…)`로 주소·대역(`Intel::ADDR`·`SUBNET`) 모두 맞춤 |
-| 도메인 | `dns_request`의 조회 이름, `ssl_extension_server_name`의 SNI, `http_message_done`의 `c$http$host`(프록시 CONNECT 대상 포함). Intel 도메인 일치는 정확 일치뿐이라, 이름에서 등록 도메인(`parent_domain`)까지 한 단계씩 떼어 각각 맞춤(`a.b.evil.example` → `a.b.evil.example`, `b.evil.example`, `evil.example`) |
+| 도메인 | `dns_request`의 조회 이름, `ssl_extension_server_name`의 SNI, `http_message_done`의 `c$http$host`(프록시 CONNECT 대상 포함). Intel 도메인 일치는 정확 일치뿐이라, 이름에서 라벨 2개가 남을 때까지 한 단계씩 떼어 각각 맞춤(`a.b.evil.example` → `a.b.evil.example`, `b.evil.example`, `evil.example`). 동적 DNS 이름(`x.evil.duckdns.org`)은 서비스 도메인(`duckdns.org`) IOC에도 맞음. 공용 접미사 자체(`co.kr`)는 보지 않음 |
 | URL | `http_message_done`의 Host + URI를 "호스트/경로"로 정규화(스킴 제거, 호스트 소문자, 포트 제거, 경로 없으면 `/`. 프록시 절대 URL은 스킴만 떼어 씀). 쿼리 포함 전체와 쿼리를 뗀 것 둘 다 `Intel::URL`로 맞춤. IOC URL도 같은 규칙으로 정규화해 넣음 |
 | 연결 상태 | 일치한 곳을 Intel `Where` 값으로 구분: 연결 성립(`established`)·연결 시도(`attempt`)·DNS 조회(`lookup`)·TLS·HTTP 요청(`request`) |
 
@@ -865,7 +865,7 @@ PC에 프록시가 설정된 환경(PAC·WPAD 포함)에서는 PC의 웹 연결�
 
 | 데이터 | 값을 얻는 방법 (Zeek 이벤트·필드) |
 | --- | --- |
-| 목적지 서비스 | `c$ssl$server_name`(SNI) 우선, 없으면 프록시 CONNECT 대상, 그다음 `c$http$host`. `cloud_hosts` 패턴과 비교. 누적 키는 등록 도메인(`parent_domain`) |
+| 목적지 서비스 | `c$ssl$server_name`(SNI) 우선, 없으면 프록시 CONNECT 대상, 그다음 `c$http$host`. `cloud_hosts` 패턴과 **이름 전체로** 비교(소문자). 목록은 파일 저장·공유 서비스만: Drive·Google Cloud Storage·`www.googleapis.com`(Drive 업로드 API), Dropbox, S3, Azure Blob, OneDrive·SharePoint, MEGA, WeTransfer, Box. 일반 AWS API(로그·모니터링·SSM 등)와 일반 Google API(FCM·업데이트 등)는 넣지 않음. 누적 키는 서비스(`cloud_service`: S3는 버킷·리전과 무관하게 `s3.amazonaws.com`, 그 밖에는 등록 도메인) |
 | 업로드량 | `connection_state_remove`의 `c$orig$size`를 (출발지, 서비스)별로 합산(SumStats SUM, 창 `webupload_epoch` 1시간) |
 | 근거 표본 | 연결 표본 최대 5개(SumStats SAMPLE). 임계를 넘긴 연결도 들어가도록 표본을 합계보다 먼저 넣음 |
 
@@ -1309,6 +1309,8 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `lm_num_samples` | 20 | 집계형 탐지가 근거로 남기는 최대 표본 수 | 근거를 더 남기려면 올리되 메모리 증가 |
 | `chain_max_victims` | 8 | 탐지 요약의 피해 호스트 표시 개수 | 표시용 |
 | `multi_label_suffixes` | `co.kr`, `or.kr`, `go.kr` 등 | 등록 도메인을 구할 때 2단계로 보는 접미사 | 국가 도메인 추가 시 `+=` |
+| `cc_second_levels` | com, net, org, edu, gov, co, ac 등 | 끝이 2글자 국가 도메인이고 바로 앞 라벨이 이 중 하나면 2단계 공용 접미사로 봄(`example.com.vn`) |  |
+| `tenant_suffixes` | amazonaws.com, cloudfront.net, azurewebsites.net, duckdns.org, ddns.net 등 | 하위 이름마다 주인이 다른 서비스 도메인. 이 접미사 바로 아래 라벨까지를 등록 도메인으로 봄 | 08·13·메타데이터 DNS 요약·IOC 도메인에 영향 |
 
 #### 01 포트 스캔 · 02 호스트 스캔
 
@@ -1404,7 +1406,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `exfil_bytes_threshold` | 50*1024*1024 (룰 100MB) | \[10\] 단일 연결 업로드 바이트 | 백업 환경에서는 올림 |
 | `webupload_bytes` | 50*1024*1024 | \[12\] (출발지, 클라우드 서비스)별 창 안 업로드 합계 임계 |  |
 | `webupload_epoch` | 1hr | \[12\] 누적 창 | 늘리면 천천히 올리는 유출도 잡지만 정상 동기화 누적도 늘어남 |
-| `cloud_hosts` | Google Drive·Dropbox·S3 등 패턴 | \[12\] 클라우드 저장소 호스트 |  |
+| `cloud_hosts` | Drive·GCS·Dropbox·S3·Azure Blob·OneDrive·SharePoint·MEGA·WeTransfer·Box | \[12\] 클라우드 저장·공유 서비스 호스트(소문자 이름 전체로 비교) | 추가할 때 `(.*\.)?example\.com` 처럼 이름 전체를 쓴다 |
 | `web_upload_allowlist` | 비어 있음 | \[12\] 예외 목적지 | 예외 엔진 drop 예외로 등록됨. 새 예외는 예외 파일 권장(7.8절) |
 | `exfil_epoch` | 1min | \[14\] 집계 창 |  |
 | `exfil_thresholds` | vector(50.0*1024*1024) (룰 5MB) | \[14\] 호스트당 합계 임계 |  |
@@ -1751,7 +1753,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 156개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 106개(`tests/btest/rules`), 클러스터 테스트 12개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 158개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 108개(`tests/btest/rules`), 클러스터 테스트 12개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1787,8 +1789,6 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |
 | 확산 룰(06·15·16·20)은 여러 대로 퍼지는 경우만 탐지 | 한 대로의 원격 실행은 미탐 | 임계를 1로 낮추되 관리 서버 예외를 충실히 등록 |
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
-| 등록 도메인 추출이 작은 접미사 목록 기반 | 08·13에서 드문 접미사가 한 도메인으로 묶일 수 있음 | `multi_label_suffixes` 보강 또는 Public Suffix List 도입 |
-| 12의 `cloud_hosts`가 `*.amazonaws.com` 등 넓음 | 백업·CI 트래픽 오탐 가능 | 패턴 세분화 |
 | 35 IOC 일치의 범위 | HTTPS URL은 경로가 안 보여 호스트(도메인)까지만 맞음. TLS 지문·파일 해시는 IOC로 쓰지 않음. IOC IP가 CDN·공유 호스팅이면 정상 사이트도 맞음 | URL IOC의 호스트를 도메인 IOC로도 넣음. 피드 품질 관리(공유 IP 제외, 만료일) |
 | 프록시 경유 주기 접속(07·30)은 기본 끔 | 켜지 않으면 프록시를 쓰는 PC의 C2 주기 접속을 놓침. 켜면 흔한 OS·SaaS 주기 통신이 많이 잡힘(고객 환경 1.4시간 측정 07 +10건, 30 +45건) | 기본 예외 목록과 함께 켜고, 고객 환경에서 적중을 보며 목록을 늘림. 프록시 경유 장기 연결(24)은 상시 메신저 연결이 많아 보지 않음 |
 | HTTPS 프록시(PC-프록시 구간도 TLS)와 프록시 바깥 구간만 보는 미러링 | 앞의 것은 CONNECT가 암호화돼 프록시 경유를 모름, 뒤의 것은 출발지가 모두 프록시라 PC를 모름 | 설치 가이드에서 미러링을 PC-프록시 구간으로 잡게 안내. 앞의 것은 "프록시로 올린 양"만 보는 보조 룰 검토 |
