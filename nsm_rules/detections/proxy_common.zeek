@@ -119,7 +119,7 @@ event http_reply(c: connection, version: string, code: count, reason: string)
         return;
     if ( ! c?$http || ! c$http?$method || c$http$method != "CONNECT" )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) )
         return;
     add proxy_connect_ok[c$uid];
     }
@@ -188,11 +188,11 @@ function proxy_target(c: connection): string
 
 function exfil_outbound(c: connection): bool
     {
-    if ( ! Site::is_local_addr(c$id$orig_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) )
         return F;
     if ( exfil_skip_proxy_source && is_proxy_host(c$id$orig_h) )
         return F;
-    return is_external(c$id$resp_h) || conn_via_proxy(c);
+    return ( c$id$resp_h !in Site::local_nets ) || conn_via_proxy(c);
     }
 
 function conn_dest_name(c: connection): string
@@ -243,7 +243,7 @@ function proxy_c2_dest(c: connection): string
     if ( is_valid_ip(n) )
         {
         local a = to_addr(n);
-        if ( a == c$id$resp_h || Site::is_local_addr(a) || a in proxy_servers )
+        if ( a == c$id$resp_h || ( a in Site::local_nets ) || a in proxy_servers )
             return "";
         }
     return d$name;

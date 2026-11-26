@@ -122,7 +122,7 @@ function observe_port_scan(c: connection, failed: bool, kind: string)
     {
     if ( ! detect_port_scan )
         return;
-    if ( port_scan_local_only && ! Site::is_local_addr(c$id$orig_h) )
+    if ( port_scan_local_only && ! ( c$id$orig_h in Site::local_nets ) )
         return;
     # 성공 연결 제외 옵션: 미응답/거부(failed)만 카운트
     if ( ! failed && ! port_scan_count_established )

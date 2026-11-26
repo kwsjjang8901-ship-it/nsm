@@ -303,8 +303,8 @@ function meta_in_scope(scope: MetaScope, cid: conn_id): bool
     {
     if ( scope == META_ALL )
         return T;
-    local ol = Site::is_local_addr(cid$orig_h);
-    local rl = Site::is_local_addr(cid$resp_h);
+    local ol = ( cid$orig_h in Site::local_nets );
+    local rl = ( cid$resp_h in Site::local_nets );
     local boundary = ol != rl;
     local admin = ol && rl && cid$resp_p in meta_admin_ports;
     switch ( scope )
@@ -326,7 +326,8 @@ function meta_cid_key(cid: conn_id): string
     }
 
 ## 스트림별 판정 재료. 새 스트림을 선별 전송하려면 여기에 추가한다.
-function meta_extract(id: Log::ID, rec: any): MetaRow
+##   중복 억제 키(문자열 만들기)는 범위·조건을 통과해 중복 억제까지 온 행에만 만든다(want_key).
+function meta_extract(id: Log::ID, rec: any, want_key: bool): MetaRow
     {
     local r: MetaRow;
 
@@ -334,7 +335,8 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
         {
         local cn = rec as Conn::Info;
         r$cid = cn$id;
-        r$key = cat(meta_cid_key(cn$id), ":", cn$id$resp_p);
+        if ( want_key )
+            r$key = cat(meta_cid_key(cn$id), ":", cn$id$resp_p);
         }
     else if ( rec is KRB::Info )
         r$cid = (rec as KRB::Info)$id;
@@ -344,23 +346,26 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
         {
         local tr = rec as SMB::TreeInfo;
         r$cid = tr$id;
-        r$key = cat(tr$id$orig_h, ">", tr$id$resp_h, "|", tr?$path ? to_lower(tr$path) : "-");
+        if ( want_key )
+            r$key = cat(tr$id$orig_h, ">", tr$id$resp_h, "|", tr?$path ? to_lower(tr$path) : "-");
         }
     else if ( rec is SMB::FileInfo )
         {
         local fi = rec as SMB::FileInfo;
         r$cid = fi$id;
         r$keep = fi?$action && fi$action in meta_smb_file_actions;
-        r$key = cat(meta_cid_key(fi$id), "|", fi$action, "|",
-                    fi?$path ? to_lower(fi$path) : "-", "|", fi?$name ? to_lower(fi$name) : "-");
+        if ( want_key )
+            r$key = cat(meta_cid_key(fi$id), "|", fi$action, "|",
+                        fi?$path ? to_lower(fi$path) : "-", "|", fi?$name ? to_lower(fi$name) : "-");
         }
     else if ( rec is DCE_RPC::Info )
         {
         local dr = rec as DCE_RPC::Info;
         r$cid = dr$id;
         r$keep = dr?$endpoint && to_lower(dr$endpoint) in meta_dce_rpc_endpoints;
-        r$key = cat(meta_cid_key(dr$id), "|", dr?$endpoint ? dr$endpoint : "-", "|",
-                    dr?$operation ? dr$operation : "-");
+        if ( want_key )
+            r$key = cat(meta_cid_key(dr$id), "|", dr?$endpoint ? dr$endpoint : "-", "|",
+                        dr?$operation ? dr$operation : "-");
         }
     else if ( rec is SSL::Info )
         {
@@ -368,7 +373,8 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
         r$cid = sl$id;
         local sni = sl?$server_name ? to_lower(sl$server_name) : "";
         r$keep = ! domain_matches(sni, meta_domain_allowlist);
-        r$key = cat(sl$id$orig_h, "|", sni, "|", sl?$ja3 ? sl$ja3 : "-");
+        if ( want_key )
+            r$key = cat(sl$id$orig_h, "|", sni, "|", sl?$ja3 ? sl$ja3 : "-");
         }
     else if ( rec is HTTP::Info )
         {
@@ -376,8 +382,9 @@ function meta_extract(id: Log::ID, rec: any): MetaRow
         r$cid = hp$id;
         local host = hp?$host ? to_lower(hp$host) : "";
         r$keep = ! domain_matches(host, meta_domain_allowlist);
-        r$key = cat(hp$id$orig_h, "|", host, "|", hp?$method ? hp$method : "-", "|",
-                    hp?$uri_path ? hp$uri_path : "-", "|", hp?$status_code ? cat(hp$status_code) : "-");
+        if ( want_key )
+            r$key = cat(hp$id$orig_h, "|", host, "|", hp?$method ? hp$method : "-", "|",
+                        hp?$uri_path ? hp$uri_path : "-", "|", hp?$status_code ? cat(hp$status_code) : "-");
         }
     else if ( rec is DNS::Info )
         {
@@ -611,7 +618,7 @@ hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
         break;
     local spec = meta_export_streams[id];
     local st = meta_counter(spec$name);
-    local row = meta_extract(id, rec);
+    local row = meta_extract(id, rec, F);
 
     # 1) 범위(가장 싸고, 가장 많이 거른다)
     if ( row?$cid && ! meta_in_scope(spec$scope, row$cid) )
@@ -640,9 +647,10 @@ hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
         }
 
     # 3) 중복 억제
-    if ( spec$dedup > 0secs && row$key != "" )
+    local dkey = spec$dedup > 0secs ? meta_extract(id, rec, T)$key : "";
+    if ( dkey != "" )
         {
-        local dk = cat(spec$name, "|", row$key);
+        local dk = cat(spec$name, "|", dkey);
         local now = network_time();
         if ( dk in meta_dedup && meta_dedup[dk] > now )
             {
@@ -671,6 +679,8 @@ hook meta_policy(rec: any, id: Log::ID, filter: Log::Filter)
         meta_rate_count[spec$name] = n + 1;
         }
 
+    # Community ID 는 보내는 행에만 채운다(원본 로그를 남기는 스트림은 기록 전에 이미 채움, community_id.zeek)
+    cid_fill(rec);
     ++st$sent;
     }
 
@@ -731,6 +741,11 @@ event zeek_init() &priority=0
 # filter_log(우선순위 -1)가 스트림을 정리한 뒤에 실행한다.
 event zeek_init() &priority=-2
     {
+    # 원본(default) 로그가 남는 스트림은 모든 필터보다 먼저 Community ID 를 채운다(그 밖에는 보내는 선별 행에만)
+    for ( cid_id in set(KRB::LOG, NTLM::LOG, SMB::MAPPING_LOG, SMB::FILES_LOG, DCE_RPC::LOG, RDP::LOG, SSH::LOG, SSL::LOG, HTTP::LOG) )
+        if ( keep_all_log_streams || cid_id in keep_log_streams || ( meta_export_enable && meta_keep_raw_local ) )
+            add cid_early_streams[cid_id];
+
     if ( ! meta_export_enable )
         {
         Log::disable_stream(META_STATS_LOG);

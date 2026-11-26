@@ -123,7 +123,7 @@ event http_message_done(c: connection, is_orig: bool, stat: http_message_stat)
         return;
     if ( ! c?$http || ! c$http?$method || c$http$method == "CONNECT" )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) || ! conn_via_proxy(c) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || ! conn_via_proxy(c) )
         return;
     local n = proxy_c2_dest(c);
     if ( n == "" )
@@ -169,7 +169,7 @@ event connection_state_remove(c: connection)
     if ( proxy_aware_beacon && conn_via_proxy(c) )
         return;                            # 프록시 경유는 위의 Host 별 관측으로
 
-    if ( ! Site::is_local_addr(orig) || ! is_external(resp) )
+    if ( ! ( orig in Site::local_nets ) || ! ( resp !in Site::local_nets ) )
         return;                            # 내부 -> 외부 C2 방향만
     # 예외(예외 파일 + 기존 beacon_allowlist·beacon_allowlist_domains). 워커에서 연결마다 판정해
     #   예외 연결은 상태 보유 노드로 보내지 않는다. 연결이 끝난 시점이라 HTTP Host(domain 축)를 쓸 수 있다.

@@ -92,7 +92,7 @@ function web_bf_observe(c: connection, pw: string, user: string, where: string)
     {
     if ( pw == "" )
         return;
-    if ( web_attack_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( web_attack_local_servers_only && ! ( c$id$resp_h in Site::local_nets ) )
         return;
     if ( NSM::exception_drop_agg(HTTP_Bruteforce, c) )
         return;
@@ -234,7 +234,7 @@ event http_reply(c: connection, version: string, code: count, reason: string) &p
         return;
     if ( ! c?$http || ! c$http?$username )
         return;
-    if ( web_attack_local_servers_only && ! Site::is_local_addr(c$id$resp_h) )
+    if ( web_attack_local_servers_only && ! ( c$id$resp_h in Site::local_nets ) )
         return;
     if ( NSM::exception_drop_agg(HTTP_Bruteforce, c) )
         return;

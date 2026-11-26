@@ -35,7 +35,7 @@ export {
 
 function outbound_smb_target(c: connection, note: Notice::Type): bool
     {
-    if ( ! Site::is_local_addr(c$id$orig_h) || Site::is_local_addr(c$id$resp_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || ( c$id$resp_h in Site::local_nets ) )
         return F;
     # 예외(예외 파일 + 기존 outbound_smb_allowlist·outbound_smb_allowed_dsts)
     if ( NSM::exception_drop(note, c) )

@@ -28,20 +28,27 @@ event arp_reply(mac_src: string, mac_dst: string, SPA: addr, SHA: string, TPA: a
 	arp_emit(SPA, SHA, "arp");
 	}
 
+# 연결마다 같은 (IP, MAC) 이 반복되므로, emit 의 중복 억제(suppress_interval)와 같은 기간 동안
+#   이미 본 (IP, 원본 MAC) 은 MAC 정규화·emit 호출 자체를 건너뛴다(결과는 같고 연결당 비용만 줄어든다).
+global conn_mac_seen: set[addr, string] &create_expire=suppress_interval;
+
+function conn_mac(ip: addr, raw: string, uid: string)
+	{
+	if ( [ip, raw] in conn_mac_seen )
+		return;
+	add conn_mac_seen[ip, raw];
+	local m = normalize_mac(raw);
+	emit(ip, MAC, m, "conn", 40, uid, m);
+	}
+
 event new_connection(c: connection)
 	{
 	if ( ! enable_conn_mac )
 		return;
 
 	if ( c$orig?$l2_addr )
-		{
-		local om = normalize_mac(c$orig$l2_addr);
-		emit(c$id$orig_h, MAC, om, "conn", 40, c$uid, om);
-		}
+		conn_mac(c$id$orig_h, c$orig$l2_addr, c$uid);
 
 	if ( c$resp?$l2_addr )
-		{
-		local rm = normalize_mac(c$resp$l2_addr);
-		emit(c$id$resp_h, MAC, rm, "conn", 40, c$uid, rm);
-		}
+		conn_mac(c$id$resp_h, c$resp$l2_addr, c$uid);
 	}

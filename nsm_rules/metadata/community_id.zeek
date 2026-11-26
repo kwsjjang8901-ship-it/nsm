@@ -35,6 +35,12 @@ export {
     redef record SSH::Info      += { community_id: string &optional &log; };
     redef record SSL::Info      += { community_id: string &optional &log; };
     redef record HTTP::Info     += { community_id: string &optional &log; };
+
+    ## 레코드의 community_id 를 채운다(이미 있으면 그대로). 선별 전송은 보내는 행에만 부른다(main.zeek meta_policy)
+    global cid_fill: function(rec: any);
+
+    ## 원본(default) 로그가 남아 모든 필터보다 먼저 채워야 하는 스트림(metadata/main.zeek 가 시작할 때 정함)
+    global cid_early_streams: set[Log::ID] = set();
 }
 
 # conn 의 Community ID(Zeek 스크립트)도 같은 seed 를 쓰게 맞춘다
@@ -49,8 +55,15 @@ function cid_of(id: conn_id): string
     return community_id_v1(id, community_id_seed);
     }
 
-# 기록 직전(모든 필터보다 먼저) 한 번 채운다. 원본 로그(T2)와 선별 전송 로그에 같은 값이 남는다.
+# 원본 로그(T2 등)가 남는 스트림은 기록 직전(모든 필터보다 먼저) 채워 원본과 선별 전송에 같은 값이 남게 한다.
+#   원본이 꺼진 운영 형상에서는 선별 전송이 보내기로 한 행에만 채운다(대부분의 행은 범위·조건·중복 억제로 빠짐).
 hook Log::log_stream_policy(rec: any, id: Log::ID) &priority=10
+    {
+    if ( id in cid_early_streams )
+        cid_fill(rec);
+    }
+
+function cid_fill(rec: any)
     {
     if ( rec is SSL::Info )
         {

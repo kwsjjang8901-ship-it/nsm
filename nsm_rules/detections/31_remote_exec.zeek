@@ -84,7 +84,7 @@ event dce_rpc_response(c: connection, fid: count, ctx_id: count, opnum: count, s
     {
     if ( ! detect_remote_exec || ! c?$dce_rpc || ! c$dce_rpc?$endpoint || ! c$dce_rpc?$operation )
         return;
-    if ( ! Site::is_local_addr(c$id$orig_h) || ! Site::is_local_addr(c$id$resp_h) )
+    if ( ! ( c$id$orig_h in Site::local_nets ) || ! ( c$id$resp_h in Site::local_nets ) )
         return;
     local ep = c$dce_rpc$endpoint;
     local op = c$dce_rpc$operation;

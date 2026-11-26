@@ -104,7 +104,7 @@ function observe_host_scan(c: connection, failed: bool)
     {
     if ( ! detect_host_scan )
         return;
-    if ( host_scan_local_only && ! Site::is_local_addr(c$id$orig_h) )
+    if ( host_scan_local_only && ! ( c$id$orig_h in Site::local_nets ) )
         return;
     # 80·443·53 기본 제외는 탐지 정의라 룰에 둔다
     if ( c$id$resp_p in host_scan_exclude_ports )

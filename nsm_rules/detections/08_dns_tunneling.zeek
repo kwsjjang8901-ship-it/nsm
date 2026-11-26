@@ -122,31 +122,31 @@ event zeek_init()
     if ( ! detect_dns_tunnel )
         return;
 
-    local r_total = SumStats::Reducer($stream="nsm.dnstun.total", $apply=set(SumStats::SUM));
+    # 질의 하나를 관측 한 번으로: 건수(관측 수 num), 고유 서브도메인(UNIQUE), 실린 바이트(SUM)
+    local r_dns   = SumStats::Reducer($stream="nsm.dnstun", $apply=set(SumStats::SUM, SumStats::UNIQUE));
     local r_susp  = SumStats::Reducer($stream="nsm.dnstun.susp",
                                       $apply=set(SumStats::SUM, SumStats::SAMPLE),
                                       $num_samples=lm_num_samples);
-    local r_uniq  = SumStats::Reducer($stream="nsm.dnstun.uniq", $apply=set(SumStats::UNIQUE));
-    local r_bytes = SumStats::Reducer($stream="nsm.dnstun.bytes", $apply=set(SumStats::SUM));
 
     SumStats::create([
         $name      = "nsm-detect-dns-tunnel",
         $epoch     = dnstun_interval,
-        $reducers  = set(r_total, r_susp, r_uniq, r_bytes),
+        $reducers  = set(r_dns, r_susp),
         $epoch_result(ts: time, key: SumStats::Key, result: SumStats::Result) =
             {
-            if ( "nsm.dnstun.total" !in result || "nsm.dnstun.susp" !in result )
+            if ( "nsm.dnstun" !in result || "nsm.dnstun.susp" !in result )
                 return;
 
-            local total = result["nsm.dnstun.total"]$sum;
+            local rd    = result["nsm.dnstun"];
+            local total = rd$num + 0.0;
             local rs    = result["nsm.dnstun.susp"];
             local susp  = rs$sum;
             local ratio = ( total > 0 ) ? susp / total : 0.0;
             if ( ratio < dnstun_suspicious_ratio )
                 return;
 
-            local uniq  = ( "nsm.dnstun.uniq" in result ) ? result["nsm.dnstun.uniq"]$unique : 0;
-            local bytes = ( "nsm.dnstun.bytes" in result ) ? result["nsm.dnstun.bytes"]$sum : 0.0;
+            local uniq  = rd$unique;
+            local bytes = rd$sum;
             local parent = key$str;
             local detail = fmt("total=%.0f suspicious=%.0f ratio=%.2f unique_sub=%d encoded_bytes=%.0f window=%s",
                                total, susp, ratio, uniq, bytes, dnstun_interval);
@@ -210,7 +210,7 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
         return;
 
     local src = c$id$orig_h;
-    if ( dnstun_local_only && ! Site::is_local_addr(src) )
+    if ( dnstun_local_only && ! ( src in Site::local_nets ) )
         return;
     if ( src in dns_tunnel_resolvers )
         return;
@@ -238,9 +238,7 @@ event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qcla
     local subdom = ( |q| > |parent| ) ? sub_bytes(q, 1, |q| - |parent| - 1) : "";
     local key: SumStats::Key = [$host=src, $str=parent];
 
-    SumStats::observe("nsm.dnstun.total", key, [$num=1]);
-    SumStats::observe("nsm.dnstun.uniq",  key, [$str=subdom]);
-    SumStats::observe("nsm.dnstun.bytes", key, [$num=|subdom|]);
+    SumStats::observe("nsm.dnstun", key, [$num=|subdom|, $str=subdom]);
     # 수상한 질의만 관측(표본 = 근거). 하나도 없으면 판정하지 않는다.
     if ( dns_tunnel_query_suspicious(subdom, qtype) )
         SumStats::observe("nsm.dnstun.susp", key, [$num=1, $str=q]);

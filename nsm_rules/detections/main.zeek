@@ -502,7 +502,7 @@ function cloud_service(name: string): string
 function is_external(a: addr): bool
     {
     # local_nets 에 포함되지 않으면 외부로 간주
-    return ! Site::is_local_addr(a);
+    return ! ( a in Site::local_nets );
     }
 
 function notice_suppressed(note: Notice::Type, identifier: string): bool
