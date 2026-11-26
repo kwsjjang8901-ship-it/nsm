@@ -47,6 +47,7 @@ tests/
     output/                 # 실행 결과: 테스트별 Zeek 로그(JSON), 커밋 안 함
   run_tests.sh              # 로컬 zeek 또는 Docker(zeek/zeek)로 실행
   measure_meta_export.sh    # 선별 전송·자산 식별 전송량·처리 시간 측정 (pcap 입력, 반복 실행)
+  measure_perf.py           # 센서 처리 성능 측정: 구성별 코어당 처리량·최대 메모리(docs/SENSOR_SIZING_GUIDE.md)
   run_pcap.sh               # pcap 1회 실행 결과 요약 + 통합 리포트(<pcap 이름>_report.html): 공격 스토리·탐지·킬체인·자산·선별 전송·전송량·예외·센서 상태. -S 면 Suricata 도 함께
                             #   디렉터리나 pcap 여러 개를 주면 파일마다 따로 실행하고 결과 표·index.html 을 만든다
                             #   -x 예외 파일, -u OUI 파일(IEEE·maclookup 형식), -g Recog XML 폴더(리포트 자산 보강)
@@ -72,6 +73,7 @@ docs/
   REPORT_SPEC.md            # 통합 리포트(run_pcap.sh·report_pcap.py) 생성 구조와 스펙
   DETECTION_ENRICH_SPEC.md  # 탐지 정보 보강(Manager): 메타데이터로 판단 4개·핵심 사실·기록 표, 룰별 코드 없는 구조
   SENSOR_CONTROL_SPEC.md    # 센서 제어(Manager → 센서): 룰 정책 파일·재시작 배포 절차·룰 끄기·엔진 업데이트·재시작 없는 항목
+  SENSOR_SIZING_GUIDE.md    # 센서 성능·용량 가이드: 구성별 처리량 측정, 워커·코어·메모리·디스크 산정식, 증설 기준
   SRS_METADATA_EXPORT.md    # 메타데이터 선별 전송 요구사항 명세·설정 가이드(원본)
   METADATA_EXPORT_PLAN.md   # 메타데이터 선별 전송 개발 계획·스펙
   POC_RESULT.md             # 통합 PoC 결과 보고(자산 식별·탐지·메타데이터, CIC-IDS2017 검증)
