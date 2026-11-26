@@ -40,7 +40,7 @@ Manager가 이 메타데이터로 탐지 상세에 붙이는 정보(성공 흔�
 | 요약 | 행을 쓰지 않고 노드 메모리에서 묶어 주기마다 한 행으로 쓰는 방식(conn, DNS) |
 | 경계 연결 | 출발지와 목적지 중 하나만 내부망(`Site::local_nets`)인 연결 |
 | 내부 관리 연결 | 내부 → 내부 연결 중 목적지 포트가 관리·인증 포트(`meta_admin_ports`)인 것 |
-| 등록 도메인 | `www.a.example.co.kr` → `example.co.kr`처럼 공용 접미사 바로 위까지의 이름(`parent_domain`) |
+| 등록 도메인 | `www.a.example.co.kr` → `example.co.kr`처럼 공용 접미사 바로 위까지의 이름(`parent_domain`). 클라우드·동적 DNS는 고객별 이름까지(`x.evil.duckdns.org` → `evil.duckdns.org`, `a-1.us-east-1.elb.amazonaws.com` → `elb.amazonaws.com`, [SRS](SRS.md) 7장 `tenant_suffixes`) |
 | 노드 | Zeek 프로세스 하나. 단독 실행은 `zeek`, 클러스터는 worker-1 등 |
 
 ## 2. 시스템 구성

@@ -124,14 +124,14 @@ event connection_state_remove(c: connection)
 
     # 목적지 서비스 식별: SNI(TLS) > 프록시 CONNECT 대상 > HTTP Host
     local name = conn_dest_name(c);
-    if ( name == "" || cloud_hosts !in name )  # 식별 안 되거나 클라우드 서비스 아님
+    if ( name == "" || cloud_hosts != to_lower(name) )  # 식별 안 되거나 클라우드 저장 서비스 아님(이름 전체로 비교)
         return;
 
     # 예외(예외 파일 + 기존 web_upload_allowlist). 축: 목적지, 도메인(SNI·Host) 등. 집계 전에 거른다
     if ( NSM::exception_drop_agg(Exfil_Web_Upload, c) )
         return;
 
-    local svc = parent_domain(name);
+    local svc = cloud_service(name);
     local key: SumStats::Key = [$host=c$id$orig_h, $str=svc];
     # 표본을 먼저 넣는다: 합계를 넣는 순간 임계를 넘으면 그 연결도 근거에 남도록
     SumStats::observe("nsm.webupload.sample", key,

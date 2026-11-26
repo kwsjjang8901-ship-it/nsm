@@ -2831,6 +2831,35 @@ def gen_krb_tgs_error(out):
     cap.write(os.path.join(out, "krb_tgs_error.pcap"))
 
 
+def gen_domain_fp(out):
+    """12 클라우드 목록·등록 도메인 추출(2026-11 점검 4·5번).
+    업로드(10MB 6번, 70초 간격: 14 의 1분 합계에는 닿지 않고 12 의 1시간 합계 50MB 는 넘음)
+      .5  일반 AWS API(로그·모니터링·SSM 등, 모두 *.amazonaws.com) -> 12 미탐(전에는 amazonaws.com 한 서비스로 누적돼 탐지)
+      .6  일반 Google API(fcm·update 등 *.googleapis.com) -> 12 미탐(전에는 googleapis.com 로 누적돼 탐지)
+      .7  S3 버킷(가상 호스트·리전) -> 12 탐지(서비스 s3.amazonaws.com)
+      .8  Azure Blob -> 12 탐지
+    DGA(무작위 라벨 NXDOMAIN 60건)
+      .20 무작위 라벨 + com.vn(공용 접미사 목록에 없는 국가 2단계) -> 13 탐지(전에는 등록 라벨이 com 이라 미탐)
+      .21 무작위 라벨 + duckdns.org(동적 DNS) -> 13 탐지(전에는 등록 라벨이 duckdns 라 미탐)
+    """
+    mb = 1024 * 1024
+    cap = Capture()
+    t = T0
+    aws = ["logs", "monitoring", "ssm", "ec2messages", "firehose", "kinesis"]
+    gapi = ["fcm", "update", "android", "play", "firebaseinstallations", "clients6"]
+    for i in range(6):
+        b = T0 + 1 + i * 70
+        tls_session(cap, "10.0.81.5", "93.184.216.%d" % (10 + i), b, sni="%s.us-east-1.amazonaws.com" % aws[i], upload_skip=10 * mb)
+        tls_session(cap, "10.0.81.6", "93.184.216.%d" % (20 + i), b + 5, sni="%s.googleapis.com" % gapi[i], upload_skip=10 * mb)
+        tls_session(cap, "10.0.81.7", "93.184.216.30", b + 10, sni="nsm-bucket.s3.us-west-2.amazonaws.com", upload_skip=10 * mb)
+        tls_session(cap, "10.0.81.8", "93.184.216.31", b + 15, sni="nsmbackup.blob.core.windows.net", upload_skip=10 * mb)
+    for i in range(60):
+        dns_exchange(cap, "10.0.81.20", "www." + rand_label(10) + ".com.vn", 3, t + 2 + i * 2)
+        dns_exchange(cap, "10.0.81.21", rand_label(10) + ".duckdns.org", 3, t + 2.5 + i * 2)
+    cap.tick(T0 + 75 * 60)
+    cap.write(os.path.join(out, "domain_fp.pcap"))
+
+
 GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beacon,
               gen_tls_c2, gen_exfil, gen_volume, gen_dga, gen_chain, gen_dns_tunnel, gen_web_attack,
               gen_ntlm_spray, gen_kerberos, gen_outbound_smb,
@@ -2847,7 +2876,7 @@ GENERATORS = [gen_port_scan, gen_host_scan, gen_smb, gen_rdp, gen_ssh, gen_beaco
               gen_story_meta_active, gen_report_assets,
               gen_report_assets_routed, gen_mds_agent, gen_exfil_proxy, gen_ioc, gen_proxy_learn,
               gen_asset_krb_spn, gen_asset_http_server, gen_dhcp_relay, gen_agent_policy,
-              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class, gen_proxy_c2, gen_krb_tgs_error]
+              gen_asset_fingerprint, gen_asset_banners, gen_asset_device_class, gen_proxy_c2, gen_krb_tgs_error, gen_domain_fp]
 
 
 def main():

@@ -262,12 +262,14 @@ function ioc_seen_domain(name: string, w: Intel::Where, c: connection)
     local d = ioc_norm_domain(name);
     if ( d == "" || is_valid_ip(d) )
         return;
-    # 하위 도메인부터 등록 도메인까지: a.b.evil.example -> a.b.evil.example, b.evil.example, evil.example
-    local stop = parent_domain(d);
+    # 하위 도메인부터 라벨 2개까지: a.b.evil.example -> a.b.evil.example, b.evil.example, evil.example.
+    #   동적 DNS·클라우드처럼 등록 도메인이 더 긴 이름(x.evil.duckdns.org)도 서비스 도메인(duckdns.org) IOC 에 맞는다.
+    #   공용 접미사 자체(co.kr 등)는 보지 않는다
     while ( T )
         {
-        Intel::seen(Intel::Seen($indicator=d, $indicator_type=Intel::DOMAIN, $where=w, $conn=c));
-        if ( d == stop || |split_string(d, /\./)| <= 2 )
+        if ( d !in multi_label_suffixes )
+            Intel::seen(Intel::Seen($indicator=d, $indicator_type=Intel::DOMAIN, $where=w, $conn=c));
+        if ( |split_string(d, /\./)| <= 2 )
             break;
         d = split_string1(d, /\./)[1];
         }

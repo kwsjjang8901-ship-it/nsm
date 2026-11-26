@@ -222,16 +222,23 @@ export {
     ## ----------------------------------------------------------------------
     const webupload_bytes       = 50*1024*1024 &redef;  # 단일 요청 본문 50MB+
     # 클라우드 스토리지/협업 서비스 Host 패턴
+    ##   소문자 이름 전체와 맞춘다(일부만 맞는 dropbox.com.example.net 은 아님).
+    ##   클라우드 전체(모든 AWS·Google API)가 아니라 파일 저장·공유 서비스만 둔다: AWS 는 S3, Google 은 Drive·
+    ##   Cloud Storage. 넓게 잡으면 서버의 로그·모니터링 API, OS·앱의 Google API 통신이 한 서비스로 1시간
+    ##   누적돼 유출로 오탐한다.
     const cloud_hosts =
-        /(?i:.*\.(googleapis|googleusercontent)\.com)/
-      | /(?i:.*drive\.google\.com)/
-      | /(?i:.*\.dropboxapi\.com|.*dropbox\.com)/
-      | /(?i:.*\.amazonaws\.com)/        # S3 등
-      | /(?i:.*\.blob\.core\.windows\.net)/  # Azure Blob
-      | /(?i:.*\.storage\.googleapis\.com)/
-      | /(?i:.*onedrive\.live\.com|.*\.sharepoint\.com)/
-      | /(?i:.*mega\.nz|.*\.mega\.co\.nz)/
-      | /(?i:.*\.wetransfer\.com|.*\.box\.com)/ &redef;
+        /(.*\.)?drive\.google\.com/
+      | /www\.googleapis\.com/                              # Drive 업로드 API(upload/drive/v3)
+      | /(.*\.)?storage\.googleapis\.com/                  # Google Cloud Storage
+      | /(.*\.)?dropbox\.com|(.*\.)?dropboxapi\.com/
+      | /(.*\.)?s3([.-][a-z0-9-]+)*\.amazonaws\.com(\.cn)?/ # S3(버킷.s3.리전, s3-리전, s3-accelerate 등)
+      | /.*\.blob\.core\.windows\.net/                     # Azure Blob
+      | /(.*\.)?onedrive\.live\.com|.*\.sharepoint\.com|(.*\.)?storage\.live\.com/
+      | /(.*\.)?mega\.nz|(.*\.)?mega\.co\.nz|(.*\.)?mega\.io/
+      | /(.*\.)?wetransfer\.com|(.*\.)?box\.com|(.*\.)?boxcloud\.com/ &redef;
+
+    ## 업로드 집계의 서비스 이름: 클라우드 목록의 이름을 서비스 단위로(같은 서비스의 다른 호스트를 한 합계로)
+    global cloud_service: function(name: string): string;
 
     ## ----------------------------------------------------------------------
     ## [16] DGA 탐지 파라미터
@@ -259,15 +266,39 @@ export {
         "co.in", "com.br", "co.nz", "co.za",
     } &redef;
 
+    ## 위 목록에 없는 국가 도메인의 2단계 접미사: 끝이 2글자 국가 도메인이고 바로 앞 라벨이 이 중 하나면
+    ##   공용 접미사로 본다(예: example.com.vn, example.co.th). 목록에 없는 나라마다 적지 않아도 되게 한다.
+    const cc_second_levels: set[string] = {
+        "com", "net", "org", "edu", "gov", "mil", "ac", "co", "ne", "or", "go", "gob", "nic", "ltd", "plc", "sch",
+    } &redef;
+
+    ## 하위 이름마다 주인이 다른 서비스 도메인(클라우드 호스팅·CDN·동적 DNS). 이 접미사 바로 아래 라벨까지를
+    ##   등록 도메인으로 본다(예: abc.duckdns.org, d111.cloudfront.net, app.azurewebsites.net).
+    ##   이렇게 하지 않으면 서로 다른 고객의 이름이 한 도메인으로 묶여(08 터널링·메타데이터 요약) 오탐이 나거나,
+    ##   DGA 가 접미사 이름(duckdns)을 보고 무작위 라벨을 놓친다(13).
+    const tenant_suffixes: set[string] = {
+        "amazonaws.com", "cloudfront.net", "elasticbeanstalk.com",
+        "azurewebsites.net", "cloudapp.net", "cloudapp.azure.com", "blob.core.windows.net", "azureedge.net",
+        "trafficmanager.net", "appspot.com", "web.app", "firebaseapp.com", "herokuapp.com",
+        "github.io", "gitlab.io", "pages.dev", "workers.dev", "netlify.app", "vercel.app", "onrender.com",
+        "fly.dev", "r2.dev", "trycloudflare.com", "ngrok.io", "ngrok.app", "ngrok-free.app", "blogspot.com",
+        "duckdns.org", "ddns.net", "no-ip.org", "no-ip.biz", "hopto.org", "zapto.org", "sytes.net",
+        "dynu.net", "dyndns.org", "freeddns.org",
+    } &redef;
+
     ## ----------------------------------------------------------------------
     ## 공통 헬퍼 함수
     ## ----------------------------------------------------------------------
 
-    ## 도메인에서 "부모(등록) 도메인"을 추출.
-    ##   기본은 마지막 2개 라벨, 끝이 multi_label_suffixes(예: co.kr)면 마지막 3개 라벨.
-    ##   예) a.b.example.com -> example.com,  x.y.naver.co.kr -> naver.co.kr
-    ## NOTE: 정확한 eTLD+1 추출은 Public Suffix List 가 필요합니다(zeek-tld 패키지).
+    ## 도메인에서 "부모(등록) 도메인"을 추출: 공용 접미사(public_suffix_labels) + 라벨 1개.
+    ##   예) a.b.example.com -> example.com,  x.y.naver.co.kr -> naver.co.kr,  www.shop.com.vn -> shop.com.vn,
+    ##       x.evil.duckdns.org -> evil.duckdns.org
+    ## NOTE: 정확한 eTLD+1 추출은 Public Suffix List 전체가 필요합니다. 여기서는 자주 보는 것만 둔다.
     global parent_domain: function(name: string): string;
+
+    ## 이름(라벨 배열, 소문자) 끝의 공용 접미사가 라벨 몇 개인지(1 이상): tenant_suffixes > multi_label_suffixes >
+    ##   국가 2단계(cc_second_levels) > TLD 1개
+    global public_suffix_labels: function(parts: vector of string): count;
 
     ## 등록 라벨(등록 도메인에서 접미사를 뺀 이름)을 소문자로 추출. 끝점(.) 무시.
     ##   예) www.example.com -> example,  a.b.Example.CO.KR. -> example,  example -> example
@@ -413,15 +444,32 @@ function rule_technique(n: Notice::Type): string
     return ( n in rule_registry ) ? rule_registry[n]$technique : "";
     }
 
+function public_suffix_labels(parts: vector of string): count
+    {
+    local n = |parts|;
+    for ( _i, k in vector(4, 3, 2) )
+        {
+        if ( n <= k )
+            next;
+        local tail = join_string_vec(parts[n - k:], ".");
+        if ( tail in tenant_suffixes || tail in multi_label_suffixes )
+            return k;
+        }
+    if ( n >= 3 && |parts[n-1]| == 2 && parts[n-2] in cc_second_levels )
+        return 2;
+    return 1;
+    }
+
 function parent_domain(name: string): string
     {
     local parts = split_string(name, /\./);
     local n = |parts|;
     if ( n <= 2 )
         return name;
-    if ( to_lower(cat(parts[n-2], ".", parts[n-1])) in multi_label_suffixes )
-        return cat(parts[n-3], ".", parts[n-2], ".", parts[n-1]);
-    return cat(parts[n-2], ".", parts[n-1]);
+    local k = public_suffix_labels(split_string(to_lower(name), /\./));
+    if ( n <= k + 1 )
+        return name;
+    return join_string_vec(parts[n - k - 1:], ".");
     }
 
 function registered_label(name: string): string
@@ -433,9 +481,22 @@ function registered_label(name: string): string
     local n = |parts|;
     if ( n < 2 )
         return host;
-    if ( n >= 3 && cat(parts[n-2], ".", parts[n-1]) in multi_label_suffixes )
-        return parts[n-3];
-    return parts[n-2];
+    local k = public_suffix_labels(parts);
+    if ( n <= k )
+        return parts[0];
+    return parts[n - k - 1];
+    }
+
+function cloud_service(name: string): string
+    {
+    local n = to_lower(name);
+    if ( /(.*\.)?s3([.-][a-z0-9-]+)*\.amazonaws\.com(\.cn)?/ == n )
+        return "s3.amazonaws.com";
+    if ( /(.*\.)?storage\.googleapis\.com|www\.googleapis\.com|(.*\.)?drive\.google\.com/ == n )
+        return "drive.google.com";
+    if ( /.*\.blob\.core\.windows\.net/ == n )
+        return "blob.core.windows.net";
+    return parent_domain(n);
     }
 
 function is_external(a: addr): bool

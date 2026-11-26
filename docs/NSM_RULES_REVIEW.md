@@ -74,7 +74,7 @@
 | 08_dns_tunneling | DNS_Tunneling, Exfil_DNS | C2·유출 | 합성 | 실측 없음, 드문 접미사 묶임 |
 | 09_encrypted_c2 | Encrypted_C2 | C2 | 합성, CIC 오탐 1건(자체서명·SNI 없음) | TLS 1.3에서 인증서 신호 소실, JA3 인텔 노후 |
 | 10_large_transfer_exfil | Exfil_Large_Transfer | 유출 | 합성 | 백업·동기화 서버 예외 필요 |
-| 12_web_upload_exfil | Exfil_Web_Upload | 유출 | 합성 | `cloud_hosts` 패턴이 넓음 |
+| 12_web_upload_exfil | Exfil_Web_Upload | 유출 | 합성 | (`cloud_hosts`를 저장 서비스로 좁힘, 2026-11-26) |
 | 13_dga | DGA_Domain | C2 | 합성 | 7자 이하 라벨은 판별력 낮음 |
 | 14_large_transfer_exfil | Exfil_Volume_Aggregate | 유출 | 합성 | - |
 | 15_rdp_lateral | RDP_Lateral | 확산 | 합성 | 3대 이상만 |
@@ -206,6 +206,6 @@
 | 연동 설계 | 소급검색 화면 범위, Suricata 경보를 NSM 탐지 흐름에 합치는 설계안, MDS·MTA·NSM 통합 상관 설계안 | #106, #109, #122 |
 | 로그 형식(Manager 연동) | 탐지 요약 필드(`rule`·`severity_id`·`victim_count`·계정·목적지 이름·프록시), 계정 나누기, 상관 탐지 갈래 합치기·`revision`, 근거 포트·Community ID 등 공통 필드, JSON Schema와 CI 검증, 데이터 파일 지문, 센서 상태 로그, 선별 전송 필드 이름 통일. 기준 문서 [LOG_SCHEMA.md](LOG_SCHEMA.md) | #121, #123\~#129 |
 | 리포트 | 목업형 리포트(목업 화면을 템플릿으로), 센서 등급 그대로 표시 | #119, #120 |
-| 테스트 | btest 156개(룰·계약·예외·선별 전송 106개, 클러스터 12개, 자산 식별 38개), 합성 pcap 65개 | |
+| 테스트 | btest 158개(룰·계약·예외·선별 전송 108개, 클러스터 12개, 자산 식별 38개), 합성 pcap 66개 | |
 
 5장의 남은 위험 R1\~R3, R5\~R9와 8장의 작업 순서는 그대로입니다.
