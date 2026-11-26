@@ -35,6 +35,7 @@ export {
         exc_sha1:       string &log &optional;    ##< 이 노드가 마지막으로 읽은 예외 파일 SHA1(파일을 읽는 노드만)
         ioc_sha1:       string &log &optional;    ##< IOC 파일 SHA1
         policy_sha1:    string &log &optional;    ##< 에이전트 정책 파일 SHA1
+        rule_policy_version: string &log &optional;  ##< 적용 중인 룰 정책 버전(NSM::rule_policy_version). 정책 파일이 없으면 없음
     };
 }
 
@@ -81,6 +82,8 @@ function sensor_status_write()
         r$ioc_sha1 = data_file_sha1["ioc"];
     if ( AssetID::agent_policy_sha1 != "" )
         r$policy_sha1 = AssetID::agent_policy_sha1;
+    if ( NSM::rule_policy_version != "" )
+        r$rule_policy_version = NSM::rule_policy_version;
     Log::write(NSM::SENSOR_LOG, r);
     ss_last = now;
     ss_net = ns;

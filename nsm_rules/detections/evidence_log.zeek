@@ -368,6 +368,8 @@ function detail_fields(ev: EvidenceInfo)
 
 function write_evidence(ev: EvidenceInfo)
     {
+    if ( ev?$note && ev$note in NSM::disabled_notes )     # 룰 정책으로 끈 룰
+        return;
     # killchain_stage 미지정 시 note 로 자동 매핑(detection_log 와 동일 체계).
     if ( ! ev?$killchain_stage && ev?$note )
         {

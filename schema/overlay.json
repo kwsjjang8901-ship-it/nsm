@@ -376,6 +376,9 @@
         "policy_sha1": {
           "desc": "마지막으로 읽은 에이전트 정책 파일 SHA1",
           "pattern": "^[0-9a-f]{40}$"
+        },
+        "rule_policy_version": {
+          "desc": "적용 중인 룰 정책 버전(NSM::rule_policy_version, Manager 가 nsm_config_policy.zeek 에 씀). Manager 는 정책 배포·재시작 뒤 이 값으로 적용을 확인한다(docs/SENSOR_CONTROL_SPEC.md). 정책 파일이 없거나 버전을 쓰지 않았으면 없음"
         }
       }
     },

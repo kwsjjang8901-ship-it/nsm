@@ -387,6 +387,8 @@ function exception_drop_ctx(note: Notice::Type, ctx: ExceptionCtx, agg: bool): b
 
 function exception_drop(note: Notice::Type, c: connection): bool
     {
+    if ( note in NSM::disabled_notes )     # 룰 정책으로 끈 룰: 계산하지 않는다
+        return T;
     if ( note !in exc_index )
         return F;
     return exception_drop_ctx(note, ctx_of_conn(c), F);
@@ -394,6 +396,8 @@ function exception_drop(note: Notice::Type, c: connection): bool
 
 function exception_drop_agg(note: Notice::Type, c: connection): bool
     {
+    if ( note in NSM::disabled_notes )
+        return T;
     if ( note !in exc_index )
         return F;
     return exception_drop_ctx(note, ctx_of_conn(c), T);

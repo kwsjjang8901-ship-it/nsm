@@ -2,7 +2,7 @@
 
 이 문서는 `schema/build.py`가 만듭니다. 직접 고치지 말고 `schema/overlay.json`(설명·열거값)이나 Zeek 코드(필드)를 고친 뒤 다시 만드세요. 기계가 읽는 정의는 `schema/logs/`의 JSON Schema(draft 2020-12)입니다.
 
-- 스키마 버전: `cbb6703be7d3`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
+- 스키마 버전: `b2e2aa26e74e`(`schema/logs` 내용의 SHA-256 앞 12자리). 센서는 이 값을 센서 상태 로그(`nsm_sensor.log`)의 `schema_version`에 남기므로, Manager는 센서별로 어떤 스키마로 해석할지 고를 수 있습니다.
 - 형식: JSON 한 줄 = 한 행. 값이 없는 선택 필드는 쓰지 않습니다(키가 없음). 필수 필드는 항상 있습니다.
 - 타입: `time`은 epoch 초(소수), IP는 문자열, 목록은 JSON 배열, 정해 두지 않은 필드는 없습니다(`additionalProperties: false`).
 - 검증: CI가 btest 전체 출력의 해당 로그를 이 스키마로 검사하고(`schema/validate.py`), 코드의 필드가 스키마와 달라지면 실패합니다(`schema/build.py --check`).
@@ -16,7 +16,7 @@
 | `evidence` | 근거 | `/log/zeek/evidence.log` | 25 | [`evidence.schema.json`](../schema/logs/evidence.schema.json) |
 | `nsm_exception` | 예외 적재·적중 | `/log/zeek/nsm_exception.log` | 10 | [`nsm_exception.schema.json`](../schema/logs/nsm_exception.schema.json) |
 | `nsm_ioc` | IOC 파일 적재 | `/log/zeek/nsm_ioc.log` | 6 | [`nsm_ioc.schema.json`](../schema/logs/nsm_ioc.schema.json) |
-| `nsm_sensor` | 센서 상태 | `/log/zeek/nsm_sensor.log` | 16 | [`nsm_sensor.schema.json`](../schema/logs/nsm_sensor.schema.json) |
+| `nsm_sensor` | 센서 상태 | `/log/zeek/nsm_sensor.log` | 17 | [`nsm_sensor.schema.json`](../schema/logs/nsm_sensor.schema.json) |
 | `asset_signal` | 자산 신호 | `/log/zeek/asset_signal.log` | 11 | [`asset_signal.schema.json`](../schema/logs/asset_signal.schema.json) |
 | `asset_agent_policy` | 에이전트 정책 적재 | `/log/zeek/asset_agent_policy.log` | 5 | [`asset_agent_policy.schema.json`](../schema/logs/asset_agent_policy.schema.json) |
 | `meta/meta_export_stats` | 선별 전송 통계 | `/log/zeek/meta/meta_export_stats.log` | 9 | [`meta/meta_export_stats.schema.json`](../schema/logs/meta/meta_export_stats.schema.json) |
@@ -153,6 +153,7 @@ IOC 파일을 읽은 결과.
 | `exc_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 이 노드가 마지막으로 읽은 예외 파일 SHA1(파일을 읽는 노드만, 클러스터는 매니저) |
 | `ioc_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 마지막으로 읽은 IOC 파일 SHA1 |
 | `policy_sha1` | string |  | 형식 `^[0-9a-f]{40}$` | 마지막으로 읽은 에이전트 정책 파일 SHA1 |
+| `rule_policy_version` | string |  |  | 적용 중인 룰 정책 버전(NSM::rule_policy_version, Manager 가 nsm_config_policy.zeek 에 씀). Manager 는 정책 배포·재시작 뒤 이 값으로 적용을 확인한다(docs/SENSOR_CONTROL_SPEC.md). 정책 파일이 없거나 버전을 쓰지 않았으면 없음 |
 
 ## 자산 신호 (`asset_signal`)
 
