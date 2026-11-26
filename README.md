@@ -88,6 +88,7 @@ docs/
   RETRO_SEARCH_DESIGN.md    # 소급검색 설계안(지표 색인·결손 표시·센서 보강)
   SURICATA_INTEGRATION_DESIGN.md  # Suricata 경보를 Manager로 바로 보내 합치는 설계(정규화·예외·통합 상관·중복 정리)
   INTEGRATED_CORRELATION_DESIGN.md # MDS·MTA·NSM 통합 공격 스토리와 Sigma 상관 룰 기반 통합 상관 설계안
+  REPO_MIGRATION_REVIEW.md  # 정식 콘텐츠 저장소 이관 검토(파일 대응·서드파티 정리·설정 파일 위치·진행 순서)
   examples/                 # 예외 파일 예시(exceptions.example.tsv, 문서용 주소만), 기본 예외 목록(exceptions.proxy-beacon.tsv)
 ```
 
