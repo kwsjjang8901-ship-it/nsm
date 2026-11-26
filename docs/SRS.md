@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 154개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 155개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1148,7 +1148,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `evidence_id` | evidence.log와 조인하는 키 | `10.0.0.156\|kerberoast\|...` |
 | `attack` | ATT&CK 기법 ID | `T1558.003` |
 | `lm_targets` | 확산·포이즈닝·랜섬웨어의 피해 호스트 집합 | `10.0.20.11,10.0.20.12` |
-| `dup_count` | (중복 묶기 사용 시) 묶인 건수 | `3` |
+| `dup_count` | 중복 묶기 창이 끝날 때 남기는 요약 notice에만: 창 안에서 같은 탐지가 나온 건수(첫 건 포함). 요약은 탐지 요약·상관에 넣지 않음 | `3` |
 | `exception_id` / `disposition` | (`suppress` 예외에 맞은 경우) 예외 id / `suppressed` | `E-c2-sni` / `suppressed` |
 
 ### 6.2 nsm_detection.log — 탐지 요약
@@ -1641,9 +1641,10 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `chain_max_expire` | 2hr | 킬체인 상관 상태 최대 보관 시간 |  |
 | `chain_rules` | 개별 전이 23개(5.1절) | 어느 탐지에서 어느 탐지로 이어지는지 | `+=`로 규칙 추가 가능 |
 | `chain_group_rules / corr_*_notes` | 묶음 전이 23개, 묶음 8개(5.1.1) | 어느 단계 묶음에서 어느 단계 묶음으로 이어지는지, 각 묶음에 속한 탐지 | 묶음을 바꾸면 chain_group_rules도 다시 정의 |
-| `dedup_notes` | 비어 있음(꺼짐) | 중복 묶기를 적용할 탐지 유형 |  |
+| `dedup_notes` | 비어 있음(**모든 탐지에 적용**) | 중복 묶기를 적용할 탐지 유형. 같은 탐지(종류·연결 또는 출발지·`sub`)가 창 안에 반복되면 첫 건만 기록하고, 창이 끝날 때 반복 횟수를 담은 요약 notice(`dup_count`)를 남김. 요약은 탐지 요약·상관에 넣지 않음 | 특정 탐지만 묶으려면 `+=`로 지정 |
 | `dedup_window` | 1min | 중복 묶기 창 |  |
-| `dedup_emit_first` / `dedup_override_suppression` | T / F | 첫 건은 바로 내보냄 / 룰 억제를 무시하고 묶기만 사용 |  |
+| `dedup_override_suppression` | F | 룰 억제(`suppress_for`)를 무시하고 묶기만 사용(2026-11 이전 동작) |  |
+| `dedup_emit_first` | T | **폐기**(2026-11). 첫 건을 보류하고 요약만 내던 모드(F)는 킬체인 상관이 돌지 않고 요약에 피해 host가 없어 없앰. F로 두면 시작할 때 경고하고 무시(항상 첫 건을 바로 기록) | 고객 설정에 있으면 지움 |
 
 ### 7.6 로그 설정
 
@@ -1749,7 +1750,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 154개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 105개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 155개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 106개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1782,7 +1783,6 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 단일 탐지의 심각도가 모두 `Information` | DCSync·랜섬웨어도 스캔과 같은 등급 | 위험도는 Manager 값(룰별 Critical·High 등, [센서 제어 스펙](SENSOR_CONTROL_SPEC.md))으로 표시. 센서 등급은 그대로 |
 | 암호화된 내용(SMB3 암호화, TLS 1.3 인증서) | 05·06·21은 SMB3 암호화 세션을 못 봄, 09의 자체서명 신호가 TLS 1.3에서 없음 | 하기 어려운 한계. JA4·SNI 신호 비중을 키움 |
 | HTTP(WebDAV)로 오가는 NTLM | 05·19가 잡지 못함(Zeek가 HTTP 안 NTLM을 해석하지 않음) | HTTP Authorization 헤더 기반 보완 룰 검토 |
-| 묶기 hold 모드(`dedup_emit_first=F`) | 첫 탐지를 내보내지 않고 묶음 요약 notice만 내므로 킬체인 상관이 돌지 않고, 요약 notice에 피해 host(`lm_targets`·`dst`)가 없음. 기본값은 T라 운영 영향 없음 | 설정을 없앨지 고칠지 결정(2026-11 점검) |
 | 클러스터 워커의 Kerberos 계정 | 인증 맥락(5.6절)이 매니저에만 모여, 워커에서 판정하는 23·31·34의 근거 계정이 Kerberos 인증이면 빈칸(같은 연결의 NTLM만 씀). 단독 실행과 결과가 다름 | 인증 맥락을 워커에도 공유하거나 매니저에서 채우는 방식 검토(2026-11 점검) |
 | 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |
 | 확산 룰(06·15·16·20)은 여러 대로 퍼지는 경우만 탐지 | 한 대로의 원격 실행은 미탐 | 임계를 1로 낮추되 관리 서버 예외를 충실히 등록 |
