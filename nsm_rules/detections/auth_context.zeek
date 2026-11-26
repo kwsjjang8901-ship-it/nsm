@@ -8,10 +8,10 @@
 ##!       받은 계정" 을 찾는다(대상별 정확도는 NTLM 보다 낮다).
 ##!   - 내부 출발지만 기록한다(NTLM 은 목적지도 내부일 때만). 실패한 인증도 기록된다(시도한 계정).
 ##!
-##! 클러스터: 확산 판정(SumStats epoch_result)은 매니저에서 하고, 티켓 요청(DC 로 가는 연결)과 확산 연결은
-##!   서로 다른 워커가 볼 수 있다. 그래서 각 노드는 새 (출발지, 키, 계정) 조합을 auth_ctx_resend 마다
-##!   한 번만 매니저로 보내고, 조회(auth_accounts)는 매니저·단독 노드의 표로 한다.
-##!   워커에서 판정하는 룰(연결 단위)은 이 표가 비어 있으므로 연결 자신의 c$ntlm 을 쓴다.
+##! 클러스터: 티켓 요청(DC 로 가는 연결)과 확산·원격 실행 연결은 서로 다른 워커가 볼 수 있다.
+##!   각 워커는 새 (출발지, 키, 계정) 조합을 자기 표에 넣고 auth_ctx_resend 마다 한 번만 매니저로 보낸다.
+##!   매니저는 표에 새로 들어간 조합만 모든 워커에 다시 알린다(auth_ctx_to_workers). 그래서 매니저에서 판정하는
+##!   확산 룰(06·15·16·20·21)과 워커에서 판정하는 연결 단위 룰(23·31·34)이 단독 실행과 같은 계정을 찾는다.
 ##! ============================================================================
 
 @load base/frameworks/cluster
@@ -29,6 +29,9 @@ export {
     const auth_ctx_resend = 5min &redef;
     ## 키마다 남기는 계정 수(최근 것 우선이 아니라 먼저 본 것)
     const auth_ctx_max_accounts = 3 &redef;
+    ## 클러스터: 매니저가 받은 인증 맥락을 워커에도 알린다(워커에서 판정하는 23·31·34 의 근거 계정).
+    ##   전송량은 (출발지, 서비스 종류, 계정) 새 조합 수 × 워커 수. 아주 큰 망에서 매니저 부하가 문제면 F
+    const auth_ctx_to_workers = T &redef;
     ## 기록할 Kerberos 서비스 종류(SPN 의 '/' 앞, 소문자). drsuapi GUID 는 DCSync 용
     const auth_krb_classes: set[string] = {
         "cifs", "http", "wsman", "termsrv", "rpcss", "host", "ldap", "e3514235-4b06-11d1-ab04-00c04fc2dcd2",
@@ -45,24 +48,36 @@ global auth_ntlm: table[addr, addr] of set[string] &create_expire=auth_ctx_expir
 global auth_krb: table[addr, string] of set[string] &create_expire=auth_ctx_expire;
 global auth_sent: set[string] &create_expire=auth_ctx_resend;
 
-function auth_add(s: set[string], who: string)
+# 새로 넣었으면 T
+function auth_add(s: set[string], who: string): bool
     {
-    if ( |s| < auth_ctx_max_accounts )
-        add s[who];
+    if ( who in s || |s| >= auth_ctx_max_accounts )
+        return F;
+    add s[who];
+    return T;
     }
 
+# 받은 노드는 표에 넣는다. 매니저는 새로 들어간 조합만 워커에 다시 알린다(워커는 다시 보내지 않는다)
 event NSM::auth_ctx_ntlm(src: addr, dst: addr, who: string)
     {
     if ( [src, dst] !in auth_ntlm )
         auth_ntlm[src, dst] = set();
-    auth_add(auth_ntlm[src, dst], who);
+    local added = auth_add(auth_ntlm[src, dst], who);
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
+    if ( added && auth_ctx_to_workers )
+        Cluster::publish(Cluster::worker_topic, NSM::auth_ctx_ntlm, src, dst, who);
+@endif
     }
 
 event NSM::auth_ctx_krb(src: addr, klass: string, who: string)
     {
     if ( [src, klass] !in auth_krb )
         auth_krb[src, klass] = set();
-    auth_add(auth_krb[src, klass], who);
+    local added = auth_add(auth_krb[src, klass], who);
+@if ( Cluster::is_enabled() && Cluster::local_node_type() == Cluster::MANAGER )
+    if ( added && auth_ctx_to_workers )
+        Cluster::publish(Cluster::worker_topic, NSM::auth_ctx_krb, src, klass, who);
+@endif
     }
 
 function auth_send_ntlm(src: addr, dst: addr, who: string)
@@ -71,10 +86,9 @@ function auth_send_ntlm(src: addr, dst: addr, who: string)
     if ( k in auth_sent )
         return;
     add auth_sent[k];
+    event NSM::auth_ctx_ntlm(src, dst, who);   # 이 노드의 표
 @if ( Cluster::is_enabled() && Cluster::local_node_type() != Cluster::MANAGER )
     Cluster::publish(Cluster::manager_topic, NSM::auth_ctx_ntlm, src, dst, who);
-@else
-    event NSM::auth_ctx_ntlm(src, dst, who);
 @endif
     }
 
@@ -84,10 +98,9 @@ function auth_send_krb(src: addr, klass: string, who: string)
     if ( k in auth_sent )
         return;
     add auth_sent[k];
+    event NSM::auth_ctx_krb(src, klass, who);   # 이 노드의 표
 @if ( Cluster::is_enabled() && Cluster::local_node_type() != Cluster::MANAGER )
     Cluster::publish(Cluster::manager_topic, NSM::auth_ctx_krb, src, klass, who);
-@else
-    event NSM::auth_ctx_krb(src, klass, who);
 @endif
     }
 

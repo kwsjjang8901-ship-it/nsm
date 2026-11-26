@@ -15,7 +15,7 @@ nsm_rules는 미러 트래픽을 Zeek로 분석해 킬체인 7단계(정찰 → 
 | 탐지 | 탐지 룰 34개(파일 01\~35, 11번은 08번에 통합), 탐지 유형 48종 | 페이로드 복호화(TLS·SMB3 암호화 내용) |
 | 공통 기능 | 근거 기록, 탐지 요약, ATT&CK 매핑, 알람 억제, 킬체인 상관, 로그 필터 | 경보 전송(메일·SIEM 연동)은 외부 시스템 몫 |
 | 운영 | 단일 프로세스, 클러스터(manager·proxy·worker) | 센서 하드웨어·미러 구성 |
-| 검증 | btest 155개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
+| 검증 | btest 156개(자산 식별·선별 전송 포함), 합성 pcap 65개 + Zeek 공개 trace, CI(Zeek 9.0.1·8.0.9), 공개 데이터셋 CIC-IDS2017 5일 | 실제 고객망 성능 측정 |
 
 ### 1.2 대상 독자
 
@@ -1097,7 +1097,7 @@ conn·dns·http 등 이 목록에 없는 로그는 기본으로 꺼집니다. �
 | Kerberos 서비스 티켓 응답(`krb_tgs_response`, 내부 출발지) | (출발지, 서비스 종류) → `user@realm`. 종류는 SPN의 `/` 앞(`cifs`, `http`, `wsman`, `termsrv`, `rpcss`, `host`, `ldap`, drsuapi GUID) | 티켓은 DC에서 받으므로 대상은 모름. "그 시간에 출발지가 그 종류 티켓을 받은 계정" |
 
 - 조회: 같은 대상 NTLM 계정이 있으면 그것을, 없으면 룰별 서비스 종류의 티켓 계정을 씁니다. 여러 개면 쉼표로 잇습니다(키당 최대 `auth_ctx_max_accounts`). 실패한 인증도 기록되므로 "시도한 계정"일 수 있습니다.
-- 클러스터: 확산 판정(SumStats)은 매니저에서 하고, DC로 가는 티켓 요청과 확산 연결은 다른 워커가 볼 수 있습니다. 그래서 각 노드는 새 (출발지, 키, 계정) 조합을 `auth_ctx_resend`마다 한 번만 매니저로 보내고, 매니저가 `auth_ctx_expire` 동안 보관합니다. 워커에서 판정하는 DCSync는 같은 연결의 NTLM만 씁니다.
+- 클러스터: 확산 판정(SumStats)은 매니저에서 하고, DC로 가는 티켓 요청과 확산 연결은 다른 워커가 볼 수 있습니다. 그래서 각 노드는 새 (출발지, 키, 계정) 조합을 자기 표에 넣고 `auth_ctx_resend`마다 한 번만 매니저로 보내며, 매니저는 `auth_ctx_expire` 동안 보관합니다. 매니저는 표에 새로 들어간 조합만 모든 워커에 다시 알립니다(`auth_ctx_to_workers`). 그래서 워커에서 판정하는 연결 단위 룰(23 DCSync·31 원격 실행·34 AD 공격)도 단독 실행과 같은 Kerberos 계정을 찾습니다(btest `cluster/auth-context`). 전송량은 (출발지, 서비스 종류, 계정) 새 조합 수 × 워커 수입니다.
 - 대표 uid: 집계형 근거는 고유 수를 세는 스트림과 별도로 "목적지|uid" 표본(`ev_observe`, 창마다 (출발지, 목적지)당 첫 연결 하나)을 두거나, 이미 있는 표본 문자열에 uid를 덧붙여 근거 행에 남깁니다. 표본 수 한도(`lm_num_samples`)를 넘으면 일부 행은 uid가 없을 수 있습니다.
 
 ### 5.7 클러스터 학습 공유
@@ -1175,7 +1175,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `disposition` / `exception_id` | `suppress` 예외에 맞은 탐지만: `suppressed` / 예외 id. Manager는 이 탐지로 알림을 올리지 않는다 |
 | `revision` | 상관 탐지만: 같은 체인의 갱신 번호(1부터). 행마다 갈래를 합친 체인 전체를 담으므로 `detection_id`별 가장 큰 행이 현재 상태(5.1.2) |
 | `member_detection_ids` | 상관 탐지만: 체인을 이루는 단독 탐지의 `detection_id`(처음 본 순서). `evidence_ids`에서 체인 자신의 근거 id(맨 앞)를 뺀 것과 같다 |
-| `incident_id` / `occurrence` | 같은 사건 묶기. 상관 탐지는 `incident_id` = `detection_id`, `occurrence` = `revision`(5.1.2). 아래는 단일 탐지: 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 탐지를 낸 노드별로 묶습니다(집계형은 매니저가 내므로 한 곳) |
+| `incident_id` / `occurrence` | 같은 사건 묶기. 상관 탐지는 `incident_id` = `detection_id`, `occurrence` = `revision`(5.1.2). 아래는 단일 탐지: 같은 (탐지 종류, 공격자, 피해 호스트)의 탐지가 `detection_continue_gap`(15분) 안에 다시 나오면 같은 사건입니다. `incident_id`는 사건의 첫 탐지 `detection_id`, `occurrence`는 몇 번째인지(1부터). Manager는 `occurrence` = 1에서 알림을 올리고, 2 이상은 새 알림 없이 사건의 횟수·마지막 시각을 갱신합니다. 집계형 룰(무차별 대입 등)이 5·10분 창마다 내는 탐지가 한 사건으로 이어집니다(예: CIC-IDS2017 Tuesday FTP 무차별 대입 1시간 = 탐지 13건, 사건 1건). 클러스터에서는 워커·프록시가 요약(계정·목적지 이름 등)을 채운 탐지 행을 매니저로 보내고(`NSM::detection_assign`), 매니저 한 곳에서 사건을 정해 기록합니다. 그래서 같은 사건의 탐지가 다른 워커에서 나와도 한 사건입니다(btest `cluster/incident-across-workers`) |
 
 ### 6.3 evidence.log — 근거
 
@@ -1635,6 +1635,7 @@ Manager로 가는 로그의 필드·타입·필수 여부·열거값 전체는 [
 | `auth_ctx_expire` | 30min | 인증 맥락(5.6절) 보관 시간 | 확산 집계 창(최대 5분)보다 길게 |
 | `auth_ctx_resend` | 5min | 같은 (출발지, 키, 계정)을 매니저로 다시 보내지 않는 시간 | 워커 → 매니저 전송량 억제 |
 | `auth_ctx_max_accounts` | 3 | 키마다 남기는 계정 수 |  |
+| `auth_ctx_to_workers` | T | 클러스터: 매니저가 받은 인증 맥락을 워커에도 알림(워커에서 판정하는 23·31·34의 근거 계정) | 아주 큰 망에서 매니저 부하가 문제면 F(그 룰들은 같은 연결의 NTLM만 씀) |
 | `share_learned_keep` | 24hr | 매니저가 학습 값을 기억하는 시간. 새로 붙거나 다시 시작한 워커·프록시에 이 값을 다시 보냄(5.7절) |  |
 | `share_learned_refresh` | 1hr | 클러스터에서 배운 서버(DC·AI 판별용 서버·프록시)를 다른 노드에 다시 알리는 간격(5.7절) | 처음 배울 때는 바로 알림. 늦게 붙은 노드와 만료된 표를 채움 |
 | `auth_krb_classes` | cifs, http, wsman, termsrv, rpcss, host, ldap, drsuapi GUID | 기록할 Kerberos 서비스 종류 | `+=`로 추가 |
@@ -1750,7 +1751,7 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 
 | 항목 | 내용 |
 | --- | --- |
-| btest | 155개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 106개(`tests/btest/rules`), 클러스터 테스트 11개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
+| btest | 156개 — 룰·계약·선별 전송·예외 엔진·자산 식별 통합·리포트·로그 스키마·센서 상태·룰 레지스트리 테스트 106개(`tests/btest/rules`), 클러스터 테스트 12개(`tests/btest/cluster`, 매니저+워커 2\[+proxy\]), 자산 식별 센서 테스트 38개(`tests/btest/asset-id`, nsm_rules 없이 자산 식별 패키지만, 기대 출력은 `Baseline/`과 비교. 이 중 일부는 Zeek 9.x 분석기가 필요해 8.0.9에서는 건너뜀: DNS 동적 업데이트 2개, LDAP 안 NTLM, LDAP 안 Kerberos 티켓, TCP syslog) |
 | 합성 pcap | 27개(`tests/pcaps`), `tests/gen_pcaps.py`가 고정 시드로 만들어 항상 같은 바이트 |
 | 공개 trace | `tests/pcaps/zeek/ssh_auth_internal.pcap` — Zeek 테스트 trace에서 발췌(실제 SSH 인증 성공) |
 | 검사 도구 | `assert-rows`(로그 행 수 조건 검사), `assert-evidence-join`(notice의 근거가 evidence.log에 있는지), `assert-fields`(로그에 허용한 필드만 있는지) |
@@ -1783,7 +1784,6 @@ E-002	group:lateral	10.20.30.11/32	10.20.40.0/24	22/tcp,3389/tcp	-	-	-	drop	운�
 | 단일 탐지의 심각도가 모두 `Information` | DCSync·랜섬웨어도 스캔과 같은 등급 | 위험도는 Manager 값(룰별 Critical·High 등, [센서 제어 스펙](SENSOR_CONTROL_SPEC.md))으로 표시. 센서 등급은 그대로 |
 | 암호화된 내용(SMB3 암호화, TLS 1.3 인증서) | 05·06·21은 SMB3 암호화 세션을 못 봄, 09의 자체서명 신호가 TLS 1.3에서 없음 | 하기 어려운 한계. JA4·SNI 신호 비중을 키움 |
 | HTTP(WebDAV)로 오가는 NTLM | 05·19가 잡지 못함(Zeek가 HTTP 안 NTLM을 해석하지 않음) | HTTP Authorization 헤더 기반 보완 룰 검토 |
-| 클러스터 워커의 Kerberos 계정 | 인증 맥락(5.6절)이 매니저에만 모여, 워커에서 판정하는 23·31·34의 근거 계정이 Kerberos 인증이면 빈칸(같은 연결의 NTLM만 씀). 단독 실행과 결과가 다름 | 인증 맥락을 워커에도 공유하거나 매니저에서 채우는 방식 검토(2026-11 점검) |
 | 클러스터 학습 공유는 매니저를 거침 | 처음 배운 순간과 다른 노드가 받는 순간 사이(매니저 왕복, 보통 1초 미만)에 다른 워커가 본 연결은 공유 전 기준으로 판단. 22 NBNS는 질의·응답마다 매니저를 한 번 거침 | 학습은 서버당 한 번이라 영향 작음. NBNS가 아주 많은 망은 매니저 전송량을 `stats.log`로 확인 |
 | 확산 룰(06·15·16·20)은 여러 대로 퍼지는 경우만 탐지 | 한 대로의 원격 실행은 미탐 | 임계를 1로 낮추되 관리 서버 예외를 충실히 등록 |
 | 21은 이름 변경·랜섬 노트만 봄 | 덮어쓰기나 대량 삭제(T1485)형 랜섬웨어는 미탐 가능 | 대량 삭제·쓰기 신호 추가 |
