@@ -6,6 +6,7 @@
 같은 pcap 을 구성마다 오프라인(zeek -r)으로 돌려 CPU 시간(user+sys)과 최대 메모리(RSS)를 잰다.
     full    nsm_rules 없이 Zeek 기본 스크립트 + JSON 로그 전체(일반 Zeek 센서와 비교하는 기준점)
     detect  nsm_rules 탐지만(선별 전송 끔, 자산 식별 끔)
+    asset   탐지 + 자산 식별(선별 전송 끔). detect→asset 이 자산 식별, asset→ops 가 선별 전송의 몫
     ops     운영 형상(탐지 + 예외 엔진 + 자산 식별 + 선별 전송, tests/run_pcap.sh 와 같은 설정)
 회차마다 구성 순서를 번갈아 실행하고 중앙값을 쓴다. 결과:
     시작 비용     = 패킷 없는 pcap 으로 잰 CPU 시간·RSS(스크립트 읽기·초기화). 처리량 계산에서 뺀다
@@ -29,7 +30,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PKG = os.path.join(ROOT, "nsm_rules")
-PROFILES = ("full", "detect", "ops")
+PROFILES = ("full", "detect", "asset", "ops")
 LOCAL = ("redef NSM::log_paths = {}; redef NSM::create_log_dirs = F; "
          "redef Log::default_rotation_interval = 0secs; redef NSM::meta_path_prefix = \"meta/\";")
 
@@ -132,6 +133,8 @@ def profile_args(name, pkg, extra_e):
     e = LOCAL + " " + extra_e
     if name == "detect":
         return [pkg, "-e", e + " redef NSM::meta_export_enable = F; " + noasset()]
+    if name == "asset":
+        return [pkg, "-e", e + " redef NSM::meta_export_enable = F;"]
     return [pkg, "-e", e + " redef NSM::meta_export_enable = T;"]
 
 
