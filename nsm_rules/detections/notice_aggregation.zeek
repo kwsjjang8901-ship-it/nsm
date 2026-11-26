@@ -6,11 +6,14 @@ export {
     ## 동일 이벤트 집계 윈도우 (X분, 설정 가능). 예: 1min.
     const dedup_window = 1min &redef;
 
-    ## 집계를 적용할 Notice 타입. 비어 있으면 "전체 notice" 에 적용.
+    ## 묶기: 같은 notice(dedup_signature)가 dedup_window 안에 반복되면 첫 건만 기록하고 나머지는 세기만 한다.
+    ##   창이 끝날 때 반복이 있었으면 횟수를 담은 요약 notice(dup_count) 1건을 기록한다(탐지 요약·상관에는 넣지 않음).
+    ## 집계를 적용할 Notice 타입. 비어 있으면 "전체 notice" 에 적용(기본).
     ## 특정 타입만 묶으려면: redef NSM::dedup_notes += { NSM::SMB_Admin_Share };
     const dedup_notes: set[Notice::Type] = {} &redef;
 
-    ## 첫 건 즉시 발화 여부(위 모드 설명 참고). 기본 T(지연 없음).
+    ## 폐기(2026-11). 첫 건을 보류하고 요약만 내던 모드(F)는 킬체인 상관이 돌지 않고 요약에 피해 host 가 없어 없앴다.
+    ##   고객 설정의 redef 가 시작을 막지 않도록 이름만 남기고, F 로 두면 경고 후 무시한다(항상 첫 건을 바로 기록).
     const dedup_emit_first = T &redef;
 
     ## T 이면 이 레이어가 모든 대상 notice 의 $suppress_for 를 0 으로 덮어써
@@ -40,6 +43,13 @@ export {
             };
 }
 
+# 폐기한 보류 모드 설정은 경고만 하고 무시한다
+event zeek_init()
+    {
+    if ( ! dedup_emit_first )
+        Reporter::warning("NSM::dedup_emit_first = F(보류 모드)는 폐기됐습니다. 무시하고 첫 건을 바로 기록합니다(SRS 7.5)");
+    }
+
 ## 윈도우별 집계 상태(요약 발화에 필요한 대표 필드 보관)
 type DedupState: record {
     cnt:   count          &default=0;
@@ -56,8 +66,8 @@ function dedup_expire(t: table[string] of DedupState, idx: string): interval
     {
     local st = t[idx];
 
-    # emit_first 모드에서 단건(중복 없음)이면 이미 첫 건이 나갔으므로 요약 생략
-    if ( dedup_emit_first && st$cnt <= 1 )
+    # 단건(중복 없음)이면 첫 건이 이미 기록됐으므로 요약 생략
+    if ( st$cnt <= 1 )
         return 0secs;
 
     local info: Notice::Info = [$note=st$note, $dup_count=st$cnt];
@@ -105,15 +115,7 @@ hook Notice::policy(n: Notice::Info) &priority=-5
         if ( n?$id )  st$id  = n$id;
         if ( n?$evidence_id ) st$evidence_id = n$evidence_id;
         dedup_tbl[sig] = st;
-
-        if ( ! dedup_emit_first )
-            {
-            # 보류 모드: 첫 건도 로깅/액션 제거(요약만 발화)
-            delete n$actions[Notice::ACTION_LOG];
-            delete n$actions[Notice::ACTION_ALARM];
-            delete n$actions[Notice::ACTION_EMAIL];
-            }
-        # emit_first 모드면 첫 건은 그대로 통과(정상 발화)
+        # 첫 건은 그대로 통과(정상 기록)
         }
     else
         {
